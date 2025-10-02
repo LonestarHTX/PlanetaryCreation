@@ -1,10 +1,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "RealtimeMeshStreamRange.h"
-#include "RealtimeMeshStreamSet.h"
 
 class UTectonicSimulationService;
+namespace RealtimeMesh
+{
+    struct FRealtimeMeshStreamSet;
+}
 
 /** Encapsulates higher-level control over the tectonic simulation and mesh conversion. */
 class FTectonicSimulationController
@@ -21,19 +23,10 @@ public:
     double GetCurrentTimeMy() const;
 
     /** Builds a placeholder mesh using the current simulation samples. */
-    struct FPreviewMeshPayload
-    {
-        RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
-        int32 VertexCount = 0;
-        int32 TriangleCount = 0;
-    };
-
-    FPreviewMeshPayload BuildPreviewMesh(float RadiusKm) const;
-
 private:
     UTectonicSimulationService* GetService() const;
     void EnsurePreviewActor() const;
-    void UpdatePreviewMesh(FPreviewMeshPayload&& Payload);
+    void UpdatePreviewMesh(RealtimeMesh::FRealtimeMeshStreamSet&& StreamSet, int32 VertexCount, int32 TriangleCount);
 
     mutable TWeakObjectPtr<UTectonicSimulationService> CachedService;
     mutable TWeakObjectPtr<class ARealtimeMeshActor> PreviewActor;

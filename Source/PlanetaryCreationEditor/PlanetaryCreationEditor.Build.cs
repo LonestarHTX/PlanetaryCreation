@@ -12,14 +12,16 @@ public class PlanetaryCreationEditor : ModuleRules
             "CoreUObject",
             "Engine",
             "Slate",
-            "SlateCore"
+            "SlateCore",
+            "UnrealEd",
+            "EditorSubsystem",
+            "EditorFramework"
         });
 
         PrivateDependencyModuleNames.AddRange(new[]
         {
             "UnrealEd",
             "LevelEditor",
-            "EditorSubsystem",
             "Projects",
             "RealtimeMeshComponent",
             "Blutility",
