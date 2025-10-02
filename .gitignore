@@ -1,0 +1,46 @@
+# Unreal Engine build output and caches
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+Builds/
+
+# Local-only plugins or temp content (uncomment if desired)
+# Plugins/Developer/
+# Content/Developers/
+
+# IDE and tooling settings
+.vs/
+.vscode/
+.idea/
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Compiler and linker artifacts
+*.obj
+*.pdb
+*.ipch
+*.db
+*.ilk
+*.pch
+
+# Logs and temporary files
+*.log
+*.tlog
+*.cache
+*.tmp
+*.temp
+*_tmp.*
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Optional: uncomment to use Git LFS for large binary assets
+# *.uasset filter=lfs diff=lfs merge=lfs -text
+# *.umap filter=lfs diff=lfs merge=lfs -text
