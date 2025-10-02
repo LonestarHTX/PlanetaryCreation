@@ -6,6 +6,11 @@ public class PlanetaryCreationEditor : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+        if (Target.Type != TargetType.Editor)
+        {
+            throw new BuildException("PlanetaryCreationEditor module only supports editor targets.");
+        }
+
         PublicDependencyModuleNames.AddRange(new[]
         {
             "Core",
@@ -14,7 +19,6 @@ public class PlanetaryCreationEditor : ModuleRules
             "Slate",
             "SlateCore",
             "UnrealEd",
-            "EditorSubsystem",
             "EditorFramework"
         });
 
@@ -24,6 +28,7 @@ public class PlanetaryCreationEditor : ModuleRules
             "LevelEditor",
             "Projects",
             "RealtimeMeshComponent",
+            "InputCore",
             "Blutility",
             "EditorStyle",
             "UMG",

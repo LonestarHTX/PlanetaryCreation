@@ -7,7 +7,10 @@
 #include "RealtimeMeshComponent/Public/RealtimeMeshComponent.h"
 #include "RealtimeMeshComponent/Public/RealtimeMeshSimple.h"
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshBuilder.h"
-#include "Core/RealtimeMeshStreamRange.h"
+#include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshSectionConfig.h"
+#include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshStreamRange.h"
+#include "MaterialDomain.h"
+#include "Materials/Material.h"
 #include "TectonicSimulationService.h"
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
@@ -45,6 +48,7 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                 Builder.EnableTangents();
                 Builder.EnableTexCoords();
                 Builder.EnableColors();
+                Builder.EnablePolyGroups();
 
                 const float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km for editor tooling
 
@@ -57,7 +61,22 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                     const FVector3f Position = FVector3f(Normalized * RadiusUnits);
                     const FVector3f Normal = Position.GetSafeNormal();
                     const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
-                    const FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
+                    FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector);
+                    if (!TangentX.Normalize())
+                    {
+                        TangentX = FVector3f::CrossProduct(Normal, FVector3f(0.0f, 1.0f, 0.0f));
+                        if (!TangentX.Normalize())
+                        {
+                            TangentX = FVector3f::CrossProduct(Normal, FVector3f(1.0f, 0.0f, 0.0f));
+                            TangentX.Normalize();
+                        }
+                    }
+
+                    const FVector3f Binormal = FVector3f::CrossProduct(TangentX, Normal);
+                    if (FVector3f::DotProduct(Binormal, UpVector) < 0.0f)
+                    {
+                        TangentX *= -1.0f;
+                    }
                     const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
 
                     const int32 VertexId = Builder.AddVertex(Position)
@@ -78,15 +97,15 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                     const int32 PosZ = VertexIndices[4];
                     const int32 NegZ = VertexIndices[5];
 
-                    Builder.AddTriangle(PosZ, PosX, PosY, 0);
-                    Builder.AddTriangle(PosZ, PosY, NegX, 0);
-                    Builder.AddTriangle(PosZ, NegX, NegY, 0);
-                    Builder.AddTriangle(PosZ, NegY, PosX, 0);
+                    Builder.AddTriangle(PosZ, PosY, PosX, 0);
+                    Builder.AddTriangle(PosZ, NegX, PosY, 0);
+                    Builder.AddTriangle(PosZ, NegY, NegX, 0);
+                    Builder.AddTriangle(PosZ, PosX, NegY, 0);
 
-                    Builder.AddTriangle(NegZ, PosY, PosX, 0);
-                    Builder.AddTriangle(NegZ, NegX, PosY, 0);
-                    Builder.AddTriangle(NegZ, NegY, NegX, 0);
-                    Builder.AddTriangle(NegZ, PosX, NegY, 0);
+                    Builder.AddTriangle(NegZ, PosX, PosY, 0);
+                    Builder.AddTriangle(NegZ, PosY, NegX, 0);
+                    Builder.AddTriangle(NegZ, NegX, NegY, 0);
+                    Builder.AddTriangle(NegZ, NegY, PosX, 0);
 
                     TriangleCount = 8;
                 }
@@ -108,17 +127,20 @@ double FTectonicSimulationController::GetCurrentTimeMy() const
 
 UTectonicSimulationService* FTectonicSimulationController::GetService() const
 {
-    if (UTectonicSimulationService* Service = CachedService.Get())
+    if (CachedService.IsValid())
     {
-        return Service;
+        return CachedService.Get();
     }
 
 #if WITH_EDITOR
     if (GEditor)
     {
-        Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
-        CachedService = Service;
-        return Service;
+        UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
+        if (Service)
+        {
+            CachedService = Service;
+            return Service;
+        }
     }
 #endif
 
@@ -157,7 +179,8 @@ void FTectonicSimulationController::EnsurePreviewActor() const
     }
 
     Actor->SetActorHiddenInGame(true);
-    Actor->SetIsTemporarilyHiddenInEditor(true);
+    Actor->SetIsTemporarilyHiddenInEditor(false);
+    Actor->SetActorLabel(TEXT("TectonicPreviewActor"));
 
     PreviewActor = Actor;
 
@@ -166,6 +189,11 @@ void FTectonicSimulationController::EnsurePreviewActor() const
         Component->SetMobility(EComponentMobility::Movable);
         if (URealtimeMeshSimple* Mesh = Component->InitializeRealtimeMesh<URealtimeMeshSimple>())
         {
+            Mesh->SetupMaterialSlot(0, TEXT("TectonicPreview"));
+            if (UMaterialInterface* DefaultMaterial = UMaterial::GetDefaultMaterial(EMaterialDomain::MD_Surface))
+            {
+                Component->SetMaterial(0, DefaultMaterial);
+            }
             PreviewMesh = Mesh;
             bPreviewInitialized = false;
         }
@@ -182,18 +210,19 @@ void FTectonicSimulationController::UpdatePreviewMesh(RealtimeMesh::FRealtimeMes
 
     URealtimeMeshSimple* Mesh = PreviewMesh.Get();
     const FRealtimeMeshSectionGroupKey GroupKey = FRealtimeMeshSectionGroupKey::Create(0, FName(TEXT("TectonicPreview")));
+    const FRealtimeMeshSectionKey SectionKey = FRealtimeMeshSectionKey::CreateForPolyGroup(GroupKey, 0);
 
     if (!bPreviewInitialized)
     {
-        Mesh->CreateSectionGroup(GroupKey, MoveTemp(StreamSet)).Wait();
+        Mesh->CreateSectionGroup(GroupKey, MoveTemp(StreamSet));
+        Mesh->UpdateSectionConfig(SectionKey, FRealtimeMeshSectionConfig(0));
         bPreviewInitialized = true;
     }
     else
     {
-        Mesh->UpdateSectionGroup(GroupKey, MoveTemp(StreamSet)).Wait();
+        Mesh->UpdateSectionGroup(GroupKey, MoveTemp(StreamSet));
     }
 
-    const FRealtimeMeshSectionKey SectionKey = FRealtimeMeshSectionKey::CreateForPolyGroup(GroupKey, 0);
     const int32 ClampedVertices = FMath::Max(VertexCount, 0);
     const int32 ClampedTriangles = FMath::Max(TriangleCount, 0);
     const FRealtimeMeshStreamRange Range(0, ClampedVertices, 0, ClampedTriangles * 3);

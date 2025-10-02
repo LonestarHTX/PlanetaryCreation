@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/EditorSubsystem.h"
+#include "Subsystems/UnrealEditorSubsystem.h"
 #include "TectonicSimulationService.generated.h"
 
 /**
@@ -9,7 +9,7 @@
  * The state uses double precision so long-running editor sessions avoid drift.
  */
 UCLASS()
-class UTectonicSimulationService : public UEditorSubsystem
+class UTectonicSimulationService : public UUnrealEditorSubsystem
 {
     GENERATED_BODY()
 

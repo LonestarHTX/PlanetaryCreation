@@ -1,5 +1,7 @@
 #include "PlanetaryCreationEditorCommands.h"
 
+#include "InputCoreTypes.h"
+
 #define LOCTEXT_NAMESPACE "FPlanetaryCreationEditorCommands"
 
 void FPlanetaryCreationEditorCommands::RegisterCommands()

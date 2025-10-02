@@ -24,12 +24,14 @@ void FPlanetaryCreationEditorModule::StartupModule()
     CommandList = MakeShared<FUICommandList>();
     BindCommands();
 
+    const IWorkspaceMenuStructure& MenuStructure = WorkspaceMenu::GetMenuStructure();
+
     FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
         TectonicToolTabName,
         FOnSpawnTab::CreateRaw(this, &FPlanetaryCreationEditorModule::HandleSpawnTectonicTab))
         .SetDisplayName(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTitle", "Tectonic Tool"))
         .SetTooltipText(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTooltip", "Control the procedural tectonic simulation."))
-        .SetGroup(WorkspaceMenuStructure::GetMenuStructure().GetLevelEditorCategory());
+        .SetGroup(MenuStructure.GetLevelEditorCategory());
 
     RegisterMenus();
 }

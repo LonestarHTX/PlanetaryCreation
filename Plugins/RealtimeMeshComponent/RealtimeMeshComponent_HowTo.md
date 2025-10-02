@@ -536,6 +536,11 @@ RealtimeMesh->CreateSection(SectionKey, FRealtimeMeshSectionConfig(0), SectionRa
    // Example for cube faces:
    // Right (+X): Up=X, A=Z, B=Y
    // Top (+Z): Up=Z, A=Y, B=X (not A=X, B=Y which would invert)
+   
+   // When deriving tangents from a fallback axis, prefer Normal × Up so the
+   // tangent/normal/binormal basis stays right-handed. In situations where
+   // the cross product degenerates, pick another fallback axis before
+   // calling SetNormalAndTangent.
    ```
 
 ## Common Pitfalls and Solutions (continued)
