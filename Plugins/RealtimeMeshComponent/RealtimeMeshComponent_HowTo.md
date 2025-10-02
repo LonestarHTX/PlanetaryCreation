@@ -138,6 +138,16 @@ AMyActor::AMyActor()
 }
 ```
 
+### Updating Topology at Runtime
+
+RMC lets you replace the geometry of a section group without tearing down the component. The stress-test actor in `RealtimeMeshTests` demonstrates the pattern:
+
+1. Build a fresh `FRealtimeMeshStreamSet` containing the new vertex and index data.
+2. Call `UpdateSectionGroup(GroupKey, MoveTemp(StreamSet))` to swap the buffers in place.
+3. Recompute `FRealtimeMeshStreamRange` values for each section that belongs to the group and pass them to `UpdateSectionRange`.
+
+This approach supports plate rifting or other topology changes because the vertex count can shrink or grow each update. Collision data will refresh asynchronously after the visual buffers finish uploading, so expect a short delay before physics reflects the new shape.
+
 ## Advanced Features
 
 ### 1. Stream-by-Stream Building
