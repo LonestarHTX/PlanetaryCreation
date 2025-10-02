@@ -189,6 +189,13 @@ void FTectonicSimulationController::EnsurePreviewActor() const
     if (URealtimeMeshComponent* Component = Actor->GetRealtimeMeshComponent())
     {
         Component->SetMobility(EComponentMobility::Movable);
+
+        // Disable raytracing and expensive rendering features for editor preview
+        Component->SetCastShadow(false);
+        Component->SetVisibleInRayTracing(false);
+        Component->SetAffectDistanceFieldLighting(false);
+        Component->SetAffectDynamicIndirectLighting(false);
+
         if (URealtimeMeshSimple* Mesh = Component->InitializeRealtimeMesh<URealtimeMeshSimple>())
         {
             Mesh->SetupMaterialSlot(0, TEXT("TectonicPreview"));
