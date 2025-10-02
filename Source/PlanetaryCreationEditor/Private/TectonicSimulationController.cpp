@@ -3,6 +3,7 @@
 #include "Async/Future.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "RealtimeMeshComponent/Public/RealtimeMeshActor.h"
 #include "RealtimeMeshComponent/Public/RealtimeMeshComponent.h"
 #include "RealtimeMeshComponent/Public/RealtimeMeshSimple.h"
@@ -11,7 +12,9 @@
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshStreamRange.h"
 #include "MaterialDomain.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionVertexColor.h"
 #include "TectonicSimulationService.h"
+#include "UObject/ConstructorHelpers.h"
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
 FTectonicSimulationController::~FTectonicSimulationController() = default;
@@ -31,7 +34,19 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
     if (UTectonicSimulationService* Service = GetService())
     {
         Service->AdvanceSteps(Steps);
+        BuildAndUpdateMesh();
+    }
+}
 
+void FTectonicSimulationController::RebuildPreview()
+{
+    BuildAndUpdateMesh();
+}
+
+void FTectonicSimulationController::BuildAndUpdateMesh()
+{
+    if (UTectonicSimulationService* Service = GetService())
+    {
         EnsurePreviewActor();
 
         // Phase 5: Render actual tectonic plates with unique colors
@@ -51,7 +66,7 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                 Builder.EnableTangents();
                 Builder.EnableTexCoords();
                 Builder.EnableColors();
-                Builder.EnablePolyGroups();
+                // Note: Not enabling PolyGroups to avoid raytracing complexity
 
                 const float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km for editor tooling
 
@@ -68,6 +83,21 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                     return RGB.ToFColor(false);
                 };
 
+                // Helper: Apply Rodrigues rotation to a vertex given Euler pole and total rotation
+                auto RotateVertex = [](const FVector3d& Vertex, const FVector3d& EulerPoleAxis, double TotalRotationAngle) -> FVector3d
+                {
+                    const double CosTheta = FMath::Cos(TotalRotationAngle);
+                    const double SinTheta = FMath::Sin(TotalRotationAngle);
+                    const double DotProduct = FVector3d::DotProduct(EulerPoleAxis, Vertex);
+
+                    const FVector3d Rotated =
+                        Vertex * CosTheta +
+                        FVector3d::CrossProduct(EulerPoleAxis, Vertex) * SinTheta +
+                        EulerPoleAxis * DotProduct * (1.0 - CosTheta);
+
+                    return Rotated.GetSafeNormal();
+                };
+
                 // Build vertices and triangles per-plate (avoid shared vertices for color correctness)
                 for (const FTectonicPlate& Plate : Plates)
                 {
@@ -75,13 +105,18 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                     {
                         const FColor PlateColor = GetPlateColor(Plate.PlateID);
 
+                        // Calculate total rotation: AngularVelocity * CurrentTime
+                        const double CurrentTimeMy = Service->GetCurrentTimeMy();
+                        const double TotalRotation = Plate.AngularVelocity * CurrentTimeMy;
+
                         // Add 3 vertices for this plate with the plate's color
                         TArray<int32, TInlineAllocator<3>> PlateVerts;
                         for (int32 i = 0; i < 3; ++i)
                         {
-                            const FVector3d& Vertex = SharedVertices[Plate.VertexIndices[i]];
-                            const FVector3d Normalized = Vertex.GetSafeNormal();
-                            const FVector3f Position = FVector3f(Normalized * RadiusUnits);
+                            // Rotate the vertex using the same Euler pole that rotated the centroid
+                            const FVector3d& OriginalVertex = SharedVertices[Plate.VertexIndices[i]];
+                            const FVector3d RotatedVertex = RotateVertex(OriginalVertex, Plate.EulerPoleAxis, TotalRotation);
+                            const FVector3f Position = FVector3f(RotatedVertex * RadiusUnits);
                             const FVector3f Normal = Position.GetSafeNormal();
 
                             // Calculate tangent for proper lighting
@@ -98,8 +133,8 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                             VertexCount++;
                         }
 
-                        // Add triangle with correct winding order (CCW when viewed from outside)
-                        Builder.AddTriangle(PlateVerts[0], PlateVerts[2], PlateVerts[1], Plate.PlateID);
+                        // Add triangle with CCW winding when viewed from outside (reverse order fixes inside-out)
+                        Builder.AddTriangle(PlateVerts[0], PlateVerts[2], PlateVerts[1]);
                         TriangleCount++;
                     }
                 }
@@ -168,6 +203,19 @@ void FTectonicSimulationController::EnsurePreviewActor() const
         return;
     }
 
+    // Clean up stale actor if it exists but weak pointer is invalid
+    if (!PreviewActor.IsValid())
+    {
+        for (TActorIterator<ARealtimeMeshActor> It(World); It; ++It)
+        {
+            if (It->GetActorLabel() == TEXT("TectonicPreviewActor"))
+            {
+                World->DestroyActor(*It);
+                break;
+            }
+        }
+    }
+
     FActorSpawnParameters SpawnParams;
     SpawnParams.Name = TEXT("TectonicPreviewActor");
     SpawnParams.ObjectFlags = RF_Transient;
@@ -199,10 +247,20 @@ void FTectonicSimulationController::EnsurePreviewActor() const
         if (URealtimeMeshSimple* Mesh = Component->InitializeRealtimeMesh<URealtimeMeshSimple>())
         {
             Mesh->SetupMaterialSlot(0, TEXT("TectonicPreview"));
-            if (UMaterialInterface* DefaultMaterial = UMaterial::GetDefaultMaterial(EMaterialDomain::MD_Surface))
-            {
-                Component->SetMaterial(0, DefaultMaterial);
-            }
+
+            // Create simple unlit material that displays vertex colors
+            UMaterial* VertexColorMaterial = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+            VertexColorMaterial->MaterialDomain = EMaterialDomain::MD_Surface;
+            VertexColorMaterial->SetShadingModel(EMaterialShadingModel::MSM_Unlit);
+
+            UMaterialExpressionVertexColor* VertexColorNode = NewObject<UMaterialExpressionVertexColor>(VertexColorMaterial);
+            VertexColorMaterial->GetExpressionCollection().AddExpression(VertexColorNode);
+            VertexColorMaterial->GetEditorOnlyData()->EmissiveColor.Expression = VertexColorNode;
+
+            VertexColorMaterial->PostEditChange();
+
+            Component->SetMaterial(0, VertexColorMaterial);
+
             PreviewMesh = Mesh;
             bPreviewInitialized = false;
         }

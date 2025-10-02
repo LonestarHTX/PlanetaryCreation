@@ -133,6 +133,9 @@ FReply SPTectonicToolPanel::HandleRegenerateClicked()
             NewParams.Seed = CachedSeed;
             Service->SetParameters(NewParams);
 
+            // Refresh preview mesh without advancing time
+            Controller->RebuildPreview();
+
             UE_LOG(LogTemp, Log, TEXT("Regenerated plates with seed %d"), CachedSeed);
         }
     }

@@ -78,9 +78,7 @@ struct FTectonicSimulationParameters
     UPROPERTY()
     int32 Seed = 42;
 
-    /** Target number of plates (from icosphere subdivision level). */
-    UPROPERTY()
-    int32 PlateCount = 12;
+    // TODO(Milestone 3): Add PlateCount parameter once icosphere subdivision is implemented
 
     /** Mantle viscosity coefficient (placeholder - used in Milestone 3). */
     UPROPERTY()

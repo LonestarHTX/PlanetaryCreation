@@ -20,16 +20,19 @@ public:
 
     void StepSimulation(int32 Steps);
 
+    /** Rebuild the preview mesh without advancing simulation time. */
+    void RebuildPreview();
+
     double GetCurrentTimeMy() const;
 
     /** Access to underlying simulation service (for UI parameter binding). */
     UTectonicSimulationService* GetSimulationService() const;
 
-    /** Builds a placeholder mesh using the current simulation samples. */
 private:
     UTectonicSimulationService* GetService() const;
     void EnsurePreviewActor() const;
     void UpdatePreviewMesh(RealtimeMesh::FRealtimeMeshStreamSet&& StreamSet, int32 VertexCount, int32 TriangleCount);
+    void BuildAndUpdateMesh();
 
     mutable TWeakObjectPtr<UTectonicSimulationService> CachedService;
     mutable TWeakObjectPtr<class ARealtimeMeshActor> PreviewActor;

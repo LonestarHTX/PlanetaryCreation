@@ -327,6 +327,21 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
     // Velocity at a point on plate = ω × r (angular velocity cross radius vector)
     // For boundary between plates A and B, compute velocities at boundary midpoint
 
+    // Helper: Apply Rodrigues rotation to a vertex (shared with visualization)
+    auto RotateVertex = [](const FVector3d& Vertex, const FVector3d& EulerPoleAxis, double TotalRotationAngle) -> FVector3d
+    {
+        const double CosTheta = FMath::Cos(TotalRotationAngle);
+        const double SinTheta = FMath::Sin(TotalRotationAngle);
+        const double DotProduct = FVector3d::DotProduct(EulerPoleAxis, Vertex);
+
+        const FVector3d Rotated =
+            Vertex * CosTheta +
+            FVector3d::CrossProduct(EulerPoleAxis, Vertex) * SinTheta +
+            EulerPoleAxis * DotProduct * (1.0 - CosTheta);
+
+        return Rotated.GetSafeNormal();
+    };
+
     int32 DivergentCount = 0;
     int32 ConvergentCount = 0;
     int32 TransformCount = 0;
@@ -345,10 +360,16 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
             continue;
         }
 
-        // Calculate boundary midpoint on sphere
-        const FVector3d& V0 = SharedVertices[Boundary.SharedEdgeVertices[0]];
-        const FVector3d& V1 = SharedVertices[Boundary.SharedEdgeVertices[1]];
-        const FVector3d BoundaryMidpoint = ((V0 + V1) * 0.5).GetSafeNormal();
+        // Rotate boundary vertices to current simulation time for accurate classification
+        const FVector3d& V0_Original = SharedVertices[Boundary.SharedEdgeVertices[0]];
+        const FVector3d& V1_Original = SharedVertices[Boundary.SharedEdgeVertices[1]];
+
+        // Determine which plate "owns" this boundary edge for rotation
+        // Use PlateA's rotation for boundary geometry (arbitrary but consistent)
+        const double TotalRotationA = PlateA->AngularVelocity * CurrentTimeMy;
+        const FVector3d V0_Rotated = RotateVertex(V0_Original, PlateA->EulerPoleAxis, TotalRotationA);
+        const FVector3d V1_Rotated = RotateVertex(V1_Original, PlateA->EulerPoleAxis, TotalRotationA);
+        const FVector3d BoundaryMidpoint = ((V0_Rotated + V1_Rotated) * 0.5).GetSafeNormal();
 
         // Compute velocity at boundary for each plate: v = ω × r
         // ω is the angular velocity vector = AngularVelocity * EulerPoleAxis
@@ -361,8 +382,11 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
         // Relative velocity: vRel = vA - vB
         const FVector3d RelativeVelocity = VelocityA - VelocityB;
 
-        // Boundary normal (outward from PlateA toward PlateB)
-        const FVector3d BoundaryNormal = FVector3d::CrossProduct(V1 - V0, BoundaryMidpoint).GetSafeNormal();
+        // Boundary normal: deterministic orientation using PlateA's centroid
+        // Cross the edge vector with a vector from boundary toward PlateA's centroid
+        const FVector3d EdgeVector = (V1_Rotated - V0_Rotated).GetSafeNormal();
+        const FVector3d ToPlateA = (PlateA->Centroid - BoundaryMidpoint).GetSafeNormal();
+        const FVector3d BoundaryNormal = FVector3d::CrossProduct(EdgeVector, ToPlateA).GetSafeNormal();
 
         // Project relative velocity onto boundary normal
         const double NormalComponent = FVector3d::DotProduct(RelativeVelocity, BoundaryNormal);

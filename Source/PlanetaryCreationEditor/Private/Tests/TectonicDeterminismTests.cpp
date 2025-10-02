@@ -38,7 +38,6 @@ bool FTectonicDeterminismSameSeedTest::RunTest(const FString& Parameters)
     // Configure parameters with fixed seed
     FTectonicSimulationParameters Params;
     Params.Seed = 12345;
-    Params.PlateCount = 12;
 
     // First run
     Service->SetParameters(Params);
