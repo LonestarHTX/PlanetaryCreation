@@ -68,51 +68,38 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
                     return RGB.ToFColor(false);
                 };
 
-                // Build shared vertex pool first
-                TArray<int32> VertexRemap;
-                VertexRemap.SetNumUninitialized(SharedVertices.Num());
-
-                for (int32 i = 0; i < SharedVertices.Num(); ++i)
-                {
-                    const FVector3d& Vertex = SharedVertices[i];
-                    const FVector3d Normalized = Vertex.GetSafeNormal();
-                    const FVector3f Position = FVector3f(Normalized * RadiusUnits);
-                    const FVector3f Normal = Position.GetSafeNormal();
-
-                    // Calculate tangent for proper lighting
-                    const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
-                    FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
-                    const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
-
-                    // Color will be overridden per-plate, use white as default
-                    const int32 VertexId = Builder.AddVertex(Position)
-                        .SetNormalAndTangent(Normal, TangentX)
-                        .SetColor(FColor::White)
-                        .SetTexCoord(TexCoord);
-
-                    VertexRemap[i] = VertexId;
-                }
-
-                VertexCount = SharedVertices.Num();
-
-                // Add triangles for each plate with unique color
+                // Build vertices and triangles per-plate (avoid shared vertices for color correctness)
                 for (const FTectonicPlate& Plate : Plates)
                 {
                     if (Plate.VertexIndices.Num() == 3) // Triangular plate
                     {
                         const FColor PlateColor = GetPlateColor(Plate.PlateID);
 
-                        const int32 V0 = VertexRemap[Plate.VertexIndices[0]];
-                        const int32 V1 = VertexRemap[Plate.VertexIndices[1]];
-                        const int32 V2 = VertexRemap[Plate.VertexIndices[2]];
+                        // Add 3 vertices for this plate with the plate's color
+                        TArray<int32, TInlineAllocator<3>> PlateVerts;
+                        for (int32 i = 0; i < 3; ++i)
+                        {
+                            const FVector3d& Vertex = SharedVertices[Plate.VertexIndices[i]];
+                            const FVector3d Normalized = Vertex.GetSafeNormal();
+                            const FVector3f Position = FVector3f(Normalized * RadiusUnits);
+                            const FVector3f Normal = Position.GetSafeNormal();
 
-                        // Override vertex colors for this plate
-                        Builder.SetColor(V0, PlateColor);
-                        Builder.SetColor(V1, PlateColor);
-                        Builder.SetColor(V2, PlateColor);
+                            // Calculate tangent for proper lighting
+                            const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
+                            FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
+                            const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
+
+                            const int32 VertexId = Builder.AddVertex(Position)
+                                .SetNormalAndTangent(Normal, TangentX)
+                                .SetColor(PlateColor)
+                                .SetTexCoord(TexCoord);
+
+                            PlateVerts.Add(VertexId);
+                            VertexCount++;
+                        }
 
                         // Add triangle with correct winding order (CCW when viewed from outside)
-                        Builder.AddTriangle(V0, V2, V1, Plate.PlateID);
+                        Builder.AddTriangle(PlateVerts[0], PlateVerts[2], PlateVerts[1], Plate.PlateID);
                         TriangleCount++;
                     }
                 }
