@@ -10,6 +10,10 @@ public class PlanetaryCreationEditorTarget : TargetRules
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V5;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_5;
-		ExtraModuleNames.Add("PlanetaryCreation");
+		ExtraModuleNames.AddRange(new string[]
+		{
+			"PlanetaryCreation",
+			"PlanetaryCreationEditor"
+		});
 	}
 }

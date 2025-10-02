@@ -117,3 +117,33 @@
 - Prototype single-step elevation update on placeholder mesh to validate RealtimeMesh stream updates.
 
 _Reference figures available in `ProceduralTectonicPlanetsPaper/` screenshots._
+
+## Milestone 1 Task Breakdown
+
+### Milestone 1 – Progress Notes
+- PlanetaryCreationEditor module boots with dedicated tab, toolbar buttons, and a 2 My step command for the tectonic tool.
+- Simulation scaffolding uses double precision and spawns a hidden RealtimeMesh preview actor to exercise `UpdateSectionGroup`/`UpdateSectionRange` on each step.
+- Heightfield infrastructure seeded with stub library and content folders (`Content/PlanetaryCreation/Heightfields`, `.../Data`).
+- Automation smoke test added to `Source/PlanetaryCreationEditor/Private/Tests` with TODO hook for future Insights capture.
+
+1. **Editor Module Bootstrapping**
+   - Add `PlanetaryCreationEditor.Target.cs` and module Build.cs entries.
+   - Register the module in `.uproject`; ensure it loads editor-only.
+2. **UI Entry Point**
+   - Implement toolbar/menu extender creating a "Tectonic Tool" tab.
+   - Scaffold Slate widget with `Step (2 My)` button and disabled multi-step controls.
+3. **Simulation Scaffolding**
+   - Create `UTectonicSimulationService` (double-based state) and `FTectonicSimulationController` skeleton with `Advance(int32 Steps)` placeholder.
+   - Add float conversion helper returning `FRealtimeMeshStreamSet` for the placeholder mesh.
+4. **RealtimeMesh Prototype**
+   - Initialize a simple section group on startup and wire `Step` button to update it via `UpdateSectionGroup`/`UpdateSectionRange`.
+5. **Heightfield Infrastructure**
+   - Generate content folders (`Content/PlanetaryCreation/Heightfields`, `.../Data`) and stub `UHeightfieldExemplarLibrary`.
+   - Create empty `UDataTable` asset + struct for exemplar metadata.
+6. **Automation Harness**
+   - Add editor automation test module, stub test case logging TODO perf capture.
+   - Script CLI command to run tests and leave placeholders for Insights/JSON export.
+7. **Documentation & Validation**
+   - Update `Docs/Milestone0_Notes.md` with status notes.
+   - Record Milestone 1 checklist in `Docs/PlanningAgentPlan.md` once complete.
+

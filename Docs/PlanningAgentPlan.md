@@ -17,12 +17,14 @@
 ### Milestone 1 – Tooling & Infrastructure Setup (Week 1)
 - **Owners:** Tools Engineer (lead), Build Engineer
 - **Tasks:**
-  - Create `PlanetaryCreationEditor` module, toolbar tab, and spawnable utility widget.
-  - Enable `RealtimeMeshComponent` in editor target; add mesh asset cache subsystem.
-  - Set up automation test harness in `Source/PlanetaryCreationEditor/Private/Tests`.
-- **Dependencies:** UE 5.5.4 SDK, Visual Studio.
+  - Create `PlanetaryCreationEditor` module, toolbar tab, and spawnable utility widget with a 2 My `Step` button (batch stepping deferred).
+  - Define simulation scaffolding (`UTectonicSimulationService`, `FTectonicSimulationController`) using double-precision state and float conversion helpers for RealtimeMesh.
+  - Enable `RealtimeMeshComponent` in the editor target; prototype a placeholder sphere update via `UpdateSectionGroup`/`UpdateSectionRange` to prove topology swapping works.
+  - Seed exemplar infrastructure: create heightfield asset folders, stub `UHeightfieldExemplarLibrary`, and register an empty metadata `UDataTable`.
+  - Set up automation test harness in `Source/PlanetaryCreationEditor/Private/Tests` with perf-report TODO hooks for future Insights captures.
+- **Dependencies:** UE 5.5.4 SDK, Visual Studio, RMC plugin docs.
 - **Risks:** Editor build linkage conflicts; isolate plugin usage.
-- **Validation:** Compile editor target, run editor automation smoke tests, verify tab loads sans PIE.
+- **Validation:** Compile editor target, run editor automation smoke tests, verify tab loads sans PIE, confirm placeholder mesh updates after pressing Step.
 
 ### Milestone 2 – Data & Simulation Core (Weeks 2–4)
 - **Owners:** Simulation Engineer, Tools Engineer
