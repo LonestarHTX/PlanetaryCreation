@@ -22,6 +22,9 @@ public:
 
     double GetCurrentTimeMy() const;
 
+    /** Access to underlying simulation service (for UI parameter binding). */
+    UTectonicSimulationService* GetSimulationService() const;
+
     /** Builds a placeholder mesh using the current simulation samples. */
 private:
     UTectonicSimulationService* GetService() const;

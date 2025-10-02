@@ -125,6 +125,11 @@ double FTectonicSimulationController::GetCurrentTimeMy() const
     return 0.0;
 }
 
+UTectonicSimulationService* FTectonicSimulationController::GetSimulationService() const
+{
+    return GetService();
+}
+
 UTectonicSimulationService* FTectonicSimulationController::GetService() const
 {
     if (CachedService.IsValid())

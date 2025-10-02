@@ -16,7 +16,16 @@ public:
 
 private:
     FReply HandleStepClicked();
+    FReply HandleRegenerateClicked();
     FText GetCurrentTimeLabel() const;
+    FText GetPlateCountLabel() const;
+
+    // Parameter accessors for spin boxes
+    int32 GetSeedValue() const;
+    void OnSeedValueChanged(int32 NewValue);
 
     TWeakPtr<FTectonicSimulationController> ControllerWeak;
+
+    // Cached parameter values (updated on regenerate)
+    int32 CachedSeed = 42;
 };
