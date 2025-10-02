@@ -91,6 +91,17 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 .OnClicked(this, &SPTectonicToolPanel::HandleStepClicked)
             ]
 
+            // Export metrics button
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ExportMetricsLabel", "Export Metrics CSV"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ExportMetricsTooltip", "Export current simulation state to Saved/TectonicMetrics/ for analysis"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleExportMetricsClicked)
+            ]
+
             + SVerticalBox::Slot()
             .AutoHeight()
             [
@@ -161,4 +172,16 @@ int32 SPTectonicToolPanel::GetSeedValue() const
 void SPTectonicToolPanel::OnSeedValueChanged(int32 NewValue)
 {
     CachedSeed = NewValue;
+}
+
+FReply SPTectonicToolPanel::HandleExportMetricsClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            Service->ExportMetricsToCSV();
+        }
+    }
+    return FReply::Handled();
 }

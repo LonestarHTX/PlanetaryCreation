@@ -34,16 +34,19 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
 
         EnsurePreviewActor();
 
+        // Phase 5: Render actual tectonic plates with unique colors
         RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
         int32 VertexCount = 0;
         int32 TriangleCount = 0;
 
         {
-            const TArray<FVector3d>& Samples = Service->GetBaseSphereSamples();
-            if (Samples.Num() >= 6)
-            {
-                using namespace RealtimeMesh;
+            using namespace RealtimeMesh;
 
+            const TArray<FTectonicPlate>& Plates = Service->GetPlates();
+            const TArray<FVector3d>& SharedVertices = Service->GetSharedVertices();
+
+            if (Plates.Num() > 0 && SharedVertices.Num() > 0)
+            {
                 TRealtimeMeshBuilderLocal<uint16, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
                 Builder.EnableTangents();
                 Builder.EnableTexCoords();
@@ -52,63 +55,70 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
 
                 const float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km for editor tooling
 
-                TArray<int32, TInlineAllocator<6>> VertexIndices;
-                VertexIndices.Reserve(Samples.Num());
-
-                for (const FVector3d& Sample : Samples)
+                // Helper to generate stable color from plate ID
+                auto GetPlateColor = [](int32 PlateID) -> FColor
                 {
-                    const FVector3d Normalized = Sample.GetSafeNormal();
+                    // Use golden ratio for color distribution
+                    const float GoldenRatio = 0.618033988749895f;
+                    const float Hue = FMath::Fmod(PlateID * GoldenRatio, 1.0f);
+
+                    // Convert HSV to RGB (Saturation=0.7, Value=0.9 for pastel look)
+                    FLinearColor HSV(Hue * 360.0f, 0.7f, 0.9f);
+                    FLinearColor RGB = HSV.HSVToLinearRGB();
+                    return RGB.ToFColor(false);
+                };
+
+                // Build shared vertex pool first
+                TArray<int32> VertexRemap;
+                VertexRemap.SetNumUninitialized(SharedVertices.Num());
+
+                for (int32 i = 0; i < SharedVertices.Num(); ++i)
+                {
+                    const FVector3d& Vertex = SharedVertices[i];
+                    const FVector3d Normalized = Vertex.GetSafeNormal();
                     const FVector3f Position = FVector3f(Normalized * RadiusUnits);
                     const FVector3f Normal = Position.GetSafeNormal();
-                    const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
-                    FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector);
-                    if (!TangentX.Normalize())
-                    {
-                        TangentX = FVector3f::CrossProduct(Normal, FVector3f(0.0f, 1.0f, 0.0f));
-                        if (!TangentX.Normalize())
-                        {
-                            TangentX = FVector3f::CrossProduct(Normal, FVector3f(1.0f, 0.0f, 0.0f));
-                            TangentX.Normalize();
-                        }
-                    }
 
-                    const FVector3f Binormal = FVector3f::CrossProduct(TangentX, Normal);
-                    if (FVector3f::DotProduct(Binormal, UpVector) < 0.0f)
-                    {
-                        TangentX *= -1.0f;
-                    }
+                    // Calculate tangent for proper lighting
+                    const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
+                    FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
                     const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
 
+                    // Color will be overridden per-plate, use white as default
                     const int32 VertexId = Builder.AddVertex(Position)
                         .SetNormalAndTangent(Normal, TangentX)
-                        .SetColor(FColor::Silver)
+                        .SetColor(FColor::White)
                         .SetTexCoord(TexCoord);
-                    VertexIndices.Add(VertexId);
+
+                    VertexRemap[i] = VertexId;
                 }
 
-                VertexCount = VertexIndices.Num();
+                VertexCount = SharedVertices.Num();
 
-                if (VertexIndices.Num() >= 6)
+                // Add triangles for each plate with unique color
+                for (const FTectonicPlate& Plate : Plates)
                 {
-                    const int32 PosX = VertexIndices[0];
-                    const int32 NegX = VertexIndices[1];
-                    const int32 PosY = VertexIndices[2];
-                    const int32 NegY = VertexIndices[3];
-                    const int32 PosZ = VertexIndices[4];
-                    const int32 NegZ = VertexIndices[5];
+                    if (Plate.VertexIndices.Num() == 3) // Triangular plate
+                    {
+                        const FColor PlateColor = GetPlateColor(Plate.PlateID);
 
-                    Builder.AddTriangle(PosZ, PosY, PosX, 0);
-                    Builder.AddTriangle(PosZ, NegX, PosY, 0);
-                    Builder.AddTriangle(PosZ, NegY, NegX, 0);
-                    Builder.AddTriangle(PosZ, PosX, NegY, 0);
+                        const int32 V0 = VertexRemap[Plate.VertexIndices[0]];
+                        const int32 V1 = VertexRemap[Plate.VertexIndices[1]];
+                        const int32 V2 = VertexRemap[Plate.VertexIndices[2]];
 
-                    Builder.AddTriangle(NegZ, PosX, PosY, 0);
-                    Builder.AddTriangle(NegZ, PosY, NegX, 0);
-                    Builder.AddTriangle(NegZ, NegX, NegY, 0);
-                    Builder.AddTriangle(NegZ, NegY, PosX, 0);
+                        // Override vertex colors for this plate
+                        Builder.SetColor(V0, PlateColor);
+                        Builder.SetColor(V1, PlateColor);
+                        Builder.SetColor(V2, PlateColor);
 
-                    TriangleCount = 8;
+                        // Add triangle with correct winding order (CCW when viewed from outside)
+                        Builder.AddTriangle(V0, V2, V1, Plate.PlateID);
+                        TriangleCount++;
+                    }
                 }
+
+                UE_LOG(LogTemp, Verbose, TEXT("Rendered %d plates with %d vertices and %d triangles"),
+                    Plates.Num(), VertexCount, TriangleCount);
             }
         }
 

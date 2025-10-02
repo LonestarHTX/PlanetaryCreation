@@ -1,5 +1,8 @@
 #include "TectonicSimulationService.h"
 #include "Math/RandomStream.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "HAL/PlatformFileManager.h"
 
 void UTectonicSimulationService::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -387,4 +390,113 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
 
     UE_LOG(LogTemp, VeryVerbose, TEXT("Boundary classification: %d divergent, %d convergent, %d transform"),
         DivergentCount, ConvergentCount, TransformCount);
+}
+
+void UTectonicSimulationService::ExportMetricsToCSV()
+{
+    // Phase 4 Task 9: Export simulation metrics to CSV for validation and analysis
+
+    // Create output directory if it doesn't exist
+    const FString OutputDir = FPaths::ProjectSavedDir() / TEXT("TectonicMetrics");
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (!PlatformFile.DirectoryExists(*OutputDir))
+    {
+        PlatformFile.CreateDirectory(*OutputDir);
+    }
+
+    // Generate timestamped filename
+    const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
+    const FString Filename = FString::Printf(TEXT("TectonicMetrics_Seed%d_Step%d_%s.csv"),
+        Parameters.Seed,
+        static_cast<int32>(CurrentTimeMy / 2.0), // Step count
+        *Timestamp);
+    const FString FilePath = OutputDir / Filename;
+
+    // Build CSV content
+    TArray<FString> CSVLines;
+
+    // Header
+    CSVLines.Add(TEXT("PlateID,CentroidX,CentroidY,CentroidZ,CrustType,CrustThickness,EulerPoleAxisX,EulerPoleAxisY,EulerPoleAxisZ,AngularVelocity"));
+
+    // Plate data
+    for (const FTectonicPlate& Plate : Plates)
+    {
+        const FString CrustTypeName = (Plate.CrustType == ECrustType::Oceanic) ? TEXT("Oceanic") : TEXT("Continental");
+
+        CSVLines.Add(FString::Printf(TEXT("%d,%.8f,%.8f,%.8f,%s,%.2f,%.8f,%.8f,%.8f,%.8f"),
+            Plate.PlateID,
+            Plate.Centroid.X, Plate.Centroid.Y, Plate.Centroid.Z,
+            *CrustTypeName,
+            Plate.CrustThickness,
+            Plate.EulerPoleAxis.X, Plate.EulerPoleAxis.Y, Plate.EulerPoleAxis.Z,
+            Plate.AngularVelocity
+        ));
+    }
+
+    // Add separator and boundary data
+    CSVLines.Add(TEXT("")); // Empty line
+    CSVLines.Add(TEXT("PlateA_ID,PlateB_ID,BoundaryType,RelativeVelocity"));
+
+    for (const auto& BoundaryPair : Boundaries)
+    {
+        const TPair<int32, int32>& PlateIDs = BoundaryPair.Key;
+        const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+        FString BoundaryTypeName;
+        switch (Boundary.BoundaryType)
+        {
+            case EBoundaryType::Divergent:  BoundaryTypeName = TEXT("Divergent"); break;
+            case EBoundaryType::Convergent: BoundaryTypeName = TEXT("Convergent"); break;
+            case EBoundaryType::Transform:  BoundaryTypeName = TEXT("Transform"); break;
+        }
+
+        CSVLines.Add(FString::Printf(TEXT("%d,%d,%s,%.8f"),
+            PlateIDs.Key, PlateIDs.Value,
+            *BoundaryTypeName,
+            Boundary.RelativeVelocity
+        ));
+    }
+
+    // Add summary statistics
+    CSVLines.Add(TEXT("")); // Empty line
+    CSVLines.Add(TEXT("Metric,Value"));
+    CSVLines.Add(FString::Printf(TEXT("SimulationTime_My,%.2f"), CurrentTimeMy));
+    CSVLines.Add(FString::Printf(TEXT("PlateCount,%d"), Plates.Num()));
+    CSVLines.Add(FString::Printf(TEXT("BoundaryCount,%d"), Boundaries.Num()));
+    CSVLines.Add(FString::Printf(TEXT("Seed,%d"), Parameters.Seed));
+
+    // Calculate total kinetic energy (for monitoring)
+    double TotalKineticEnergy = 0.0;
+    for (const FTectonicPlate& Plate : Plates)
+    {
+        // Simplified: KE ∝ ω² (ignoring moment of inertia for now)
+        TotalKineticEnergy += Plate.AngularVelocity * Plate.AngularVelocity;
+    }
+    CSVLines.Add(FString::Printf(TEXT("TotalKineticEnergy,%.8f"), TotalKineticEnergy));
+
+    // Count boundary types
+    int32 DivergentCount = 0, ConvergentCount = 0, TransformCount = 0;
+    for (const auto& BoundaryPair : Boundaries)
+    {
+        switch (BoundaryPair.Value.BoundaryType)
+        {
+            case EBoundaryType::Divergent:  DivergentCount++; break;
+            case EBoundaryType::Convergent: ConvergentCount++; break;
+            case EBoundaryType::Transform:  TransformCount++; break;
+        }
+    }
+    CSVLines.Add(FString::Printf(TEXT("DivergentBoundaries,%d"), DivergentCount));
+    CSVLines.Add(FString::Printf(TEXT("ConvergentBoundaries,%d"), ConvergentCount));
+    CSVLines.Add(FString::Printf(TEXT("TransformBoundaries,%d"), TransformCount));
+
+    // Write to file
+    const FString CSVContent = FString::Join(CSVLines, TEXT("\n"));
+    if (FFileHelper::SaveStringToFile(CSVContent, *FilePath))
+    {
+        UE_LOG(LogTemp, Log, TEXT("Exported metrics to: %s"), *FilePath);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to export metrics to: %s"), *FilePath);
+    }
 }

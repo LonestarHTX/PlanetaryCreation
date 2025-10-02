@@ -131,6 +131,9 @@ public:
     /** Update simulation parameters and reset (Milestone 2 - Phase 3). */
     void SetParameters(const FTectonicSimulationParameters& NewParams);
 
+    /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
+    void ExportMetricsToCSV();
+
 private:
     void GenerateDefaultSphereSamples();
 

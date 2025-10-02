@@ -17,6 +17,7 @@ public:
 private:
     FReply HandleStepClicked();
     FReply HandleRegenerateClicked();
+    FReply HandleExportMetricsClicked();
     FText GetCurrentTimeLabel() const;
     FText GetPlateCountLabel() const;
 
