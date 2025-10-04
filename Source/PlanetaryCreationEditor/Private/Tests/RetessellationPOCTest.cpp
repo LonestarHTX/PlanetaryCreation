@@ -77,22 +77,36 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
     const bool ValidationResult = Service->ValidateRetessellation(CleanSnapshot);
     TestTrue(TEXT("Validation passes for clean mesh"), ValidationResult);
 
-    // Test 3: Re-tessellation (POC forced rebuild)
+    // Test 3: Re-tessellation with real drift detection
     UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Forced Re-tessellation (POC)"));
+    UE_LOG(LogTemp, Log, TEXT("Test 3: Re-tessellation (Drift Detection)"));
 
     Service->SetParameters(Params); // Reset
+
+    // First check: no drift initially (threshold = 30°, no steps taken)
+    const bool NoDriftRebuild = Service->PerformRetessellation();
+    TestTrue(TEXT("Re-tessellation succeeds when no drift"), NoDriftRebuild);
+    TestEqual(TEXT("No rebuild when plates haven't drifted"), Service->RetessellationCount, 0);
+
+    // Advance simulation to cause drift
+    Service->AdvanceSteps(10); // 20 My should cause some drift
+
     const int32 PreRebuildVertexCount = Service->GetRenderVertices().Num();
 
+    // Lower threshold to 1° to force rebuild
+    Params.RetessellationThresholdDegrees = 1.0;
+    Service->SetParameters(Params);
+    Service->AdvanceSteps(10); // Another 20 My
+
     const bool RebuildSuccess = Service->PerformRetessellation();
-    TestTrue(TEXT("Re-tessellation succeeds"), RebuildSuccess);
+    TestTrue(TEXT("Re-tessellation succeeds after drift"), RebuildSuccess);
 
     const int32 PostRebuildVertexCount = Service->GetRenderVertices().Num();
     UE_LOG(LogTemp, Log, TEXT("  Pre-rebuild: %d vertices"), PreRebuildVertexCount);
     UE_LOG(LogTemp, Log, TEXT("  Post-rebuild: %d vertices"), PostRebuildVertexCount);
     UE_LOG(LogTemp, Log, TEXT("  Rebuild time: %.2f ms"), Service->LastRetessellationTimeMs);
 
-    // POC uses full rebuild, so vertex count should match
+    // Full rebuild preserves vertex count
     TestEqual(TEXT("Vertex count preserved after rebuild"), PostRebuildVertexCount, PreRebuildVertexCount);
 
     // Test 4: Performance logging
@@ -102,22 +116,22 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
     UE_LOG(LogTemp, Log, TEXT("  Last rebuild time: %.2f ms"), Service->LastRetessellationTimeMs);
 
     TestTrue(TEXT("Rebuild time logged"), Service->LastRetessellationTimeMs > 0.0);
-    TestEqual(TEXT("Rebuild count incremented"), Service->RetessellationCount, 1);
+    TestTrue(TEXT("Rebuild count incremented"), Service->RetessellationCount >= 1);
 
-    // Test 5: Run multiple rebuilds to check stability
+    // Test 5: No-rebuild case (high threshold)
     UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Multiple Rebuilds (Stability Test)"));
+    UE_LOG(LogTemp, Log, TEXT("Test 5: No-Rebuild Case (High Threshold)"));
 
-    for (int32 i = 0; i < 5; ++i)
-    {
-        const bool Success = Service->PerformRetessellation();
-        TestTrue(FString::Printf(TEXT("Rebuild %d succeeds"), i + 1), Success);
-    }
+    Params.RetessellationThresholdDegrees = 90.0; // Very high threshold
+    Service->SetParameters(Params);
+    Service->AdvanceSteps(5);
 
-    UE_LOG(LogTemp, Log, TEXT("  Total rebuilds: %d"), Service->RetessellationCount);
-    UE_LOG(LogTemp, Log, TEXT("  Latest rebuild time: %.2f ms"), Service->LastRetessellationTimeMs);
+    const int32 PreNoRebuildCount = Service->RetessellationCount;
+    const bool NoRebuildSuccess = Service->PerformRetessellation();
+    TestTrue(TEXT("Re-tessellation succeeds with high threshold"), NoRebuildSuccess);
+    TestEqual(TEXT("Rebuild count unchanged when no drift"), Service->RetessellationCount, PreNoRebuildCount);
 
-    TestEqual(TEXT("Rebuild count after 5 more rebuilds"), Service->RetessellationCount, 6); // 1 from Test 3 + 5 here
+    UE_LOG(LogTemp, Log, TEXT("  Rebuild avoided (no plates drifted beyond 90°)"));
 
     AddInfo(TEXT("✅ Re-tessellation POC test complete"));
     AddInfo(FString::Printf(TEXT("Snapshot/Restore: Working | Validation: Passing | Rebuild: %.2f ms"),

@@ -159,15 +159,35 @@ bool UTectonicSimulationService::PerformRetessellation()
     // Step 1: Create snapshot for rollback
     const FRetessellationSnapshot Snapshot = CaptureRetessellationSnapshot();
 
-    // Step 2: Detect drifted plates (POC: hard-code PlateID=0 for single-plate test)
+    // Step 2: Detect drifted plates using real drift calculation
     TArray<int32> DriftedPlateIDs;
 
-    // POC: Force drift detection for testing (will use real drift check in Phase 2)
-    const int32 TestPlateID = 0;
-    if (Plates.IsValidIndex(TestPlateID))
+    // Convert threshold from degrees to radians
+    const double ThresholdRad = FMath::DegreesToRadians(Parameters.RetessellationThresholdDegrees);
+
+    // Check each plate's drift from initial position
+    for (int32 i = 0; i < Plates.Num(); ++i)
     {
-        DriftedPlateIDs.Add(TestPlateID);
-        UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation POC] Forcing rebuild for PlateID=%d (test mode)"), TestPlateID);
+        if (!InitialPlateCentroids.IsValidIndex(i))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Plate %d has no initial centroid (skipping drift check)"), Plates[i].PlateID);
+            continue;
+        }
+
+        const FVector3d& CurrentCentroid = Plates[i].Centroid;
+        const FVector3d& InitialCentroid = InitialPlateCentroids[i];
+
+        // Calculate angular distance (great circle distance on unit sphere)
+        const double DotProduct = FMath::Clamp(FVector3d::DotProduct(CurrentCentroid, InitialCentroid), -1.0, 1.0);
+        const double AngularDistanceRad = FMath::Acos(DotProduct);
+
+        if (AngularDistanceRad > ThresholdRad)
+        {
+            const double AngularDistanceDeg = FMath::RadiansToDegrees(AngularDistanceRad);
+            UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Plate %d drifted %.2f° (threshold: %.2f°)"),
+                Plates[i].PlateID, AngularDistanceDeg, Parameters.RetessellationThresholdDegrees);
+            DriftedPlateIDs.Add(Plates[i].PlateID);
+        }
     }
 
     if (DriftedPlateIDs.Num() == 0)
@@ -176,9 +196,9 @@ bool UTectonicSimulationService::PerformRetessellation()
         return true; // No rebuild needed
     }
 
-    // Step 3: POC - Simple full mesh rebuild (incremental logic in Phase 2)
-    // For now, just regenerate the entire render mesh to prove snapshot/restore/validate works
-    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation POC] Rebuilding render mesh (full rebuild)"));
+    // Step 3: Phase 2 - Full mesh rebuild for drifted plates
+    // TODO Phase 2c: Replace with incremental boundary fan split
+    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Rebuilding mesh for %d drifted plate(s) (full rebuild)"), DriftedPlateIDs.Num());
 
     // Trigger full mesh regeneration
     GenerateRenderMesh();
@@ -197,8 +217,8 @@ bool UTectonicSimulationService::PerformRetessellation()
     LastRetessellationTimeMs = (EndTime - StartTime) * 1000.0;
     RetessellationCount++;
 
-    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation POC] Completed in %.2f ms (count: %d)"),
-        LastRetessellationTimeMs, RetessellationCount);
+    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Completed in %.2f ms (count: %d, plates rebuilt: %d)"),
+        LastRetessellationTimeMs, RetessellationCount, DriftedPlateIDs.Num());
 
     return true;
 }
