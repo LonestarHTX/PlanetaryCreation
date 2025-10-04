@@ -203,6 +203,37 @@ public:
     /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
     void ExportMetricsToCSV();
 
+    /** Milestone 4 Task 1.1: Re-tessellation public API. */
+
+    /** Re-tessellation snapshot structure for rollback. */
+    struct FRetessellationSnapshot
+    {
+        TArray<FVector3d> SharedVertices;
+        TArray<FVector3d> RenderVertices;
+        TArray<int32> RenderTriangles;
+        TArray<int32> VertexPlateAssignments;
+        TMap<TPair<int32, int32>, FPlateBoundary> Boundaries;
+        double TimestampMy;
+
+        FRetessellationSnapshot() : TimestampMy(0.0) {}
+    };
+
+    /** Captures current state for rollback. */
+    FRetessellationSnapshot CaptureRetessellationSnapshot() const;
+
+    /** Restores state from snapshot after failed rebuild. */
+    void RestoreRetessellationSnapshot(const FRetessellationSnapshot& Snapshot);
+
+    /** Performs incremental re-tessellation for drifted plates. Returns true if successful. */
+    bool PerformRetessellation();
+
+    /** Validates re-tessellation result against snapshot. */
+    bool ValidateRetessellation(const FRetessellationSnapshot& Snapshot) const;
+
+    /** Milestone 4 Task 1.1: Re-tessellation performance tracking (public for tests). */
+    double LastRetessellationTimeMs = 0.0;
+    int32 RetessellationCount = 0;
+
 private:
     void GenerateDefaultSphereSamples();
 

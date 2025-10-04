@@ -171,3 +171,14 @@ Document any deviations from paper in code comments. See `Docs/PlanningAgentPlan
 **Module compile errors after adding files:**
 - Regenerate project files with UnrealBuildTool `-projectfiles`
 - Check `.Build.cs` has required dependencies (e.g., "RealtimeMeshComponent")
+
+**Test failures during automation run:**
+- If earlier tests crash, later tests won't run but WILL still be registered
+- Check logs in `Saved/Logs/PlanetaryCreation.log` for actual test output
+- Example: Actor name collision can crash tests (e.g., "Cannot generate unique name for 'TectonicPreviewActor'")
+- To verify a specific test exists: `grep -i "testname" Saved/Logs/PlanetaryCreation.log`
+
+**Re-tessellation validation failures (Milestone 4):**
+- **SharedVertices vs RenderVertices confusion**: Validation MUST check `RenderVertices` (the high-density render mesh), NOT `SharedVertices` (low-density simulation mesh)
+- Symptom: Euler characteristic fails with wrong vertex count (e.g., "V=12 E=480 F=320" instead of "V=162 E=480 F=320")
+- Fix: Always use `RenderVertices`, `RenderTriangles`, `VertexPlateAssignments` in validation code
