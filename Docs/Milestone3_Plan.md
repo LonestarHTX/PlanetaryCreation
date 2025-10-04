@@ -419,7 +419,7 @@ if (RenderLevel <= 2) {
 
 ---
 
-## Task Dependency Graph (M3 Actual Implementation)
+## Task Dependency Graph (M3 Final Status)
 
 ```
 Phase 1 (Geometry Scaffold):
@@ -434,21 +434,30 @@ Phase 3 (Lloyd & Refinement):
   2.1 → 3.2 (Boundary Overlay) ✅ (merged with 4.1)
   3.1 + 3.2 → 3.3 (Re-tessellation Stub) ✅
     ↓
-Phase 4 (Polish - Partial):
+Phase 4 (Performance & Polish):
   4.1 (Boundary Overlay) ✅ merged into 3.2
-  4.2 (Velocity Arrows) ⚠️ deferred (optional)
-  4.3 (Async Mesh) ⚠️ deferred (optimization)
-  4.4 (Profiling) ⚠️ deferred (optimization)
-  4.5 (UI Polish) ⚠️ partial (missing perf stats)
+  4.2 (Velocity Arrows) ⚠️ deferred (optional feature for M4)
+  4.3 (Async Mesh Pipeline) ✅ COMPLETE (snapshot pattern, threshold-based)
+  4.4 (Performance Profiling) ✅ COMPLETE (101ms at level 3, within margin)
+  4.5 (UI Performance Stats) ✅ COMPLETE (step time, vertex/tri count display)
     ↓
 Phase 5 (Validation):
-  5.1 (Test Suite) ✅ COMPLETE (7 M3 tests passing)
-  5.2 (Visual Comparison) ⚠️ deferred
-  5.3 (CSV Export) ✅ COMPLETE
-  5.4 (Documentation) ⚠️ in progress
+  5.1 (Test Suite) ✅ COMPLETE (8 M3 tests: 7 feature + 1 perf profiling)
+  5.2 (Visual Comparison) ⚠️ deferred (manual validation acceptable)
+  5.3 (CSV Export) ✅ COMPLETE (vertex-level stress/velocity/elevation)
+  5.4 (Documentation) ✅ COMPLETE (Performance_M3.md, Milestone3_Plan.md updates)
+
   2.3 → 5.3 (CSV Export)
+  4.3 + 4.4 → 5.4 (Performance docs)
   All phases → 5.4 (Documentation)
 ```
+
+**Legend:**
+- ✅ COMPLETE: Fully implemented, tested, and documented
+- ⚠️ Deferred: Moved to M4+ scope (not critical for M3 acceptance)
+
+**M3 Completion Status:** 12/14 tasks complete (86%)
+- **Deferred (acceptable):** Task 4.2 (velocity arrows - optional), Task 5.2 (visual comparison - manual OK)
 
 ---
 
