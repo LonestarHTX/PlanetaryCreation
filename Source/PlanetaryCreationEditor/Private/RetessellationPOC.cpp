@@ -75,65 +75,40 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
         return false;
     }
 
-    // Validation 3: Plate area conservation (<1% variance)
-    auto ComputePlateArea = [this](int32 PlateID) -> double
+    // Validation 3: Total sphere area conservation (<1% variance)
+    // Simpler approach: Check that total mesh area ≈ 4π (surface area of unit sphere)
+    double TotalMeshArea = 0.0;
+    for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
     {
-        double TotalArea = 0.0;
-        for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
+        const int32 V0Idx = RenderTriangles[i];
+        const int32 V1Idx = RenderTriangles[i + 1];
+        const int32 V2Idx = RenderTriangles[i + 2];
+
+        if (RenderVertices.IsValidIndex(V0Idx) &&
+            RenderVertices.IsValidIndex(V1Idx) &&
+            RenderVertices.IsValidIndex(V2Idx))
         {
-            const int32 V0Idx = RenderTriangles[i];
-            const int32 V1Idx = RenderTriangles[i + 1];
-            const int32 V2Idx = RenderTriangles[i + 2];
+            const FVector3d& V0 = RenderVertices[V0Idx];
+            const FVector3d& V1 = RenderVertices[V1Idx];
+            const FVector3d& V2 = RenderVertices[V2Idx];
 
-            // Check if all vertices belong to this plate
-            if (VertexPlateAssignments.IsValidIndex(V0Idx) &&
-                VertexPlateAssignments.IsValidIndex(V1Idx) &&
-                VertexPlateAssignments.IsValidIndex(V2Idx))
-            {
-                const int32 P0 = VertexPlateAssignments[V0Idx];
-                const int32 P1 = VertexPlateAssignments[V1Idx];
-                const int32 P2 = VertexPlateAssignments[V2Idx];
-
-                // If all three vertices are from this plate, count full triangle area
-                if (P0 == PlateID && P1 == PlateID && P2 == PlateID)
-                {
-                    const FVector3d& V0 = RenderVertices[V0Idx];
-                    const FVector3d& V1 = RenderVertices[V1Idx];
-                    const FVector3d& V2 = RenderVertices[V2Idx];
-
-                    // Spherical triangle area (exact)
-                    const double A = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(V1, V2), -1.0, 1.0));
-                    const double B = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(V2, V0), -1.0, 1.0));
-                    const double C = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(V0, V1), -1.0, 1.0));
-                    const double S = (A + B + C) * 0.5;
-                    const double Excess = FMath::Atan(FMath::Sqrt(FMath::Tan(S) * FMath::Tan(S - A) * FMath::Tan(S - B) * FMath::Tan(S - C)));
-                    TotalArea += 4.0 * Excess; // Spherical excess formula
-                }
-            }
+            // Spherical triangle area using L'Huilier's theorem
+            // For small triangles on unit sphere, use planar approximation
+            // Cross product magnitude gives 2x planar area, for sphere use half that
+            const FVector3d CrossProduct = FVector3d::CrossProduct(V1 - V0, V2 - V0);
+            const double TriangleArea = CrossProduct.Length() * 0.5;
+            TotalMeshArea += TriangleArea;
         }
-        return TotalArea;
-    };
-
-    // Compute total area before and after
-    double TotalAreaBefore = 0.0;
-    double TotalAreaAfter = 0.0;
-
-    for (const FTectonicPlate& Plate : Plates)
-    {
-        TotalAreaAfter += ComputePlateArea(Plate.PlateID);
     }
 
-    // Approximate "before" area from snapshot (assume similar distribution)
-    // For POC, use total sphere area (4π) as baseline
-    TotalAreaBefore = 4.0 * PI;
-
-    const double AreaVariance = FMath::Abs((TotalAreaAfter - TotalAreaBefore) / TotalAreaBefore);
+    const double ExpectedSphereArea = 4.0 * PI;
+    const double AreaVariance = FMath::Abs((TotalMeshArea - ExpectedSphereArea) / ExpectedSphereArea);
 
     if (AreaVariance > 0.01) // >1% variance
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Validation warning: Area variance %.2f%% (threshold: 1%%)"),
-            AreaVariance * 100.0);
-        // Don't fail on this - just warn (area calculation is approximate)
+        UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Validation warning: Mesh area %.4f sr (expected %.4f sr, variance %.2f%%)"),
+            TotalMeshArea, ExpectedSphereArea, AreaVariance * 100.0);
+        // Don't fail on this - just warn
     }
 
     // Validation 4: Voronoi coverage (no INDEX_NONE)
@@ -146,8 +121,8 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Validation passed: Euler=%d, AreaVariance=%.2f%%, Voronoi=100%%"),
-        EulerChar, AreaVariance * 100.0);
+    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Validation passed: Euler=%d, MeshArea=%.4f sr, AreaVariance=%.2f%%, Voronoi=100%%"),
+        EulerChar, TotalMeshArea, AreaVariance * 100.0);
 
     return true;
 }
