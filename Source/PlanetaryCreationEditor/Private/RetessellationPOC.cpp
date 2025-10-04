@@ -92,12 +92,43 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
             const FVector3d& V1 = RenderVertices[V1Idx];
             const FVector3d& V2 = RenderVertices[V2Idx];
 
-            // Spherical triangle area using L'Huilier's theorem
-            // For small triangles on unit sphere, use planar approximation
-            // Cross product magnitude gives 2x planar area, for sphere use half that
-            const FVector3d CrossProduct = FVector3d::CrossProduct(V1 - V0, V2 - V0);
-            const double TriangleArea = CrossProduct.Length() * 0.5;
-            TotalMeshArea += TriangleArea;
+            // Spherical triangle area using Girard's theorem: E = α + β + γ - π
+            // where α, β, γ are the angles at each vertex of the spherical triangle
+            // For unit sphere, Area = E (spherical excess in steradians)
+
+            // Normalize vertices (should already be normalized, but ensure it)
+            const FVector3d N0 = V0.GetSafeNormal();
+            const FVector3d N1 = V1.GetSafeNormal();
+            const FVector3d N2 = V2.GetSafeNormal();
+
+            // Calculate angles using dot products (clamped to avoid NaN from acos)
+            const double CosA = FMath::Clamp(FVector3d::DotProduct(N1, N2), -1.0, 1.0);
+            const double CosB = FMath::Clamp(FVector3d::DotProduct(N2, N0), -1.0, 1.0);
+            const double CosC = FMath::Clamp(FVector3d::DotProduct(N0, N1), -1.0, 1.0);
+
+            // Arc lengths (sides of spherical triangle)
+            const double a = FMath::Acos(CosA);
+            const double b = FMath::Acos(CosB);
+            const double c = FMath::Acos(CosC);
+
+            // Skip degenerate triangles
+            if (a < SMALL_NUMBER || b < SMALL_NUMBER || c < SMALL_NUMBER)
+                continue;
+
+            // Compute spherical angles at vertices using spherical law of cosines
+            const double CosAlpha = (FMath::Cos(a) - FMath::Cos(b) * FMath::Cos(c)) / (FMath::Sin(b) * FMath::Sin(c));
+            const double CosBeta = (FMath::Cos(b) - FMath::Cos(c) * FMath::Cos(a)) / (FMath::Sin(c) * FMath::Sin(a));
+            const double CosGamma = (FMath::Cos(c) - FMath::Cos(a) * FMath::Cos(b)) / (FMath::Sin(a) * FMath::Sin(b));
+
+            const double Alpha = FMath::Acos(FMath::Clamp(CosAlpha, -1.0, 1.0));
+            const double Beta = FMath::Acos(FMath::Clamp(CosBeta, -1.0, 1.0));
+            const double Gamma = FMath::Acos(FMath::Clamp(CosGamma, -1.0, 1.0));
+
+            // Spherical excess (Girard's theorem)
+            const double SphericalExcess = Alpha + Beta + Gamma - PI;
+
+            // Area equals excess for unit sphere
+            TotalMeshArea += SphericalExcess;
         }
     }
 
@@ -187,7 +218,21 @@ bool UTectonicSimulationService::PerformRetessellation()
         return false;
     }
 
-    // Step 5: Update tracking
+    // Step 5: Reset initial centroids for drifted plates (prevent accumulation)
+    // CRITICAL: After successful rebuild, update reference positions so next drift check is relative to NEW positions
+    for (int32 PlateID : DriftedPlateIDs)
+    {
+        for (int32 i = 0; i < Plates.Num(); ++i)
+        {
+            if (Plates[i].PlateID == PlateID && InitialPlateCentroids.IsValidIndex(i))
+            {
+                InitialPlateCentroids[i] = Plates[i].Centroid;
+                UE_LOG(LogTemp, Verbose, TEXT("[Re-tessellation] Reset reference centroid for Plate %d"), PlateID);
+            }
+        }
+    }
+
+    // Step 6: Update tracking
     const double EndTime = FPlatformTime::Seconds();
     LastRetessellationTimeMs = (EndTime - StartTime) * 1000.0;
     RetessellationCount++;
