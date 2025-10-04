@@ -1,104 +1,123 @@
 # Milestone 4: Dynamic Tectonics & Visual Fidelity
 
 ## Overview
-Translate the Milestone 3 scaffolding into believable tectonic activity by enabling plate re-topology, hotspot/rift events, and responsive visualization. This milestone focuses on dynamic geometry updates, higher-fidelity boundary rendering, and Level of Detail (LOD) support so the experience can scale to production-quality planets.
+Build on the Milestone 3 scaffold to deliver visible tectonic activity. Milestone 4 activates plate topology changes, hotspot/rift behaviour from the "Procedural Tectonic Planets" paper (Section 4), upgrades boundary visualization, and introduces multi-tier LOD so dense meshes stay performant.
 
-## Goals (Aligned with Procedural Tectonic Planets Paper)
-1. Activate plate lifecycle events (rift creation, hotspot-driven growth, subduction recycling).
-2. Implement dynamic re-tessellation to keep render meshes aligned with drifting plate boundaries.
-3. Add tectonic activity cues (volcanic hotspots, rift valleys, transform shear) with gameplay-friendly analytics.
-4. Introduce multi-tier LOD and streaming so dense meshes render efficiently.
-5. Expand automated validation with comparative renders and extended stress/temperature metrics.
+## Goals (Paper Alignment)
+1. Implement the paper's rift, hotspot, and subduction rules (Sec. 4.2–4.4) with clear citations and documented deviations.
+2. Enable deterministic dynamic re-tessellation so render geometry tracks drifting plate boundaries.
+3. Provide high-fidelity overlays and analytics (thermal, boundary state) to validate tectonic behaviour.
+4. Add LOD/streaming support for higher subdivision levels without blowing the frame budget.
+5. Expand automated validation (tests + screenshots + CSV v3.0) to prevent regressions.
 
 ## Scope Constraints
-- **In Scope:** Hotspot spawning, boundary state machines, dynamic mesh rebuilds, LOD tiers, shader-driven overlays, CSV + screenshot validation.
-- **Out of Scope:** Full mantle convection, long-term climate coupling, multiplayer sync, GPU-based stress solver, cinematic materials.
-- **Deferred:** Non-spherical planet shapes, ocean simulation, erosion/weathering passes.
+- **In Scope:** Re-tessellation, plate split/merge, hotspot & rift progression, thermal stress coupling (analytic model), high-res overlays, velocity vectors, LOD tiers, async streaming, expanded tests/docs.
+- **Out of Scope:** Full PDE-based thermal diffusion, erosion/weathering, ocean/atmosphere coupling, non-spherical planets, cinematic materials, multiplayer sync.
+- **Deferred:** Complex material polish (moved to Milestone 5), climate integration, procedural erosion.
 
 ---
 
 ## Phase 1: Dynamic Plate Topology
 
-### Task 1.1: Re-tessellation Engine
+### Task 1.0: Re-tessellation Design Spike
 **Owner:** Simulation Engineer  
-**Effort:** 4-5 days  
+**Effort:** 1 day  
 **Description:**
-- Replace the M3 warning-only stub with actionable re-tessellation.
-- When centroid drift > threshold, split render mesh edges along the boundary and rebuild `SharedVertices` + render buffers.
-- Preserve determinism via seed-stable edge processing.
-- Cache boundary adjacency so repeated rebuilds reuse shared work.
-- Support incremental rebuild (only plates crossing the threshold).
+- Survey constrained spherical Delaunay / edge-flip approaches applicable to our icosphere topology.
+- Choose algorithm for incremental boundary rebuild (likely boundary-edge fan split).
+- Document plan in `Docs/Milestone4_RetessellationDesign.md` including epsilon handling, determinism strategy, validation checklist.
 
 **Acceptance Criteria:**
-- Drifted plates trigger automatic mesh rebuild within one simulation step.
-- Plate counts remain constant unless a split/merge is requested.
-- Automation test verifies re-tessellation occurs when drift > threshold and remains stable otherwise.
+- Design doc reviewed/approved by gameplay & rendering leads.
+- Explicit decision on vertex snapping tolerance and ordering for determinism.
 
-### Task 1.2: Plate Split & Merge Pipeline
+### Task 1.1: Re-tessellation Engine (Implementation)
+**Owner:** Simulation Engineer  
+**Effort:** 6 days  
+**Description:**
+- Implement incremental rebuild per design doc: detect drifted plates, slice boundary edges, update `SharedVertices`, `RenderVertices`, and boundary adjacency.
+- Maintain determinism using seed-stable traversal order and tolerance values from Task 1.0.
+- Include staged rollout: proof-of-concept (single plate), then multi-plate integration, then regression harness.
+- Run post-rebuild validation (Euler characteristic, plate area conservation).
+
+**Acceptance Criteria:**
+- Plates crossing drift threshold rebuild within one simulation step.
+- Plate area conserved within 1% and Euler characteristic remains 2.
+- Automation test toggles threshold to assert rebuild/no-rebuild cases.
+
+### Task 1.2: Plate Split & Merge (Paper Sections 4.2, 4.3)
 **Owner:** Simulation Engineer  
 **Effort:** 3 days  
 **Description:**
-- Implement rules from the paper for rift-induced splitting and subduction merging.
-- Preserve plate metadata (velocity, stress history) across operations.
-- Emit events for UI/logging/analytics when topology changes.
+- Implement rift-driven split per paper Eq. (4.2) velocity threshold; log deviations if thresholds tuned.
+- Implement subduction merge using convergence angle/stress criteria (Sec. 4.3). Redistribute vertex ownership and maintain determinism.
+- Emit `FPlateTopologyEvent` entries for UI/debug.
 
 **Acceptance Criteria:**
-- Rifts can split a plate into two children with deterministic ID assignment.
-- Subduction merges collapse minor plates and redistribute vertices.
-- Tests confirm conservation of total area within tolerance.
+- Controlled tests: divergent boundary > threshold splits plate, convergent subduction merges minor plate.
+- CSV v3.0 captures split/merge events with timestamp and reference stress values.
 
-### Task 1.3: Boundary State Machine
+### Task 1.3: Boundary State Machine & CSV v3.0
 **Owner:** Simulation Engineer  
 **Effort:** 2 days  
 **Description:**
-- Track boundary lifecycle (nascent, active, dormant) with thresholds based on relative velocity & stress.
-- Drive downstream visuals (volcanic plume intensity, trench depth).
+- Add lifecycle states (Nascent, Active, Dormant) driven by relative velocity & stress as defined in paper Sec. 4.1.
+- Export `BoundaryState`, `StateTransitionTimeMy`, and `ThermalFlux` in CSV v3.0.
+- Keep backward compatibility: readers ignore unknown columns.
 
 **Acceptance Criteria:**
-- Boundaries transition correctly according to thresholds.
-- CSV export includes boundary states and timestamps.
+- State machine transitions covered by automation test.
+- CSV schema bump documented (`Docs/CSV_Schema.md`), existing readers handle new columns.
+
+### Task 1.4: Re-tessellation Rollback & Validation
+**Owner:** Simulation Engineer  
+**Effort:** 1 day  
+**Description:**
+- Snapshot plate/vertex state prior to rebuild.
+- If validation fails (NaNs, Euler ≠ 2, area drift >1%), revert and log warning.
+- Surface rollback status in UI/debug overlay.
+
+**Acceptance Criteria:**
+- Fault injection test forces invalid rebuild and verifies rollback to last good state.
 
 ---
 
-## Phase 2: Hotspots, Rifts, and Thermal Fields
+## Phase 2: Hotspots, Rifts, Thermal Coupling
 
-### Task 2.1: Hotspot Generation & Drift
+### Task 2.1: Hotspot Generation & Drift (Paper Sec. 4.4)
 **Owner:** Simulation Engineer  
 **Effort:** 3 days  
 **Description:**
-- Sample hotspot seeds from mantle plume distribution.
-- Allow hotspots to migrate with underlying mantle conveyor (paper Section 4).
-- Couple hotspot heat to nearby plate vertices and elevate stress accordingly.
+- Spawn hotspot seeds deterministically (3 major, 5 minor by default) following plume distribution.
+- Allow mantle-frame drift; update plate stress/elevation within influence radius.
+- Document any deviations from paper formulae (e.g., capped drift speed).
 
 **Acceptance Criteria:**
-- Hotspot count configurable; default matches paper (3 major, 5 minor).
-- Heat field influences stress accumulation and elevation displacement.
-- Tests validate deterministic hotspot placement per seed.
+- Hotspot positions repeat per seed; automation test compares CSV logs.
+- Heat contribution increases local stress/elevation as expected.
 
-### Task 2.2: Rift Propagation Model
+### Task 2.2: Rift Propagation Model (Paper Sec. 4.2)
 **Owner:** Simulation Engineer  
 **Effort:** 3 days  
 **Description:**
-- Trigger rifts when divergent boundaries exceed velocity threshold.
-- Animate rift widening, spawn new crust along ridge.
-- Interface with re-tessellation to split plates when rifts extend past critical angle.
+- Trigger rift state when divergent velocity > threshold for sustained duration.
+- Animate widening (increase separation, spawn new crust mass) and hand off to re-tessellation for splits once angle limit reached.
 
 **Acceptance Criteria:**
-- Divergent boundaries with sustained separation spawn rift events.
-- Rift width grows over time and impacts vertex displacement/elevation.
-- Test ensures rifts do not trigger under convergent/transform conditions.
+- Divergent boundaries trigger rift overlay + eventual plate split.
+- Automation test ensures convergent/transform boundaries never enter rift state.
 
-### Task 2.3: Thermal & Stress Coupling
+### Task 2.3: Thermal & Stress Coupling (Analytic Model)
 **Owner:** Simulation Engineer  
 **Effort:** 2 days  
 **Description:**
-- Add simplified thermal field decaying with distance from hotspots and subduction zones.
-- Feed temperature into stress/elevation modifiers (e.g., hotter crust = softer, lower elevation).
+- Implement analytic temperature field: `T(r) = T_max * exp(-r^2 / σ^2)` from hotspot centres and add secondary term for subduction heating.
+- No time integration/PDE; update per simulation step analytically.
+- Use temperature to modulate stress & elevation additively (e.g., softer crust lowers peak stress).
 
 **Acceptance Criteria:**
-- Temperature recorded per render vertex and exported to CSV.
-- Thermal field influences elevation as described in documentation.
-- Automated test checks temperature falloff curve.
+- Thermal values exported per vertex; CSV v3.0 includes `VertexTemperature`.
+- Automated test verifies falloff curve and additive stress modulation.
 
 ---
 
@@ -108,78 +127,74 @@ Translate the Milestone 3 scaffolding into believable tectonic activity by enabl
 **Owner:** Rendering Engineer  
 **Effort:** 3 days  
 **Description:**
-- Upgrade overlay to follow render-level plate seams by tracing triangle edges where plate IDs change.
-- Generate polylines (or ribbon mesh) with vertex density matching render mesh.
-- Fade color based on boundary state (Task 1.3) and stress magnitude.
+- Trace render triangles for plate ID transitions and build polyline/ribbon that hugs seams.
+- Modulate color/width by boundary state & stress.
+- Include downsampling option for low-end performance.
 
 **Acceptance Criteria:**
-- Overlay aligns within one vertex of visual seam at all subdivision levels.
-- Boundary colors and widths respond to state & stress thresholds.
-- Test compares sampled overlay points against plate ID transitions.
+- Overlay deviation ≤ one render vertex at all subdivision levels.
+- Boundary appearance reflects lifecycle state in real time.
+- Test samples seam point set and confirms ID alignment.
 
-### Task 3.2: Velocity Vector Field (Deferred Task from M3)
+### Task 3.2: Velocity Vector Field (Deferred from M3)
 **Owner:** Rendering Engineer  
 **Effort:** 1 day  
 **Description:**
-- Render velocity arrows at centroids with magnitude-based scaling and optional screen-space fade.
-- Integrate with UI toggle and legend.
+- Render centroid arrows with magnitude scaling, UI legend, and toggle. Support screen-space fade for readability.
 
 **Acceptance Criteria:**
-- Arrows display correct direction/magnitude and toggle without hitching.
-- Automated screenshot validation checks arrow presence when enabled.
+- Arrows point in correct direction/magnitude; toggle updates instantly; screenshot test validates presence.
 
-### Task 3.3: Material & Lighting Pass
-**Owner:** Rendering Engineer  
-**Effort:** 2 days  
-**Description:**
-- Introduce physically-inspired material layering: crust, oceanic, volcanic.
-- Use material parameter collections to feed stress/temperature into emissive/displacement.
-- Add night/day preview (directional light orbit toggle).
-
-**Acceptance Criteria:**
-- Three material variants selectable in UI.
-- Hotspots emit glow proportional to temperature.
-- Lighting toggle updates without full mesh rebuild.
+> **Deferred:** Task 3.3 (Material & Lighting Pass) moved to Milestone 5 per scope prioritization.
 
 ---
 
-## Phase 4: Level of Detail & Performance
+## Phase 4: LOD & Performance
+
+### Task 4.0: LOD Architecture Spike
+**Owner:** Rendering Engineer  
+**Effort:** 1 day  
+**Description:**
+- Evaluate RealtimeMesh LOD support/API limitations.
+- Decide between built-in LOD groups vs. custom distance-based switching.
+- Document plan in `Docs/Milestone4_LODDesign.md`.
+
+**Acceptance Criteria:**
+- Design reviewed; includes fallback if RealtimeMesh lacks native LODs.
 
 ### Task 4.1: Multi-Tier LOD System
 **Owner:** Rendering Engineer  
-**Effort:** 4 days  
+**Effort:** 5 days  
 **Description:**
-- Implement three LOD tiers (High, Medium, Low) tied to render subdivision levels.
-- Seamlessly transition between LODs based on camera distance and performance budget.
-- Maintain plate ID/color continuity during transitions.
+- Follow design doc: implement distance-based LOD selection, buffer reuse, and hysteresis.
+- Provide High/Medium/Low tiers mapped to render subdivision levels.
+- Ensure plate ID/color continuity across transitions.
 
 **Acceptance Criteria:**
-- LOD switches without popping; hysteresis prevents rapid oscillation.
-- Performance at Low LOD < 16ms/frame on reference hardware (level 2 mesh).
-- Tests verify LOD selection logic given distance inputs.
+- LOD transitions avoid visual popping (tested via recorded fly-through).
+- Unit test verifies LOD choice per distance input; hysteresis prevents rapid thrash.
 
 ### Task 4.2: Streaming & Caching
 **Owner:** Rendering Engineer  
 **Effort:** 2 days  
 **Description:**
-- Cache precomputed LOD meshes and share buffers across frames.
-- Stream textures/material parameters asynchronously to avoid frame spikes.
+- Cache previously generated LOD meshes/material params; stream asynchronously using TaskGraph.
+- Avoid blocking loads during camera moves.
 
 **Acceptance Criteria:**
-- Cache hits logged when revisiting previously generated LODs.
-- No blocking loads during camera transitions.
+- Logs confirm cache hits; no hitching when changing LOD.
 
 ### Task 4.3: Profiling & Optimization Pass
 **Owner:** Performance Engineer  
-**Effort:** 3 days  
+**Effort:** 5 days  
 **Description:**
-- Re-run Insights captures post-M4 features.
-- Optimize hot loops (Voronoi update, stress interpolation) identified in M3 report.
-- Document CPU/GPU metrics for each LOD.
+- Re-run Unreal Insights with M4 features; focus on Voronoi updates, stress/thermal loops, re-tessellation cost.
+- Optimize using caching, SIMD, or GPU passes as needed.
+- Update `Docs/Performance_M4.md` with before/after metrics.
 
 **Acceptance Criteria:**
-- Level 3 step time pulled back under 90ms despite new features.
-- Report updated in `Docs/Performance_M4.md` with before/after comparisons.
+- Level 3 step time <120ms (ship target), <100ms stretch goal documented with required optimizations; 90ms path outlined for future work.
+- Memory usage <200MB at Level 3.
 
 ---
 
@@ -189,64 +204,62 @@ Translate the Milestone 3 scaffolding into believable tectonic activity by enabl
 **Owner:** QA Engineer  
 **Effort:** 3 days  
 **Description:**
-- Add tests for hotspot determinism, plate splitting, boundary state transitions, and LOD integrity.
-- Integrate screenshot-based validation (new baseline images).
+- Add tests covering re-tessellation, split/merge, boundary state transitions, hotspots, thermal coupling, LOD consistency, and rollback.
+- Extend async mesh test to cover LOD + overlay integration.
 
 **Acceptance Criteria:**
 - 6 new M4 tests added; all pass on CI.
-- Screenshot diff tooling flags deviations >5% pixel variance.
+- Fault injection suite covers rollback scenario.
 
 ### Task 5.2: Visual Comparison & Paper Parity
 **Owner:** QA Engineer  
 **Effort:** 2 days  
 **Description:**
-- Recreate paper figures showing hotspots, rifts, and transform boundaries.
-- Document alignment/deviations in `Docs/Validation_M4/README.md`.
+- Reproduce paper figures for hotspots/rifts/subduction; generate before/after comparisons in `Docs/Validation_M4/`.
+- Document deviations with rationale.
 
 **Acceptance Criteria:**
-- Updated gallery with before/after images.
-- Deviations explained and approved by simulation lead.
+- Gallery updated; simulation lead signs off.
 
 ### Task 5.3: Documentation & Release Notes
 **Owner:** Technical Writer  
 **Effort:** 2 days  
 **Description:**
-- Summarize M4 in `Docs/Milestone4_Features.md` and update `CLAUDE.md` architecture notes.
-- Draft release notes, including known limitations (e.g., lack of erosion, climate coupling).
+- Update `Docs/Milestone4_Features.md`, `CLAUDE.md`, and CSV schema notes.
+- Draft release notes summarizing features, performance metrics, known limitations (lack of erosion, etc.).
 
 **Acceptance Criteria:**
-- Documentation reviewed and merged.
-- Release notes include verification checklist and profiling results.
+- Docs reviewed; release checklist includes new tests, screenshots, profiling, CSV schema version 3.0.
 
 ---
 
-## Acceptance Criteria (Milestone Level)
-- Re-tessellation automatically corrects boundary drift; plate area conserved within 1%.
-- Hotspots/rifts influence stress, elevation, and visualization overlays.
-- High-resolution boundary overlay aligns with render seam.
-- LOD system hits performance targets and transitions gracefully.
-- All M4 automation tests green; screenshot comparisons approved.
-- Documentation updated; CSV exports include new thermal/boundary state metrics.
+## Updated Acceptance Criteria (Milestone Level)
+- Re-tessellation automatically corrects drift with rollback safety net; area conserved within 1%.
+- Plate split/merge events aligned with paper thresholds; logged deterministically.
+- Hotspots, rifts, and thermal fields influence stress/elevation and appear in overlays/CSV.
+- High-resolution boundary overlay aligns with visual seam; velocity vectors available for diagnostics.
+- LOD system transitions smoothly and maintains ≤120ms Level 3 step time (stretch: <100ms documented).
+- All M4 automation tests green; screenshot comparisons approved; documentation and CSV schema v3.0 published.
 
 ---
 
-## Risk Register
+## Risk Register (Revised)
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| Re-tessellation introduces instability | Medium | High | Start with small drift thresholds, add rollback if rebuild fails |
-| Plate split/merge causes determinism loss | Medium | Medium | Seed-based ordering, regression tests |
-| High-res overlay expensive at level 6 | Medium | Medium | Allow downsampled overlay option; profile early |
-| Hotspot heat overwhelms elevation | Low | Medium | Clamp temperature contributions; expose tuning parameters |
-| LOD transitions visible seams | Medium | High | Blend vertex colors across seams; add hysteresis |
+| Re-tessellation instability | Medium | High | Design spike + rollback (Task 1.0 & 1.4), staged rollout |
+| Determinism loss after split/merge | Medium | Medium | Seed-stable ordering, regression tests, CSV audit |
+| High-res overlay performance | Medium | Medium | Downsampling option, profile early |
+| LOD API limitations | Medium | High | LOD design spike, fallback path |
+| Performance regressions | High | Medium | Extended optimization pass, documented stretch goals |
 
 ---
 
-## Estimated Timeline
-- **Phase 1:** 2 weeks (re-tessellation + split/merge + state machine)
-- **Phase 2:** 2 weeks (hotspots, rifts, thermal coupling)
-- **Phase 3:** 1.5 weeks (overlay, vectors, materials)
-- **Phase 4:** 2 weeks (LOD system, streaming, optimization)
+## Estimated Timeline (Adjusted)
+- **Phase 1:** 2.5 weeks (design spike, re-tess implementation, split/merge, rollback)
+- **Phase 2:** 2 weeks (hotspots, rifts, thermal coupling) — parallelizable with Phase 1 once design complete
+- **Phase 3:** 1 week (overlay + velocity vectors)
+- **Phase 4:** 2.5 weeks (LOD spike + implementation + optimization)
 - **Phase 5:** 1 week (validation, docs)
 
-Total: ~6.5 weeks (buffer included for integration & QA).
+**Total:** ~7.5 weeks including buffer and design spikes.
 
