@@ -1,5 +1,6 @@
 #include "TectonicSimulationController.h"
 
+#include "Async/Async.h"
 #include "Async/Future.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -17,6 +18,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Components/LineBatchComponent.h"
 #include "Math/Quat.h"
+#include "HAL/PlatformTime.h"
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
 FTectonicSimulationController::~FTectonicSimulationController() = default;
@@ -45,152 +47,110 @@ void FTectonicSimulationController::RebuildPreview()
     BuildAndUpdateMesh();
 }
 
-void FTectonicSimulationController::BuildAndUpdateMesh()
+FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() const
 {
+    FMeshBuildSnapshot Snapshot;
+
     if (UTectonicSimulationService* Service = GetService())
     {
-        EnsurePreviewActor();
+        // Deep-copy render state from service (thread-safe snapshot)
+        Snapshot.RenderVertices = Service->GetRenderVertices();
+        Snapshot.RenderTriangles = Service->GetRenderTriangles();
+        Snapshot.VertexPlateAssignments = Service->GetVertexPlateAssignments();
+        Snapshot.VertexVelocities = Service->GetVertexVelocities();
+        Snapshot.VertexStressValues = Service->GetVertexStressValues();
+        Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
+    }
 
-        // Milestone 3: Render high-density mesh with plate coloring from Voronoi mapping
+    // Capture visualization state from controller
+    Snapshot.bShowVelocityField = bShowVelocityField;
+    Snapshot.ElevationMode = CurrentElevationMode;
+
+    return Snapshot;
+}
+
+void FTectonicSimulationController::BuildAndUpdateMesh()
+{
+    UTectonicSimulationService* Service = GetService();
+    if (!Service)
+    {
+        return;
+    }
+
+    EnsurePreviewActor();
+
+    const int32 RenderLevel = Service->GetParameters().RenderSubdivisionLevel;
+
+    // Milestone 3 Task 4.3: Threshold check - async only for level 3+ (1280+ triangles)
+    // Level 0-2 use synchronous path (fast enough, not worth threading overhead)
+    if (RenderLevel <= 2)
+    {
+        // Synchronous path for low-density meshes
+        const uint32 ThreadID = FPlatformTLS::GetCurrentThreadId();
+        const double StartTime = FPlatformTime::Seconds();
+
+        FMeshBuildSnapshot Snapshot = CreateMeshBuildSnapshot();
         RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
         int32 VertexCount = 0;
         int32 TriangleCount = 0;
 
-        {
-            using namespace RealtimeMesh;
+        BuildMeshFromSnapshot(Snapshot, StreamSet, VertexCount, TriangleCount);
 
-            const TArray<FVector3d>& RenderVertices = Service->GetRenderVertices();
-            const TArray<int32>& RenderTriangles = Service->GetRenderTriangles();
-            const TArray<int32>& VertexPlateAssignments = Service->GetVertexPlateAssignments();
-            const TArray<FVector3d>& VertexVelocities = Service->GetVertexVelocities();
-            const TArray<double>& VertexStressValues = Service->GetVertexStressValues();
-            const FTectonicSimulationParameters& Params = Service->GetParameters();
+        const double EndTime = FPlatformTime::Seconds();
+        LastMeshBuildTimeMs = (EndTime - StartTime) * 1000.0;
 
-            if (RenderVertices.Num() > 0 && RenderTriangles.Num() > 0 && VertexPlateAssignments.Num() == RenderVertices.Num())
-            {
-                TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
-                Builder.EnableTangents();
-                Builder.EnableTexCoords();
-                Builder.EnableColors();
-
-                const float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km
-
-                // Helper to generate stable color from plate ID
-                auto GetPlateColor = [](int32 PlateID) -> FColor
-                {
-                    const float GoldenRatio = 0.618033988749895f;
-                    const float Hue = FMath::Fmod(PlateID * GoldenRatio, 1.0f);
-                    FLinearColor HSV(Hue * 360.0f, 0.7f, 0.9f);
-                    FLinearColor RGB = HSV.HSVToLinearRGB();
-                    return RGB.ToFColor(false);
-                };
-
-                // Helper to map velocity magnitude to color (blue=slow, red=fast)
-                auto GetVelocityColor = [](const FVector3d& Velocity) -> FColor
-                {
-                    const double VelMagnitude = Velocity.Length(); // radians/My
-                    // Typical plate velocities: 0.01-0.1 rad/My
-                    // Map to hue: 240° (blue) at 0.01 rad/My → 0° (red) at 0.1 rad/My
-                    const double NormalizedVel = FMath::Clamp((VelMagnitude - 0.01) / (0.1 - 0.01), 0.0, 1.0);
-                    const float Hue = FMath::Lerp(240.0f, 0.0f, static_cast<float>(NormalizedVel)); // Blue → Red
-                    FLinearColor HSV(Hue, 0.8f, 0.9f); // High saturation, high brightness
-                    FLinearColor RGB = HSV.HSVToLinearRGB();
-                    return RGB.ToFColor(false);
-                };
-
-                // Helper to map stress to color (green=0 → yellow → red=100 MPa)
-                auto GetStressColor = [](double StressMPa) -> FColor
-                {
-                    const double NormalizedStress = FMath::Clamp(StressMPa / 100.0, 0.0, 1.0);
-                    // Hue: 120° (green) at 0 MPa → 60° (yellow) → 0° (red) at 100 MPa
-                    const float Hue = FMath::Lerp(120.0f, 0.0f, static_cast<float>(NormalizedStress));
-                    FLinearColor HSV(Hue, 0.8f, 0.9f);
-                    FLinearColor RGB = HSV.HSVToLinearRGB();
-                    return RGB.ToFColor(false);
-                };
-
-                // Build vertices with elevation displacement and visualization
-                TArray<int32> VertexToBuilderIndex;
-                VertexToBuilderIndex.SetNumUninitialized(RenderVertices.Num());
-
-                // Store displaced positions for normal recalculation
-                TArray<FVector3f> DisplacedPositions;
-                DisplacedPositions.SetNumUninitialized(RenderVertices.Num());
-
-                // Milestone 3 Task 2.4: Compression modulus for stress-to-elevation conversion
-                constexpr double CompressionModulus = 1.0; // 1 MPa = 1 km elevation (simplified)
-                constexpr double MaxElevationKm = 10.0; // ±10km clamp
-
-                for (int32 i = 0; i < RenderVertices.Num(); ++i)
-                {
-                    const FVector3d& Vertex = RenderVertices[i];
-                    const int32 PlateID = VertexPlateAssignments[i];
-                    const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
-
-                    // Choose color based on visualization mode
-                    FColor VertexColor;
-                    if (bShowVelocityField && VertexVelocities.IsValidIndex(i))
-                    {
-                        VertexColor = GetVelocityColor(VertexVelocities[i]);
-                    }
-                    else if (CurrentElevationMode != EElevationMode::Flat)
-                    {
-                        VertexColor = GetStressColor(StressMPa); // Stress heatmap in elevation mode
-                    }
-                    else
-                    {
-                        VertexColor = GetPlateColor(PlateID); // Default plate colors
-                    }
-
-                    // Base position on sphere
-                    FVector3f Position = FVector3f(Vertex * RadiusUnits);
-
-                    // Milestone 3 Task 2.4: Elevation displacement (only in Displaced mode)
-                    if (CurrentElevationMode == EElevationMode::Displaced)
-                    {
-                        const FVector3f Normal = Position.GetSafeNormal();
-                        const double ElevationKm = (StressMPa / CompressionModulus) * Params.ElevationScale;
-                        const double ClampedElevation = FMath::Clamp(ElevationKm, -MaxElevationKm, MaxElevationKm);
-                        Position += Normal * static_cast<float>(ClampedElevation);
-                    }
-
-                    DisplacedPositions[i] = Position;
-
-                    // Normal (will be recalculated if displaced)
-                    const FVector3f Normal = Position.GetSafeNormal();
-
-                    // Calculate tangent for proper lighting
-                    const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
-                    const FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
-                    const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
-
-                    const int32 VertexId = Builder.AddVertex(Position)
-                        .SetNormalAndTangent(Normal, TangentX)
-                        .SetColor(VertexColor)
-                        .SetTexCoord(TexCoord);
-
-                    VertexToBuilderIndex[i] = VertexId;
-                    VertexCount++;
-                }
-
-                // Build triangles (groups of 3 indices)
-                for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
-                {
-                    const int32 V0 = VertexToBuilderIndex[RenderTriangles[i]];
-                    const int32 V1 = VertexToBuilderIndex[RenderTriangles[i + 1]];
-                    const int32 V2 = VertexToBuilderIndex[RenderTriangles[i + 2]];
-
-                    // CCW winding when viewed from outside
-                    Builder.AddTriangle(V0, V2, V1);
-                    TriangleCount++;
-                }
-
-                UE_LOG(LogTemp, Verbose, TEXT("Rendered mesh with %d vertices and %d triangles (subdivision level %d)"),
-                    VertexCount, TriangleCount, Service->GetParameters().RenderSubdivisionLevel);
-            }
-        }
+        UE_LOG(LogTemp, Log, TEXT("⚡ [SYNC] Mesh build: %d verts, %d tris, %.2fms (ThreadID: %u, level %d)"),
+            VertexCount, TriangleCount, LastMeshBuildTimeMs, ThreadID, RenderLevel);
 
         UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
+    }
+    else
+    {
+        // Asynchronous path for high-density meshes (level 3+)
+        if (bAsyncMeshBuildInProgress.load())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("⏸️ [ASYNC] Skipping mesh rebuild - async build already in progress (rapid stepping detected)"));
+            return; // Skip if already building
+        }
+
+        bAsyncMeshBuildInProgress.store(true);
+        const double StartTime = FPlatformTime::Seconds();
+
+        // Create snapshot on game thread (captures current simulation state)
+        FMeshBuildSnapshot Snapshot = CreateMeshBuildSnapshot();
+
+        // Kick off async mesh build on background thread
+        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, StartTime]()
+        {
+            const uint32 BackgroundThreadID = FPlatformTLS::GetCurrentThreadId();
+            UE_LOG(LogTemp, Log, TEXT("⚙️ [ASYNC] Building mesh on background thread (ThreadID: %u)"), BackgroundThreadID);
+
+            // Build mesh on background thread (thread-safe, no UObject access)
+            RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
+            int32 VertexCount = 0;
+            int32 TriangleCount = 0;
+
+            BuildMeshFromSnapshot(Snapshot, StreamSet, VertexCount, TriangleCount);
+
+            const double EndTime = FPlatformTime::Seconds();
+            const double BuildTimeMs = (EndTime - StartTime) * 1000.0;
+
+            // Return to game thread to apply mesh update
+            AsyncTask(ENamedThreads::GameThread, [this, StreamSet = MoveTemp(StreamSet), VertexCount, TriangleCount, BuildTimeMs, BackgroundThreadID]() mutable
+            {
+                const uint32 GameThreadID = FPlatformTLS::GetCurrentThreadId();
+                LastMeshBuildTimeMs = BuildTimeMs;
+
+                UE_LOG(LogTemp, Log, TEXT("✅ [ASYNC] Mesh build completed: %d verts, %d tris, %.2fms (Background: %u → Game: %u)"),
+                    VertexCount, TriangleCount, LastMeshBuildTimeMs, BackgroundThreadID, GameThreadID);
+
+                UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
+                bAsyncMeshBuildInProgress.store(false);
+            });
+        });
+
+        const uint32 MainThreadID = FPlatformTLS::GetCurrentThreadId();
+        UE_LOG(LogTemp, Log, TEXT("🚀 [ASYNC] Mesh build dispatched from game thread (ThreadID: %u, level %d)"), MainThreadID, RenderLevel);
     }
 }
 
@@ -517,4 +477,140 @@ void FTectonicSimulationController::DrawBoundaryLines()
         LineBatcher->DrawLine(Midpoint, CentroidB, LineColor, SDPG_World, LineThickness, LineDuration, BoundaryBatchId);
     }
 #endif
+}
+
+void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapshot& Snapshot, RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount)
+{
+    using namespace RealtimeMesh;
+
+    OutVertexCount = 0;
+    OutTriangleCount = 0;
+
+    const TArray<FVector3d>& RenderVertices = Snapshot.RenderVertices;
+    const TArray<int32>& RenderTriangles = Snapshot.RenderTriangles;
+    const TArray<int32>& VertexPlateAssignments = Snapshot.VertexPlateAssignments;
+    const TArray<FVector3d>& VertexVelocities = Snapshot.VertexVelocities;
+    const TArray<double>& VertexStressValues = Snapshot.VertexStressValues;
+
+    if (RenderVertices.Num() == 0 || RenderTriangles.Num() == 0 || VertexPlateAssignments.Num() != RenderVertices.Num())
+    {
+        return;
+    }
+
+    TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(OutStreamSet);
+    Builder.EnableTangents();
+    Builder.EnableTexCoords();
+    Builder.EnableColors();
+
+    constexpr float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km
+
+    // Helper to generate stable color from plate ID
+    auto GetPlateColor = [](int32 PlateID) -> FColor
+    {
+        constexpr float GoldenRatio = 0.618033988749895f;
+        const float Hue = FMath::Fmod(PlateID * GoldenRatio, 1.0f);
+        FLinearColor HSV(Hue * 360.0f, 0.7f, 0.9f);
+        FLinearColor RGB = HSV.HSVToLinearRGB();
+        return RGB.ToFColor(false);
+    };
+
+    // Helper to map velocity magnitude to color (blue=slow, red=fast)
+    auto GetVelocityColor = [](const FVector3d& Velocity) -> FColor
+    {
+        const double VelMagnitude = Velocity.Length(); // radians/My
+        // Typical plate velocities: 0.01-0.1 rad/My
+        // Map to hue: 240° (blue) at 0.01 rad/My → 0° (red) at 0.1 rad/My
+        const double NormalizedVel = FMath::Clamp((VelMagnitude - 0.01) / (0.1 - 0.01), 0.0, 1.0);
+        const float Hue = FMath::Lerp(240.0f, 0.0f, static_cast<float>(NormalizedVel)); // Blue → Red
+        FLinearColor HSV(Hue, 0.8f, 0.9f); // High saturation, high brightness
+        FLinearColor RGB = HSV.HSVToLinearRGB();
+        return RGB.ToFColor(false);
+    };
+
+    // Helper to map stress to color (green=0 → yellow → red=100 MPa)
+    auto GetStressColor = [](double StressMPa) -> FColor
+    {
+        const double NormalizedStress = FMath::Clamp(StressMPa / 100.0, 0.0, 1.0);
+        // Hue: 120° (green) at 0 MPa → 60° (yellow) → 0° (red) at 100 MPa
+        const float Hue = FMath::Lerp(120.0f, 0.0f, static_cast<float>(NormalizedStress));
+        FLinearColor HSV(Hue, 0.8f, 0.9f);
+        FLinearColor RGB = HSV.HSVToLinearRGB();
+        return RGB.ToFColor(false);
+    };
+
+    // Build vertices with elevation displacement and visualization
+    TArray<int32> VertexToBuilderIndex;
+    VertexToBuilderIndex.SetNumUninitialized(RenderVertices.Num());
+
+    // Store displaced positions for normal recalculation
+    TArray<FVector3f> DisplacedPositions;
+    DisplacedPositions.SetNumUninitialized(RenderVertices.Num());
+
+    // Milestone 3 Task 2.4: Compression modulus for stress-to-elevation conversion
+    constexpr double CompressionModulus = 1.0; // 1 MPa = 1 km elevation (simplified)
+    constexpr double MaxElevationKm = 10.0; // ±10km clamp
+
+    for (int32 i = 0; i < RenderVertices.Num(); ++i)
+    {
+        const FVector3d& Vertex = RenderVertices[i];
+        const int32 PlateID = VertexPlateAssignments[i];
+        const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
+
+        // Choose color based on visualization mode
+        FColor VertexColor;
+        if (Snapshot.bShowVelocityField && VertexVelocities.IsValidIndex(i))
+        {
+            VertexColor = GetVelocityColor(VertexVelocities[i]);
+        }
+        else if (Snapshot.ElevationMode != EElevationMode::Flat)
+        {
+            VertexColor = GetStressColor(StressMPa); // Stress heatmap in elevation mode
+        }
+        else
+        {
+            VertexColor = GetPlateColor(PlateID); // Default plate colors
+        }
+
+        // Base position on sphere
+        FVector3f Position = FVector3f(Vertex * RadiusUnits);
+
+        // Milestone 3 Task 2.4: Elevation displacement (only in Displaced mode)
+        if (Snapshot.ElevationMode == EElevationMode::Displaced)
+        {
+            const FVector3f Normal = Position.GetSafeNormal();
+            const double ElevationKm = (StressMPa / CompressionModulus) * Snapshot.ElevationScale;
+            const double ClampedElevation = FMath::Clamp(ElevationKm, -MaxElevationKm, MaxElevationKm);
+            Position += Normal * static_cast<float>(ClampedElevation);
+        }
+
+        DisplacedPositions[i] = Position;
+
+        // Normal (will be recalculated if displaced)
+        const FVector3f Normal = Position.GetSafeNormal();
+
+        // Calculate tangent for proper lighting
+        const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
+        const FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
+        const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
+
+        const int32 VertexId = Builder.AddVertex(Position)
+            .SetNormalAndTangent(Normal, TangentX)
+            .SetColor(VertexColor)
+            .SetTexCoord(TexCoord);
+
+        VertexToBuilderIndex[i] = VertexId;
+        OutVertexCount++;
+    }
+
+    // Build triangles (groups of 3 indices)
+    for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
+    {
+        const int32 V0 = VertexToBuilderIndex[RenderTriangles[i]];
+        const int32 V1 = VertexToBuilderIndex[RenderTriangles[i + 1]];
+        const int32 V2 = VertexToBuilderIndex[RenderTriangles[i + 2]];
+
+        // CCW winding when viewed from outside
+        Builder.AddTriangle(V0, V2, V1);
+        OutTriangleCount++;
+    }
 }

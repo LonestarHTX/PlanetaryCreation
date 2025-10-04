@@ -15,6 +15,19 @@ enum class EElevationMode : uint8
     Displaced   // Geometric displacement + color heatmap
 };
 
+/** Milestone 3 Task 4.3: Snapshot of simulation state for async mesh build. */
+struct FMeshBuildSnapshot
+{
+    TArray<FVector3d> RenderVertices;
+    TArray<int32> RenderTriangles;
+    TArray<int32> VertexPlateAssignments;
+    TArray<FVector3d> VertexVelocities;
+    TArray<double> VertexStressValues;
+    double ElevationScale;
+    bool bShowVelocityField;
+    EElevationMode ElevationMode;
+};
+
 /** Encapsulates higher-level control over the tectonic simulation and mesh conversion. */
 class FTectonicSimulationController
 {
@@ -60,6 +73,12 @@ private:
     void BuildAndUpdateMesh();
     void DrawBoundaryLines();
 
+    /** Milestone 3 Task 4.3: Create snapshot for async mesh build. */
+    FMeshBuildSnapshot CreateMeshBuildSnapshot() const;
+
+    /** Milestone 3 Task 4.3: Build mesh StreamSet from snapshot (thread-safe). */
+    static void BuildMeshFromSnapshot(const FMeshBuildSnapshot& Snapshot, RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
+
     mutable TWeakObjectPtr<UTectonicSimulationService> CachedService;
     mutable TWeakObjectPtr<class ARealtimeMeshActor> PreviewActor;
     mutable TWeakObjectPtr<class URealtimeMeshSimple> PreviewMesh;
@@ -73,4 +92,8 @@ private:
 
     /** Milestone 3 Task 3.2: Boundary overlay visibility. */
     bool bShowBoundaries = false;
+
+    /** Milestone 3 Task 4.3: Async mesh build state. */
+    mutable std::atomic<bool> bAsyncMeshBuildInProgress{false};
+    mutable double LastMeshBuildTimeMs = 0.0;
 };
