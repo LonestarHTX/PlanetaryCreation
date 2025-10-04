@@ -2,15 +2,33 @@
 
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
+#include "TectonicPlaybackController.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SSpinBox.h"
+#include "Widgets/Input/SSlider.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SSeparator.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+
+SPTectonicToolPanel::~SPTectonicToolPanel()
+{
+    if (PlaybackController)
+    {
+        PlaybackController->Shutdown();
+    }
+}
 
 void SPTectonicToolPanel::Construct(const FArguments& InArgs)
 {
     ControllerWeak = InArgs._Controller;
+
+    // Milestone 5 Task 1.1: Initialize playback controller
+    PlaybackController = MakeUnique<FTectonicPlaybackController>();
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        PlaybackController->Initialize(Controller);
+    }
 
     // Initialize cached parameters from service
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
@@ -125,6 +143,256 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 .Text(NSLOCTEXT("PlanetaryCreation", "StepButtonLabel", "Step (2 My)"))
                 .ToolTipText(NSLOCTEXT("PlanetaryCreation", "StepButtonTooltip", "Advance the tectonic simulation by one iteration (2 My)."))
                 .OnClicked(this, &SPTectonicToolPanel::HandleStepClicked)
+            ]
+
+            // Milestone 5 Task 1.3: Undo/Redo buttons
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 8.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "UndoButtonLabel", "Undo (Ctrl+Z)"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "UndoButtonTooltip", "Undo the last simulation step"))
+                    .IsEnabled(this, &SPTectonicToolPanel::IsUndoEnabled)
+                    .OnClicked(this, &SPTectonicToolPanel::HandleUndoClicked)
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "RedoButtonLabel", "Redo (Ctrl+Y)"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RedoButtonTooltip", "Redo the next simulation step"))
+                    .IsEnabled(this, &SPTectonicToolPanel::IsRedoEnabled)
+                    .OnClicked(this, &SPTectonicToolPanel::HandleRedoClicked)
+                ]
+            ]
+
+            // History status text
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(STextBlock)
+                .Text(this, &SPTectonicToolPanel::GetHistoryStatusText)
+                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+                .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
+            ]
+
+            // Milestone 5 Task 1.2: Camera controls separator
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 12.0f)
+            [
+                SNew(SSeparator)
+            ]
+
+            // Camera controls label
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "CameraControlsLabel", "Camera Controls"))
+                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+            ]
+
+            // Camera status text
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(STextBlock)
+                .Text(this, &SPTectonicToolPanel::GetCameraStatusText)
+                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+                .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
+            ]
+
+            // Rotation controls (Left/Right)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "RotateLeftButton", "← Rotate Left"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RotateLeftTooltip", "Rotate camera 15° left"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandleRotateLeftClicked)
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "RotateRightButton", "Rotate Right →"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RotateRightTooltip", "Rotate camera 15° right"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandleRotateRightClicked)
+                ]
+            ]
+
+            // Tilt controls (Up/Down)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "TiltUpButton", "↑ Tilt Up"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TiltUpTooltip", "Tilt camera 10° up"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandleTiltUpClicked)
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "TiltDownButton", "↓ Tilt Down"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TiltDownTooltip", "Tilt camera 10° down"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandleTiltDownClicked)
+                ]
+            ]
+
+            // Zoom controls (In/Out)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "ZoomInButton", "+ Zoom In"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomInTooltip", "Zoom in 2000 units"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandleZoomInClicked)
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(0.5f)
+                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "ZoomOutButton", "- Zoom Out"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomOutTooltip", "Zoom out 2000 units"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandleZoomOutClicked)
+                ]
+            ]
+
+            // Reset camera button
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ResetCameraButton", "Reset Camera"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ResetCameraTooltip", "Reset camera to default view"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleResetCameraClicked)
+            ]
+
+            // Milestone 5 Task 1.1: Playback controls separator
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 12.0f)
+            [
+                SNew(SSeparator)
+            ]
+
+            // Playback controls label
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "PlaybackControlsLabel", "Continuous Playback"))
+                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+            ]
+
+            // Play/Pause/Stop buttons
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .FillWidth(1.0f)
+                .Padding(0.0f, 0.0f, 2.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(this, &SPTectonicToolPanel::GetPlaybackButtonText)
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PlayPauseTooltip", "Start/pause continuous playback (Space)"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandlePlayClicked)
+                    // Play button is always enabled (can start from Stopped or resume from Paused)
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(1.0f)
+                .Padding(2.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "StopButtonLabel", "Stop"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "StopTooltip", "Stop playback and reset"))
+                    .OnClicked(this, &SPTectonicToolPanel::HandleStopClicked)
+                ]
+            ]
+
+            // Playback speed control
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(STextBlock)
+                    .Text(this, &SPTectonicToolPanel::GetPlaybackSpeedLabel)
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(1.0f)
+                [
+                    SNew(SSlider)
+                    .Value(this, &SPTectonicToolPanel::GetPlaybackSpeed)
+                    .OnValueChanged(this, &SPTectonicToolPanel::OnPlaybackSpeedChanged)
+                    .MinValue(0.5f)
+                    .MaxValue(10.0f)
+                    .StepSize(0.5f)
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PlaybackSpeedTooltip", "Adjust playback speed (0.5× to 10×)"))
+                ]
+            ]
+
+            // Timeline scrubber
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 8.0f)
+            [
+                SNew(STextBlock)
+                .Text(this, &SPTectonicToolPanel::GetTimelineLabel)
+                .ColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f)))
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SSlider)
+                .Value(this, &SPTectonicToolPanel::GetTimelineValue)
+                .OnValueChanged(this, &SPTectonicToolPanel::OnTimelineScrubbed)
+                .MinValue(0.0f)
+                .MaxValue(1000.0f)
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TimelineScrubberTooltip", "Jump to any point in simulation history (← / →)"))
             ]
 
             // Export metrics button
@@ -381,4 +649,332 @@ void SPTectonicToolPanel::OnBoundaryOverlayChanged(ECheckBoxState NewState)
         Controller->SetBoundariesVisible(bVisible);
         UE_LOG(LogTemp, Log, TEXT("Boundary overlay %s"), bVisible ? TEXT("visible") : TEXT("hidden"));
     }
+}
+
+// Milestone 5 Task 1.1: Playback control handlers
+
+FReply SPTectonicToolPanel::HandlePlayClicked()
+{
+    if (!PlaybackController)
+    {
+        return FReply::Handled();
+    }
+
+    if (PlaybackController->IsPlaying())
+    {
+        PlaybackController->Pause();
+        UE_LOG(LogTemp, Log, TEXT("Playback paused"));
+    }
+    else
+    {
+        PlaybackController->Play();
+        UE_LOG(LogTemp, Log, TEXT("Playback started"));
+    }
+
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandlePauseClicked()
+{
+    if (PlaybackController)
+    {
+        PlaybackController->Pause();
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleStopClicked()
+{
+    if (PlaybackController)
+    {
+        PlaybackController->Stop();
+        UE_LOG(LogTemp, Log, TEXT("Playback stopped"));
+    }
+    return FReply::Handled();
+}
+
+FText SPTectonicToolPanel::GetPlaybackButtonText() const
+{
+    if (PlaybackController && PlaybackController->IsPlaying())
+    {
+        return NSLOCTEXT("PlanetaryCreation", "PauseButtonLabel", "Pause");
+    }
+    return NSLOCTEXT("PlanetaryCreation", "PlayButtonLabel", "Play");
+}
+
+bool SPTectonicToolPanel::IsPlaybackPlaying() const
+{
+    return PlaybackController && PlaybackController->IsPlaying();
+}
+
+bool SPTectonicToolPanel::IsPlaybackStopped() const
+{
+    return !PlaybackController || PlaybackController->GetPlaybackState() == EPlaybackState::Stopped;
+}
+
+void SPTectonicToolPanel::OnPlaybackSpeedChanged(float NewValue)
+{
+    if (PlaybackController)
+    {
+        PlaybackController->SetPlaybackSpeed(NewValue);
+    }
+}
+
+float SPTectonicToolPanel::GetPlaybackSpeed() const
+{
+    if (PlaybackController)
+    {
+        return PlaybackController->GetPlaybackSpeed();
+    }
+    return 1.0f;
+}
+
+FText SPTectonicToolPanel::GetPlaybackSpeedLabel() const
+{
+    if (PlaybackController)
+    {
+        const float Speed = PlaybackController->GetPlaybackSpeed();
+        return FText::Format(NSLOCTEXT("PlanetaryCreation", "PlaybackSpeedLabel", "Speed: {0}×"), FText::AsNumber(Speed));
+    }
+    return NSLOCTEXT("PlanetaryCreation", "PlaybackSpeedDefault", "Speed: 1.0×");
+}
+
+void SPTectonicToolPanel::OnTimelineScrubbed(float NewValue)
+{
+    // Milestone 5 Task 1.3: Timeline scrubbing via history system
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            const int32 TargetIndex = FMath::RoundToInt(NewValue);
+            if (Service->JumpToHistoryIndex(TargetIndex))
+            {
+                // Rebuild mesh to reflect the jumped-to state
+                Controller->RebuildPreview();
+                UE_LOG(LogTemp, Log, TEXT("Timeline scrubbed to step %d (%.1f My)"),
+                    TargetIndex, Service->GetCurrentTimeMy());
+            }
+        }
+    }
+}
+
+float SPTectonicToolPanel::GetTimelineValue() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            // Each step is 2 My, so step count = time / 2
+            return static_cast<float>(Service->GetCurrentTimeMy() / 2.0);
+        }
+    }
+    return 0.0f;
+}
+
+float SPTectonicToolPanel::GetTimelineMaxValue() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            // Return current step as max for now; will be history size once rollback is implemented
+            // Each step is 2 My, so step count = time / 2
+            return FMath::Max(1.0f, static_cast<float>(Service->GetCurrentTimeMy() / 2.0));
+        }
+    }
+    return 1.0f;
+}
+
+FText SPTectonicToolPanel::GetTimelineLabel() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            const double CurrentTime = Service->GetCurrentTimeMy();
+            // Each step is 2 My, so step count = time / 2
+            const int32 CurrentStep = FMath::FloorToInt(CurrentTime / 2.0);
+            return FText::Format(
+                NSLOCTEXT("PlanetaryCreation", "TimelineLabel", "Timeline: Step {0} ({1} My)"),
+                FText::AsNumber(CurrentStep),
+                FText::AsNumber(FMath::RoundToInt(CurrentTime))
+            );
+        }
+    }
+    return NSLOCTEXT("PlanetaryCreation", "TimelineUnavailable", "Timeline: n/a");
+}
+
+// ============================================================================
+// Milestone 5 Task 1.3: Undo/Redo Handlers
+// ============================================================================
+
+FReply SPTectonicToolPanel::HandleUndoClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            if (Service->Undo())
+            {
+                // Rebuild mesh to reflect restored state
+                Controller->RebuildPreview();
+                UE_LOG(LogTemp, Log, TEXT("Undo successful, mesh rebuilt"));
+            }
+        }
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleRedoClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            if (Service->Redo())
+            {
+                // Rebuild mesh to reflect restored state
+                Controller->RebuildPreview();
+                UE_LOG(LogTemp, Log, TEXT("Redo successful, mesh rebuilt"));
+            }
+        }
+    }
+    return FReply::Handled();
+}
+
+bool SPTectonicToolPanel::IsUndoEnabled() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->CanUndo();
+        }
+    }
+    return false;
+}
+
+bool SPTectonicToolPanel::IsRedoEnabled() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->CanRedo();
+        }
+    }
+    return false;
+}
+
+FText SPTectonicToolPanel::GetHistoryStatusText() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            const int32 CurrentIndex = Service->GetHistoryIndex();
+            const int32 HistorySize = Service->GetHistorySize();
+            return FText::Format(
+                NSLOCTEXT("PlanetaryCreation", "HistoryStatus", "History: {0}/{1}"),
+                FText::AsNumber(CurrentIndex + 1),
+                FText::AsNumber(HistorySize)
+            );
+        }
+    }
+    return NSLOCTEXT("PlanetaryCreation", "HistoryUnavailable", "History: n/a");
+}
+
+// ============================================================================
+// Milestone 5 Task 1.2: Camera Control Implementation
+// ============================================================================
+
+void SPTectonicToolPanel::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+    SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+
+    // Update camera controller every frame
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->TickCamera(InDeltaTime);
+    }
+}
+
+FReply SPTectonicToolPanel::HandleRotateLeftClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->RotateCamera(-15.0f, 0.0f); // Rotate 15 degrees left
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleRotateRightClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->RotateCamera(15.0f, 0.0f); // Rotate 15 degrees right
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleTiltUpClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->RotateCamera(0.0f, 10.0f); // Tilt 10 degrees up
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleTiltDownClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->RotateCamera(0.0f, -10.0f); // Tilt 10 degrees down
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleZoomInClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->ZoomCamera(-2000.0f); // Zoom in by 2000 units
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleZoomOutClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->ZoomCamera(2000.0f); // Zoom out by 2000 units
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleResetCameraClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->ResetCamera();
+        UE_LOG(LogTemp, Log, TEXT("Camera reset to default view"));
+    }
+    return FReply::Handled();
+}
+
+FText SPTectonicToolPanel::GetCameraStatusText() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        const FVector2D Angles = Controller->GetCameraAngles();
+        const float Distance = Controller->GetCameraDistance();
+        return FText::Format(
+            NSLOCTEXT("PlanetaryCreation", "CameraStatus", "Camera: Yaw {0}° Pitch {1}° Dist {2}"),
+            FText::AsNumber(FMath::RoundToInt(Angles.X)),
+            FText::AsNumber(FMath::RoundToInt(Angles.Y)),
+            FText::AsNumber(FMath::RoundToInt(Distance))
+        );
+    }
+    return NSLOCTEXT("PlanetaryCreation", "CameraUnavailable", "Camera: n/a");
 }

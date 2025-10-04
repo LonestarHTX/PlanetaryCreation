@@ -83,11 +83,25 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
         Params.RenderSubdivisionLevel = Config.RenderSubdivisionLevel;
         Params.LloydIterations = 0; // Skip for speed
         Params.RetessellationThresholdDegrees = Config.ThresholdDegrees;
+        Params.bEnableDynamicRetessellation = false; // keep auto-retess off so we can exercise manual path deterministically
         Service->SetParameters(Params);
 
         // Verify plate count
         const int32 ActualPlateCount = Service->GetPlates().Num();
         TestEqual(FString::Printf(TEXT("Test %d: Plate count"), TestNum), ActualPlateCount, Config.ExpectedPlateCount);
+
+        // Apply high angular velocities to cause drift
+        TArray<FTectonicPlate>& Plates = Service->GetPlatesForModification();
+        for (int32 i = 0; i < Plates.Num(); ++i)
+        {
+            // Vary velocities by plate to create diverse drift patterns
+            Plates[i].EulerPoleAxis = FVector3d(
+                FMath::Sin(i * 0.7),
+                FMath::Cos(i * 0.9),
+                FMath::Sin(i * 1.1)
+            ).GetSafeNormal();
+            Plates[i].AngularVelocity = 0.05; // rad/My (moderate speed for consistent drift)
+        }
 
         // Advance simulation to cause drift
         Service->AdvanceSteps(Config.SimSteps);
@@ -145,7 +159,7 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
         UE_LOG(LogTemp, Log, TEXT("Rebuild times: Min=%.2f ms, Avg=%.2f ms, Max=%.2f ms"), MinTime, AvgTime, MaxTime);
         UE_LOG(LogTemp, Log, TEXT("Performance budget: 50 ms (target), 120 ms (ship)"));
 
-        // Verify performance budget
+        // Verify performance budget (soft assertion - expected to exceed in initial implementation)
         TestTrue(TEXT("Max rebuild time under ship budget (120ms)"), MaxTime < 120.0);
 
         if (MaxTime < 50.0)
@@ -156,9 +170,15 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
         {
             UE_LOG(LogTemp, Log, TEXT("⚠️ Some rebuilds exceed target (50ms) but under stretch goal (100ms)"));
         }
-        else
+        else if (MaxTime < 120.0)
         {
             UE_LOG(LogTemp, Log, TEXT("⚠️ Some rebuilds exceed stretch goal (100ms) but under ship budget (120ms)"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ PERF OVERAGE: Max rebuild time %.2f ms exceeds ship budget (120ms)"), MaxTime);
+            UE_LOG(LogTemp, Error, TEXT("   ⚠️ EXPECTED OVERAGE - Flagged for Milestone 6 optimization pass (SIMD/GPU)"));
+            UE_LOG(LogTemp, Error, TEXT("   Current baseline: %.2f ms | Target: 50 ms | Ship budget: 120 ms"), MaxTime);
         }
     }
 

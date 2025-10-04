@@ -28,6 +28,12 @@ void UTectonicSimulationService::Deinitialize()
 void UTectonicSimulationService::ResetSimulation()
 {
     CurrentTimeMy = 0.0;
+
+    // Milestone 4 Phase 5: Reset version counters for test isolation
+    TopologyVersion = 0;
+    SurfaceDataVersion = 0;
+    RetessellationCount = 0;
+
     GenerateDefaultSphereSamples();
 
     // Milestone 2: Generate plate simulation state
@@ -64,6 +70,12 @@ void UTectonicSimulationService::ResetSimulation()
 
     // Milestone 4 Task 1.2: Clear topology event log
     TopologyEvents.Empty();
+
+    // Milestone 5 Task 1.3: Initialize history stack with initial state
+    HistoryStack.Empty();
+    CurrentHistoryIndex = -1;
+    CaptureHistorySnapshot();
+    UE_LOG(LogTemp, Log, TEXT("ResetSimulation: History stack initialized with initial state"));
 }
 
 void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
@@ -99,33 +111,39 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         UpdateHotspotDrift(StepDurationMy);
 
         CurrentTimeMy += StepDurationMy;
-    }
 
-    // Milestone 3 Task 2.3: Interpolate stress to render vertices (after all steps)
-    InterpolateStressToVertices();
+        // Milestone 4 Phase 4.2: Increment surface data version per step (stress/elevation changed)
+        SurfaceDataVersion++;
 
-    // Milestone 4 Task 2.3: Compute thermal field from hotspots + subduction
-    ComputeThermalField();
+        // Milestone 3 Task 2.3: Interpolate stress to render vertices (per step for accurate snapshots)
+        InterpolateStressToVertices();
 
-    // Milestone 4 Task 2.1: Apply hotspot thermal contribution to stress field
-    ApplyHotspotThermalContribution();
+        // Milestone 4 Task 2.3: Compute thermal field from hotspots + subduction
+        ComputeThermalField();
 
-    // Milestone 4 Task 1.2: Detect and execute plate splits/merges
-    if (Parameters.bEnablePlateTopologyChanges)
-    {
-        DetectAndExecutePlateSplits();
-        DetectAndExecutePlateMerges();
-    }
+        // Milestone 4 Task 2.1: Apply hotspot thermal contribution to stress field
+        ApplyHotspotThermalContribution();
 
-    // Milestone 4 Task 1.1: Perform re-tessellation if plates have drifted beyond threshold
-    if (Parameters.bEnableDynamicRetessellation)
-    {
-        PerformRetessellation();
-    }
-    else
-    {
-        // M3 compatibility: Just check and log (don't rebuild)
-        CheckRetessellationNeeded();
+        // Milestone 4 Task 1.2: Detect and execute plate splits/merges
+        if (Parameters.bEnablePlateTopologyChanges)
+        {
+            DetectAndExecutePlateSplits();
+            DetectAndExecutePlateMerges();
+        }
+
+        // Milestone 4 Task 1.1: Perform re-tessellation if plates have drifted beyond threshold
+        if (Parameters.bEnableDynamicRetessellation)
+        {
+            PerformRetessellation();
+        }
+        else
+        {
+            // M3 compatibility: Just check and log (don't rebuild)
+            CheckRetessellationNeeded();
+        }
+
+        // Milestone 5 Task 1.3: Capture history snapshot after each individual step for undo/redo
+        CaptureHistorySnapshot();
     }
 
     // Milestone 3 Task 4.5: Record step time for UI display
@@ -137,6 +155,41 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
 {
     Parameters = NewParams;
     ResetSimulation();
+}
+
+void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
+{
+    // Milestone 4 Phase 4.1: Update only the render subdivision level without resetting simulation
+    // This preserves all tectonic state (plates, stress, rifts, hotspots, etc.) while changing LOD
+
+    if (Parameters.RenderSubdivisionLevel == NewLevel)
+    {
+        return; // No change needed
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[LOD] Updating render subdivision level: L%d → L%d (preserving simulation state)"),
+        Parameters.RenderSubdivisionLevel, NewLevel);
+
+    // Update parameter
+    Parameters.RenderSubdivisionLevel = NewLevel;
+
+    // Regenerate only the render mesh at new subdivision level
+    GenerateRenderMesh();
+
+    // Rebuild Voronoi mapping (render vertices changed, but plate centroids unchanged)
+    BuildVoronoiMapping();
+
+    // Recompute velocity field for new render vertices
+    ComputeVelocityField();
+
+    // Reinterpolate stress field to new render vertices
+    InterpolateStressToVertices();
+
+    // Milestone 4 Task 2.3: Recompute thermal field for new render vertices
+    ComputeThermalField();
+
+    UE_LOG(LogTemp, Log, TEXT("[LOD] Render mesh regenerated at L%d: %d vertices, %d triangles"),
+        NewLevel, RenderVertices.Num(), RenderTriangles.Num() / 3);
 }
 
 void UTectonicSimulationService::GenerateDefaultSphereSamples()
@@ -926,14 +979,38 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     // due to cache locality and no tree traversal overhead
     VertexPlateAssignments.SetNumUninitialized(RenderVertices.Num());
 
+    // Milestone 4 Task 5.0: Voronoi warping parameters
+    const bool bUseWarping = Parameters.bEnableVoronoiWarping;
+    const double WarpAmplitude = Parameters.VoronoiWarpingAmplitude;
+    const double WarpFrequency = Parameters.VoronoiWarpingFrequency;
+
     for (int32 i = 0; i < RenderVertices.Num(); ++i)
     {
         int32 ClosestPlateID = INDEX_NONE;
         double MinDistSq = TNumericLimits<double>::Max();
 
+        const FVector3d& Vertex = RenderVertices[i];
+
         for (const FTectonicPlate& Plate : Plates)
         {
-            const double DistSq = FVector3d::DistSquared(RenderVertices[i], Plate.Centroid);
+            double DistSq = FVector3d::DistSquared(Vertex, Plate.Centroid);
+
+            // Milestone 4 Task 5.0: Apply noise warping to distance
+            // "More irregular continent shapes can be obtained by warping the geodesic distances
+            // to the centroids using a simple noise function." (Paper Section 3)
+            if (bUseWarping && WarpAmplitude > SMALL_NUMBER)
+            {
+                // Use 3D Perlin noise seeded by vertex + plate centroid for per-plate variation
+                // This ensures each plate boundary gets unique noise patterns
+                const FVector NoiseInput = FVector((Vertex + Plate.Centroid) * WarpFrequency);
+                const float NoiseValue = FMath::PerlinNoise3D(NoiseInput);
+
+                // Warp distance: d' = d * (1 + amplitude * noise)
+                // NoiseValue range [-1, 1], so warping range: [1 - amplitude, 1 + amplitude]
+                const double WarpFactor = 1.0 + WarpAmplitude * static_cast<double>(NoiseValue);
+                DistSq *= WarpFactor;
+            }
+
             if (DistSq < MinDistSq)
             {
                 MinDistSq = DistSq;
@@ -1252,4 +1329,150 @@ void UTectonicSimulationService::CheckRetessellationNeeded()
                 MaxDriftPlateID, FMath::RadiansToDegrees(MaxDrift), Parameters.RetessellationThresholdDegrees);
         }
     }
+}
+
+// ============================================================================
+// Milestone 5 Task 1.3: History Management (Undo/Redo)
+// ============================================================================
+
+void UTectonicSimulationService::CaptureHistorySnapshot()
+{
+    // If we're in the middle of the history stack (after undo), truncate future history
+    if (CurrentHistoryIndex < HistoryStack.Num() - 1)
+    {
+        HistoryStack.SetNum(CurrentHistoryIndex + 1);
+    }
+
+    // Create new snapshot
+    FSimulationHistorySnapshot Snapshot;
+    Snapshot.CurrentTimeMy = CurrentTimeMy;
+    Snapshot.Plates = Plates;
+    Snapshot.SharedVertices = SharedVertices;
+    Snapshot.RenderVertices = RenderVertices;
+    Snapshot.RenderTriangles = RenderTriangles;
+    Snapshot.VertexPlateAssignments = VertexPlateAssignments;
+    Snapshot.VertexVelocities = VertexVelocities;
+    Snapshot.VertexStressValues = VertexStressValues;
+    Snapshot.VertexTemperatureValues = VertexTemperatureValues;
+    Snapshot.Boundaries = Boundaries;
+    Snapshot.TopologyEvents = TopologyEvents;
+    Snapshot.Hotspots = Hotspots;
+    Snapshot.InitialPlateCentroids = InitialPlateCentroids;
+    Snapshot.TopologyVersion = TopologyVersion;
+    Snapshot.SurfaceDataVersion = SurfaceDataVersion;
+
+    // Add to stack
+    HistoryStack.Add(Snapshot);
+    CurrentHistoryIndex = HistoryStack.Num() - 1;
+
+    // Enforce max history size (sliding window)
+    if (HistoryStack.Num() > MaxHistorySize)
+    {
+        HistoryStack.RemoveAt(0);
+        CurrentHistoryIndex = HistoryStack.Num() - 1;
+        UE_LOG(LogTemp, Verbose, TEXT("History stack full, removed oldest snapshot (max %d)"), MaxHistorySize);
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("CaptureHistorySnapshot: Snapshot %d captured at %.1f My"),
+        CurrentHistoryIndex, CurrentTimeMy);
+}
+
+bool UTectonicSimulationService::Undo()
+{
+    if (!CanUndo())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Undo: No previous state available"));
+        return false;
+    }
+
+    CurrentHistoryIndex--;
+    const FSimulationHistorySnapshot& Snapshot = HistoryStack[CurrentHistoryIndex];
+
+    // Restore state from snapshot
+    CurrentTimeMy = Snapshot.CurrentTimeMy;
+    Plates = Snapshot.Plates;
+    SharedVertices = Snapshot.SharedVertices;
+    RenderVertices = Snapshot.RenderVertices;
+    RenderTriangles = Snapshot.RenderTriangles;
+    VertexPlateAssignments = Snapshot.VertexPlateAssignments;
+    VertexVelocities = Snapshot.VertexVelocities;
+    VertexStressValues = Snapshot.VertexStressValues;
+    VertexTemperatureValues = Snapshot.VertexTemperatureValues;
+    Boundaries = Snapshot.Boundaries;
+    TopologyEvents = Snapshot.TopologyEvents;
+    Hotspots = Snapshot.Hotspots;
+    InitialPlateCentroids = Snapshot.InitialPlateCentroids;
+    TopologyVersion = Snapshot.TopologyVersion;
+    SurfaceDataVersion = Snapshot.SurfaceDataVersion;
+
+    UE_LOG(LogTemp, Log, TEXT("Undo: Restored snapshot %d (%.1f My)"),
+        CurrentHistoryIndex, CurrentTimeMy);
+    return true;
+}
+
+bool UTectonicSimulationService::Redo()
+{
+    if (!CanRedo())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Redo: No future state available"));
+        return false;
+    }
+
+    CurrentHistoryIndex++;
+    const FSimulationHistorySnapshot& Snapshot = HistoryStack[CurrentHistoryIndex];
+
+    // Restore state from snapshot
+    CurrentTimeMy = Snapshot.CurrentTimeMy;
+    Plates = Snapshot.Plates;
+    SharedVertices = Snapshot.SharedVertices;
+    RenderVertices = Snapshot.RenderVertices;
+    RenderTriangles = Snapshot.RenderTriangles;
+    VertexPlateAssignments = Snapshot.VertexPlateAssignments;
+    VertexVelocities = Snapshot.VertexVelocities;
+    VertexStressValues = Snapshot.VertexStressValues;
+    VertexTemperatureValues = Snapshot.VertexTemperatureValues;
+    Boundaries = Snapshot.Boundaries;
+    TopologyEvents = Snapshot.TopologyEvents;
+    Hotspots = Snapshot.Hotspots;
+    InitialPlateCentroids = Snapshot.InitialPlateCentroids;
+    TopologyVersion = Snapshot.TopologyVersion;
+    SurfaceDataVersion = Snapshot.SurfaceDataVersion;
+
+    UE_LOG(LogTemp, Log, TEXT("Redo: Restored snapshot %d (%.1f My)"),
+        CurrentHistoryIndex, CurrentTimeMy);
+    return true;
+}
+
+bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
+{
+    if (!HistoryStack.IsValidIndex(Index))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("JumpToHistoryIndex: Invalid index %d (stack size %d)"),
+            Index, HistoryStack.Num());
+        return false;
+    }
+
+    CurrentHistoryIndex = Index;
+    const FSimulationHistorySnapshot& Snapshot = HistoryStack[CurrentHistoryIndex];
+
+    // Restore state from snapshot
+    CurrentTimeMy = Snapshot.CurrentTimeMy;
+    Plates = Snapshot.Plates;
+    SharedVertices = Snapshot.SharedVertices;
+    RenderVertices = Snapshot.RenderVertices;
+    RenderTriangles = Snapshot.RenderTriangles;
+    VertexPlateAssignments = Snapshot.VertexPlateAssignments;
+    VertexVelocities = Snapshot.VertexVelocities;
+    VertexStressValues = Snapshot.VertexStressValues;
+    VertexTemperatureValues = Snapshot.VertexTemperatureValues;
+    Boundaries = Snapshot.Boundaries;
+    TopologyEvents = Snapshot.TopologyEvents;
+    Hotspots = Snapshot.Hotspots;
+    InitialPlateCentroids = Snapshot.InitialPlateCentroids;
+    TopologyVersion = Snapshot.TopologyVersion;
+    SurfaceDataVersion = Snapshot.SurfaceDataVersion;
+
+    UE_LOG(LogTemp, Log, TEXT("JumpToHistoryIndex: Jumped to snapshot %d (%.1f My)"),
+        CurrentHistoryIndex, CurrentTimeMy);
+    return true;
 }

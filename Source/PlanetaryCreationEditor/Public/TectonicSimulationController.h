@@ -1,12 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshDataStream.h"
+#include "OrbitCameraController.h"
 
 class UTectonicSimulationService;
-namespace RealtimeMesh
-{
-    struct FRealtimeMeshStreamSet;
-}
 
 /** Milestone 3 Task 2.4: Elevation visualization mode. */
 enum class EElevationMode : uint8
@@ -26,6 +24,17 @@ struct FMeshBuildSnapshot
     double ElevationScale;
     bool bShowVelocityField;
     EElevationMode ElevationMode;
+};
+
+/** Milestone 4 Phase 4.2: Cached LOD mesh snapshot (snapshot of simulation state, not StreamSet). */
+struct FCachedLODMesh
+{
+    FMeshBuildSnapshot Snapshot;
+    int32 VertexCount = 0;
+    int32 TriangleCount = 0;
+    int32 TopologyVersion = 0;
+    int32 SurfaceDataVersion = 0;
+    double CacheTimestamp = 0.0; // For LRU eviction if needed
 };
 
 /** Encapsulates higher-level control over the tectonic simulation and mesh conversion. */
@@ -66,6 +75,23 @@ public:
     /** Get boundary overlay visibility. */
     bool AreBoundariesVisible() const { return bShowBoundaries; }
 
+    /** Milestone 4 Phase 4.1: Update camera distance and recompute target LOD. */
+    void UpdateLOD();
+
+    /** Milestone 4 Phase 4.1: Get current target LOD level. */
+    int32 GetTargetLODLevel() const { return TargetLODLevel; }
+
+    /** Milestone 4 Phase 4.2: Get cache statistics for debugging. */
+    void GetCacheStats(int32& OutCachedLODs, int32& OutTotalCacheSize) const;
+
+    /** Milestone 5 Task 1.2: Camera control methods. */
+    void RotateCamera(float DeltaYaw, float DeltaPitch);
+    void ZoomCamera(float DeltaDistance);
+    void ResetCamera();
+    void TickCamera(float DeltaTime);
+    FVector2D GetCameraAngles() const;
+    float GetCameraDistance() const;
+
 private:
     UTectonicSimulationService* GetService() const;
     void EnsurePreviewActor() const;
@@ -73,11 +99,32 @@ private:
     void BuildAndUpdateMesh();
     void DrawBoundaryLines();
 
+    /** Milestone 4 Task 3.1: Draw high-resolution boundary overlay tracing render mesh seams. */
+    void DrawHighResolutionBoundaryOverlay();
+
+    /** Milestone 4 Task 3.2: Draw velocity vector field at plate centroids. */
+    void DrawVelocityVectorField();
+
     /** Milestone 3 Task 4.3: Create snapshot for async mesh build. */
     FMeshBuildSnapshot CreateMeshBuildSnapshot() const;
 
     /** Milestone 3 Task 4.3: Build mesh StreamSet from snapshot (thread-safe). */
     static void BuildMeshFromSnapshot(const FMeshBuildSnapshot& Snapshot, RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
+
+    /** Milestone 4 Phase 4.2: Check if LOD mesh is cached and valid. */
+    bool IsLODCached(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const;
+
+    /** Milestone 4 Phase 4.2: Get cached LOD mesh (returns nullptr if not cached). */
+    const FCachedLODMesh* GetCachedLOD(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const;
+
+    /** Milestone 4 Phase 4.2: Store built mesh snapshot in cache. */
+    void CacheLODMesh(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion, const FMeshBuildSnapshot& Snapshot, int32 VertexCount, int32 TriangleCount);
+
+    /** Milestone 4 Phase 4.2: Invalidate cache on topology change. */
+    void InvalidateLODCache();
+
+    /** Milestone 4 Phase 4.2: Pre-warm neighboring LOD levels. */
+    void PreWarmNeighboringLODs();
 
     mutable TWeakObjectPtr<UTectonicSimulationService> CachedService;
     mutable TWeakObjectPtr<class ARealtimeMeshActor> PreviewActor;
@@ -96,4 +143,19 @@ private:
     /** Milestone 3 Task 4.3: Async mesh build state. */
     mutable std::atomic<bool> bAsyncMeshBuildInProgress{false};
     mutable double LastMeshBuildTimeMs = 0.0;
+
+    /** Milestone 4 Phase 4.1: LOD state. */
+    int32 CurrentLODLevel = 2;  // Start at Level 2 (current default)
+    int32 TargetLODLevel = 2;
+    double LastCameraDistance = 0.0;
+
+    /** Milestone 4 Phase 4.2: LOD mesh cache (key: LODLevel). */
+    mutable TMap<int32, TUniquePtr<FCachedLODMesh>> LODCache;
+
+    /** Milestone 4 Phase 4.2: Topology/surface version tracking for cache invalidation. */
+    mutable int32 CachedTopologyVersion = 0;
+    mutable int32 CachedSurfaceDataVersion = 0;
+
+    /** Milestone 5 Task 1.2: Orbital camera controller. */
+    mutable FOrbitCameraController CameraController;
 };

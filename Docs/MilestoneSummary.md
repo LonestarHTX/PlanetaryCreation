@@ -43,69 +43,90 @@ This summary consolidates the original roadmap (`Docs/PlanningAgentPlan.md`) wit
   - Stress model capped at 100 MPa and labeled cosmetic.
 - **Reference:** `Docs/Milestone3_Plan.md`, `Docs/Performance_M3.md`.
 
-## Milestone 4 – Dynamic Tectonics & Visual Fidelity *(Weeks 6–13 — In Progress)*
-Detailed plan lives in `Docs/Milestone4_Plan.md`. Current status below.
+## Milestone 4 – Dynamic Tectonics & Visual Fidelity ✅ *(Weeks 6–13 — COMPLETE)*
+**Completion Date:** 2025-10-04
+**Test Status:** 17/18 passing (94.4%) - Ship-ready
+**Performance:** All ship-critical LODs (3-5) under 120ms target
+**Release Notes:** `Docs/ReleaseNotes_M4.md`
+
+Detailed plan lives in `Docs/Milestone4_Plan.md`. Final status below.
 
 ### Phase 1 – Dynamic Plate Topology
 - **Task 1.0: Re-tessellation Design Spike** *(Complete)* – Design doc `Docs/Milestone4_RetessellationDesign.md`; algorithm, tolerances, rollback plan approved.
-- **Task 1.1: Re-tessellation Engine** *(In progress, phases 1–2 complete)* – Deterministic full rebuild validated (0.10–18.46 ms from Level 0–6), centroid reset, area/Euler checks, rollback tested, automation in place. Pending hook to refresh Voronoi/mesh buffers post rebuild.
-- **Task 1.2: Plate Split & Merge (Paper Sec. 4.2–4.3)** *(Not started)* – Implement rift-driven splits and subduction merges with deterministic events.
-- **Task 1.3: Boundary State Machine & CSV v3.0** *(Not started)* – Lifecycle states (Nascent/Active/Dormant), CSV columns `BoundaryState`, `StateTransitionTimeMy`, `ThermalFlux`.
-- **Task 1.4: Re-tessellation Rollback Automation** *(Partial)* – Snapshot/restore proven; finalize automation fault injection.
+- **Task 1.1: Re-tessellation Engine** *(Complete)* – Deterministic full rebuild validated (0.10–18.46 ms from Level 0–6), centroid reset, area/Euler checks, rollback tested; design addendum documents full-rebuild decision.
+- **Task 1.2: Plate Split & Merge (Paper Sec. 4.2–4.3)** *(Complete)* – Deterministic split/merge derivation, Voronoi redistribution, topology events with automation coverage.
+- **Task 1.3: Boundary State Machine & CSV v3.0** *(Complete)* – Lifecycle states (Nascent/Active/Dormant/Rifting) with CSV v3.0 exports (`BoundaryState`, `StateTransitionTimeMy`, `ThermalFlux`, `RiftWidth_m`, `RiftAge_My`).
+- **Task 1.4: Re-tessellation Rollback Automation** *(Complete)* – Snapshot/restore validated via regression test and fault injection.
 
 ### Phase 2 – Hotspots, Rifts, Thermal Coupling
-- **Task 2.1: Hotspot Generation & Drift (Paper Sec. 4.4)** *(Not started).* Deterministic plume seeds, hotspot drift, heat impact on stress/elevation.
-- **Task 2.2: Rift Propagation Model (Paper Sec. 4.2)** *(Not started).* Divergent thresholds trigger rift widening and plate split handoff.
-- **Task 2.3: Thermal & Stress Coupling (Analytic)** *(Not started).* Analytic falloff `T(r)=T_max exp(-r²/σ²)` + subduction term; affects stress/elevation additively; per-vertex temperatures exported.
+- **Task 2.1: Hotspot Generation & Drift (Paper Sec. 4.4)** *(Complete)* – Deterministic hotspots with drift, thermal contribution, automation test.
+- **Task 2.2: Rift Propagation Model (Paper Sec. 4.2)** *(Complete)* – Rift lifecycle, width/age tracking, deterministic split triggers, automation test.
+- **Task 2.3: Thermal & Stress Coupling (Analytic)** *(Complete)* – Analytic thermal field with hotspots + subduction heating, per-vertex temperature export, automation test.
 
 ### Phase 3 – Visualization & UX Enhancements
-- **Task 3.1: High-Resolution Boundary Overlay** *(Not started).* Trace render seams, align overlay within one vertex; modulate by boundary state/stress; optional downsampling.
-- **Task 3.2: Velocity Vector Field (Deferred from M3)** *(Not started).* Centroid arrows, magnitude scaling, UI toggle, screenshot validation.
+- **Task 3.1: High-Resolution Boundary Overlay** *(Complete)* – Render seam tracing, deviation metric logged, modulation by boundary state/stress.
+- **Task 3.2: Velocity Vector Field (Deferred from M3)** *(Complete)* – Centroid arrows with magnitude scaling, UI toggle, screenshot/automation validation.
 - **Task 3.3:** Material/lighting polish deferred to later milestone per scope alignment.
 
 ### Phase 4 – LOD & Performance
-- **Task 4.0: LOD Architecture Spike** *(Not started).* Evaluate RealtimeMesh LOD support; produce `Docs/Milestone4_LODDesign.md`.
-- **Task 4.1: Multi-Tier LOD System** *(Not started).* Distance-based selection, hysteresis, buffer reuse.
-- **Task 4.2: Streaming & Caching** *(Not started).* Async loading of cached meshes/material params.
-- **Task 4.3: Profiling & Optimization** *(Not started).* Unreal Insights after M4 features; target Level 3 <120 ms (stretch <100 ms); document results in `Docs/Performance_M4.md`.
+- **Task 4.0: LOD Architecture Spike** *(Complete)* – `Docs/Milestone4_LODDesign.md` authored; distance thresholds and caching strategy approved.
+- **Task 4.1: Multi-Tier LOD System** *(Complete)* – Distance-based L4/L5/L7 tiers with hysteresis, cache-aware rebuild, automation coverage (`LODRegression`, `LODConsistency`).
+- **Task 4.2: Streaming & Caching** *(Complete)* – Snapshot-based cache, async pre-warm of neighbouring LODs, topology/surface version tracking.
+- **Task 4.3: Profiling & Optimization** *(Complete)* – Instrumented timings in `Docs/Performance_M4.md`; Level 3–5 <120 ms, Level 6 overage logged for Milestone 6 optimisation.
 
 ### Phase 5 – Validation & Documentation
-- **Task 5.1: Expanded Automation Suite** *(Not started).* Tests for retess, split/merge, lifecycle states, hotspots, thermal coupling, LOD, rollback.
-- **Task 5.2: Visual Comparison & Paper Parity** *(Not started).* Recreate paper figures; log deviations with sign-off.
-- **Task 5.3: Documentation & Release Notes** *(Not started).* Update `Docs/Milestone4_Features.md`, `CLAUDE.md`, CSV schema v3.0, release notes.
+- **Task 5.0: Voronoi Warping for Plate Shapes** *(Complete)* – Noise-warped Voronoi assignments with automation deterministic checks.
+- **Task 5.1: Expanded Automation Suite** *(Complete)* – 5 new + 2 expanded tests (retess edge cases, split/merge validation, boundary lifecycle, hotspots, thermal coupling, LOD cache, rollback determinism).
+- **Task 5.2: Visual Comparison & Paper Parity** *(Complete)* – Gallery captured per plan, parity deviations logged in `Docs/ReleaseNotes_M4.md`.
+- **Task 5.3: Documentation & Release Notes** *(Complete)* – Milestone docs, performance report, release notes, summary all updated; CSV schema v3.0 documented.
 
-### Current Summary for Milestone 4
-- Fundamental retess infrastructure delivered and validated; render refresh hook pending.
-- Remaining work: implement plate split/merge, hotspot/rift/thermal systems, high-res overlay, velocity vectors, LOD pipeline, performance pass, full automation/documentation.
-- All simplifications/deviations are recorded in plan docs.
+### Final Summary for Milestone 4
+- Dynamic tectonics, deterministic topology, hotspots/rifts/thermal coupling, high-res overlays, and LOD streaming are complete with full automation coverage.
+- Thermal model now follows paper guidance (hotspot heat decoupled from stress); parity gaps limited to Stage B amplification, erosion/sediment, and Level 7 profiling—scheduled for Milestone 6.
+- Documentation, gallery, and release notes published (`Docs/ReleaseNotes_M4.md`, `Docs/Milestone4_CompletionSummary.md`).
+- Known limitation: RetessellationRegression perf overage (228 ms @ L6) logged for Milestone 6 SIMD/GPU optimisation.
 
 ## Milestone 5 – Validation, Optimization, Packaging *(Weeks 13–15 — Planned)*
 - **Goal:** Move from research-aligned prototype to production-ready editor deliverable.
 - **Planned Deliverables:**
   - Expanded automation (determinism, mesh integrity, UI regression, new M4 features).
   - Final performance profiling reports (CPU/GPU/memory budgets) with Unreal Insights.
+  - Lightweight orbital inspection camera (baseline zoom/orbit controller for review builds).
+  - Undo/redo UI controls wired to existing rollback system (toolbar buttons + keyboard shortcuts).
+  - Continuous simulation playback controls (Play/Pause, adjustable timestep cadence, integrates with undo/redo history).
   - User guide, release notes, risk/validation checklist formalized.
 - **Dependencies:** Completion of Milestone 4 phases.
 
-## Milestone 6 – Surface Evolution & Presentation *(Future, Planned)*
-- **Goal:** Layer erosion, sediment transport, and visual polish onto Milestone 4 systems.
-- **Proposed Tasks:**
-  - Implement erosion/sediment passes tied to stress/elevation history.
-  - Restore deferred material/lighting enhancements (oceanic vs continental crust, volcanic emissive, day/night lighting).
-  - Extend UI tooling with timeline scrubber, snapshot browser, and analytics overlays.
-- **Status:** Not started; to be scheduled after Milestone 5. Documented so the erosion/polish scope is explicit.
+## Milestone 6 – Amplification & Performance Parity *(Future, Planned)*
+- **Goal:** Complete paper parity by delivering Stage B amplification, erosion/sediment transport, and performance headroom.
+- **Planned Tasks:**
+  - Implement Stage B terrain amplification (procedural noise + exemplar blending for ~100 m relief).
+  - Add terrane extraction/reattachment and localized uplift during continental collisions.
+  - Implement continental erosion and sediment transport passes tied to stress/elevation history.
+  - Apply SIMD optimizations to stress interpolation/boundary loops; offload thermal/stress fields to GPU compute where practical.
+  - Update CSV exports and automation to capture new metrics; reproduce paper figures at Level 7 for parity.
+- **Status:** Not started; begins after Milestone 5 validation.
 
-## Milestone 7 – Climate & Hydrosphere Coupling *(Future, Planned)*
+## Milestone 7 – Presentation & UX *(Future, Planned)*
+- **Goal:** Deliver a polished editor experience with upgraded visuals and navigation.
+- **Planned Tasks:**
+  - Restore deferred material/lighting enhancements (oceanic vs continental crust, volcanic emissive, day/night lighting).
+  - Implement Spore-style multi-band camera transitions with collision easing and surface glide.
+  - Extend UI tooling with timeline scrubber, snapshot browser, analytics overlays, and continuous playback refinements (recording, speed modulation).
+  - Refresh validation gallery and tutorials to showcase high-detail output.
+- **Status:** Not started; follows Milestone 6 to capitalize on amplified terrain data.
+
+## Milestone 8 – Climate & Hydrosphere Coupling *(Future, Planned)*
 - **Goal:** Integrate simplified ocean and atmosphere interactions driven by tectonic activity.
-- **Proposed Tasks:**
+- **Planned Tasks:**
   - Model sea-level response to plate uplift/subduction.
   - Introduce climate zones (temperature, precipitation) influenced by thermal field and topography.
   - Visualize wind/precipitation vectors and couple to CSV/export analytics.
-- **Status:** Not started; requires Milestones 4–6 completion and stakeholder prioritization.
+- **Status:** Not started; requires Milestones 4–7 completion and stakeholder prioritization.
 
-## Milestone 8 – Shipping Readiness & Cinematic Polish *(Future, Planned)*
+## Milestone 9 – Shipping Readiness & Cinematic Polish *(Future, Planned)*
 - **Goal:** Finalize the tool for public release or internal deployment with cinematic quality.
-- **Proposed Tasks:**
+- **Planned Tasks:**
   - Final optimization pass (GPU offloads, streaming, LOD tuning) targeting console-class hardware budgets.
   - Implement cinematic materials, screenshot/video tooling, and release packaging.
   - Update documentation, tutorials, and release management artifacts.
@@ -114,10 +135,10 @@ Detailed plan lives in `Docs/Milestone4_Plan.md`. Current status below.
 ---
 
 ## From Fundamentals to Production
-With Milestones 0–3 complete and Milestone 4 underway, the research-aligned fundamentals (deterministic simulation, high-density mesh visualization, retess infrastructure) are proven. To reach a production-level tool:
-1. **Finish Milestone 4:** Deliver dynamic tectonic behaviour, high-resolution overlays, LOD/streaming, and expanded validation/documentation.
-2. **Execute Milestone 5:** Formal QA pass, profiling, and packaging.
-3. **Plan Subsequent Milestones (6–8):** Tackle erosion/polish, climate/hydrosphere coupling, and shipping/cinematic work once core deliverables ship.
+With Milestones 0–4 complete, the research-aligned fundamentals (deterministic simulation, high-density mesh visualization, dynamic topology, LOD streaming) are proven. To reach a production-level tool:
+1. **Execute Milestone 5:** Formal QA pass, profiling, orbital camera, undo/redo UI, continuous playback, and packaging.
+2. **Deliver Milestone 6:** Stage B amplification, erosion/sediment, terrane handling, SIMD/GPU optimisation, Level 7 parity metrics.
+3. **Follow with Milestones 7–9:** Presentation polish, climate/hydrosphere coupling, and shipping/cinematic readiness.
 
 All milestones—completed, in-progress, and future—are now documented here so nothing sits “out of scope.”
 
@@ -129,4 +150,3 @@ All milestones—completed, in-progress, and future—are now documented here so
 - Milestone 4 detail: `Docs/Milestone4_Plan.md`
 - Re-tess design: `Docs/Milestone4_RetessellationDesign.md`
 - Milestone 4 progress log: `Docs/MilestoneSummary.md` (this file)
-

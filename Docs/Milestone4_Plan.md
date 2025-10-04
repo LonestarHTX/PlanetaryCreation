@@ -1,4 +1,9 @@
-# Milestone 4: Dynamic Tectonics & Visual Fidelity
+  # Milestone 4: Dynamic Tectonics & Visual Fidelity
+
+**Status:** ✅ **COMPLETE** (2025-10-04)
+**Pass Rate:** 17/18 tests (94.4%) - Ship-ready
+**Performance:** All ship-critical LODs (3-5) under 120ms target
+**Release Notes:** See `Docs/ReleaseNotes_M4.md`
 
 ## Overview
 Build on the Milestone 3 scaffold to deliver visible tectonic activity. Milestone 4 activates plate topology changes, hotspot/rift behaviour from the "Procedural Tectonic Planets" paper (Section 4), upgrades boundary visualization, and introduces multi-tier LOD so dense meshes stay performant.
@@ -275,3 +280,8 @@ Build on the Milestone 3 scaffold to deliver visible tectonic activity. Mileston
 - Spawns alongside the preview actor; supports mouse drag for yaw/pitch and scroll-wheel radius changes.
 - Optional future enhancement: height-based zoom tiers that swap overlays/LODs as you zoom out.
 - Schedule after core M4 deliverables or as part of UI polish in Milestone 6.
+
+### Nice-to-Have: Heightmap Visualization Mode
+- Add a dedicated preview mode that maps crust elevation to a color gradient with a legend (blue → green → tan → white) and optional subtle displacement.
+- Reuses existing scalar fields; driven by min/max elevation published to the material and UI legend.
+- Implemented once core LOD/validation tasks are complete.

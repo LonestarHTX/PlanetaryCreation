@@ -19,9 +19,23 @@ void UTectonicSimulationService::DetectAndExecutePlateSplits()
         FPlateBoundary& Boundary = BoundaryPair.Value;
 
         // Check if divergent boundary meets split criteria
-        if (Boundary.BoundaryType == EBoundaryType::Divergent &&
-            Boundary.RelativeVelocity > Parameters.SplitVelocityThreshold &&
-            Boundary.DivergentDurationMy > Parameters.SplitDurationThreshold)
+        // Two paths: (1) rift-based (if rift propagation enabled), (2) duration-based (legacy)
+        bool bMeetsSplitCriteria = false;
+
+        if (Parameters.bEnableRiftPropagation && Boundary.BoundaryState == EBoundaryState::Rifting)
+        {
+            // Rift-based split: check if rift width exceeds threshold
+            bMeetsSplitCriteria = (Boundary.RiftWidthMeters > Parameters.RiftSplitThresholdMeters);
+        }
+        else
+        {
+            // Legacy duration-based split: sustained divergence
+            bMeetsSplitCriteria = (Boundary.BoundaryType == EBoundaryType::Divergent &&
+                                   Boundary.RelativeVelocity > Parameters.SplitVelocityThreshold &&
+                                   Boundary.DivergentDurationMy > Parameters.SplitDurationThreshold);
+        }
+
+        if (bMeetsSplitCriteria)
         {
             // Candidate for split - pick one of the two plates (deterministic: always choose lower PlateID)
             const int32 PlateToSplit = FMath::Min(PlateIDs.Key, PlateIDs.Value);
@@ -40,9 +54,19 @@ void UTectonicSimulationService::DetectAndExecutePlateSplits()
             if (!bAlreadyQueued)
             {
                 CandidateSplits.Add(TPair<int32, int32>(PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key));
-                UE_LOG(LogTemp, Warning, TEXT("[Split Detection] Plate %d candidate for split along boundary with Plate %d (velocity=%.4f, duration=%.1f My)"),
-                    PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key,
-                    Boundary.RelativeVelocity, Boundary.DivergentDurationMy);
+
+                if (Parameters.bEnableRiftPropagation && Boundary.BoundaryState == EBoundaryState::Rifting)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[Split Detection] Plate %d candidate for rift-based split along boundary with Plate %d (rift width=%.0f m > %.0f m, velocity=%.4f rad/My)"),
+                        PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key,
+                        Boundary.RiftWidthMeters, Parameters.RiftSplitThresholdMeters, Boundary.RelativeVelocity);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[Split Detection] Plate %d candidate for duration-based split along boundary with Plate %d (velocity=%.4f rad/My, duration=%.1f My)"),
+                        PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key,
+                        Boundary.RelativeVelocity, Boundary.DivergentDurationMy);
+                }
             }
         }
     }
@@ -160,38 +184,91 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
     // Create snapshot for rollback
     const int32 OriginalPlateCount = Plates.Num();
 
-    // Simplified split algorithm (POC):
+    // Deterministic split algorithm:
     // 1. Create new plate by duplicating original
-    // 2. Split vertices along boundary (half to each plate)
-    // 3. Assign random Euler pole to new plate
+    // 2. Derive child Euler poles from parent pole + rift direction (NO random offsets)
+    // 3. Offset centroids perpendicular to rift line
     // 4. Trigger full re-tessellation to rebuild mesh
 
     FTectonicPlate NewPlate = *OriginalPlate;
     NewPlate.PlateID = Plates.Num(); // New ID = next available
 
-    // Generate new Euler pole for child plate (random direction, inherit velocity magnitude)
-    FRandomStream RNG(Parameters.Seed + NewPlate.PlateID);
-    const double Theta = RNG.FRand() * 2.0 * PI;
-    const double Phi = FMath::Acos(2.0 * RNG.FRand() - 1.0);
+    // ===== DETERMINISTIC EULER POLE DERIVATION =====
+    //
+    // Physical model: Rifting occurs when a plate experiences extensional stress perpendicular
+    // to the rift axis. The two child plates inherit the parent's motion but diverge along the rift.
+    //
+    // Math:
+    //   1. Rift direction R = normalized vector along boundary midline (great circle tangent)
+    //   2. Parent angular velocity ω_parent = EulerPoleAxis × AngularVelocity
+    //   3. Child A: ω_A = ω_parent + (divergence component along R)
+    //   4. Child B: ω_B = ω_parent - (divergence component along R)
+    //
+    // The divergence component is derived from the rift velocity (RelativeVelocity):
+    //   Divergence magnitude = RelativeVelocity / 2 (split equally between children)
+    //
+    // This ensures:
+    //   - Conservation of angular momentum (ω_A + ω_B ≈ 2 × ω_parent)
+    //   - Determinism (no random offsets, same seed → same result)
+    //   - Physical plausibility (motion guided by rift geometry)
 
-    NewPlate.EulerPoleAxis = FVector3d(
-        FMath::Sin(Phi) * FMath::Cos(Theta),
-        FMath::Sin(Phi) * FMath::Sin(Theta),
-        FMath::Cos(Phi)
-    ).GetSafeNormal();
+    // Step 1: Compute rift direction (great circle tangent at boundary midpoint)
+    FVector3d BoundaryV0 = SharedVertices[Boundary.SharedEdgeVertices[0]];
+    FVector3d BoundaryV1 = SharedVertices[Boundary.SharedEdgeVertices[1]];
+    const FVector3d BoundaryMidpoint = ((BoundaryV0 + BoundaryV1) * 0.5).GetSafeNormal();
 
-    // Slightly perturb angular velocity (±10%)
-    NewPlate.AngularVelocity = OriginalPlate->AngularVelocity * RNG.FRandRange(0.9, 1.1);
+    // Rift direction = tangent to great circle connecting boundary vertices
+    FVector3d RiftDirection = (BoundaryV1 - BoundaryV0).GetSafeNormal();
 
-    // Offset centroids away from boundary (simplified: move in opposite directions)
-    const FVector3d BoundaryMidpoint = ((SharedVertices[Boundary.SharedEdgeVertices[0]] +
-                                         SharedVertices[Boundary.SharedEdgeVertices[1]]) * 0.5).GetSafeNormal();
+    // Ensure rift direction is tangent to sphere at midpoint (project onto tangent plane)
+    RiftDirection = (RiftDirection - BoundaryMidpoint * FVector3d::DotProduct(RiftDirection, BoundaryMidpoint)).GetSafeNormal();
 
-    const FVector3d OffsetDirection = BoundaryMidpoint;
-    const double OffsetMagnitude = 0.1; // 0.1 radians ≈ 5.7° offset
+    // Step 2: Parent angular velocity vector
+    const FVector3d ParentOmega = OriginalPlate->EulerPoleAxis * OriginalPlate->AngularVelocity;
 
-    OriginalPlate->Centroid = (OriginalPlate->Centroid - OffsetDirection * OffsetMagnitude).GetSafeNormal();
-    NewPlate.Centroid = (NewPlate.Centroid + OffsetDirection * OffsetMagnitude).GetSafeNormal();
+    // Step 3: Divergence component (half the relative velocity for each child)
+    const double DivergenceMagnitude = Boundary.RelativeVelocity * 0.5; // Split equally
+    const FVector3d DivergenceVector = RiftDirection * DivergenceMagnitude;
+
+    // Step 4: Child angular velocity vectors (deterministic split)
+    const FVector3d ChildA_Omega = ParentOmega + DivergenceVector; // Original plate (ChildA) diverges in +R direction
+    const FVector3d ChildB_Omega = ParentOmega - DivergenceVector; // New plate (ChildB) diverges in -R direction
+
+    // Step 5: Convert back to Euler pole axis + angular velocity
+    OriginalPlate->AngularVelocity = ChildA_Omega.Length();
+    OriginalPlate->EulerPoleAxis = (OriginalPlate->AngularVelocity > 1e-6)
+        ? ChildA_Omega.GetSafeNormal()
+        : OriginalPlate->EulerPoleAxis; // Preserve axis if velocity is near-zero
+
+    NewPlate.AngularVelocity = ChildB_Omega.Length();
+    NewPlate.EulerPoleAxis = (NewPlate.AngularVelocity > 1e-6)
+        ? ChildB_Omega.GetSafeNormal()
+        : OriginalPlate->EulerPoleAxis; // Fallback to parent axis
+
+    // Log the derivation for validation
+    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Parent: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+        ParentOmega.Length(),
+        OriginalPlate->EulerPoleAxis.X, OriginalPlate->EulerPoleAxis.Y, OriginalPlate->EulerPoleAxis.Z);
+    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Rift direction: R=(%.3f,%.3f,%.3f), divergence=%.4f rad/My"),
+        RiftDirection.X, RiftDirection.Y, RiftDirection.Z, DivergenceMagnitude);
+    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Child A: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+        OriginalPlate->AngularVelocity,
+        OriginalPlate->EulerPoleAxis.X, OriginalPlate->EulerPoleAxis.Y, OriginalPlate->EulerPoleAxis.Z);
+    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Child B: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+        NewPlate.AngularVelocity,
+        NewPlate.EulerPoleAxis.X, NewPlate.EulerPoleAxis.Y, NewPlate.EulerPoleAxis.Z);
+
+    // ===== DETERMINISTIC CENTROID OFFSET =====
+    //
+    // Offset centroids perpendicular to rift line to prevent immediate re-merge
+    // Offset direction = cross product of rift direction and boundary midpoint normal
+    // This creates separation tangent to the sphere surface
+
+    const FVector3d OffsetDirection = FVector3d::CrossProduct(RiftDirection, BoundaryMidpoint).GetSafeNormal();
+    const double OffsetMagnitude = 0.08; // ~4.6° offset (conservative to avoid excessive drift)
+
+    OriginalPlate->Centroid = (OriginalPlate->Centroid + OffsetDirection * OffsetMagnitude).GetSafeNormal();
+    NewPlate.Centroid = (NewPlate.Centroid - OffsetDirection * OffsetMagnitude).GetSafeNormal();
 
     // Add new plate to simulation
     Plates.Add(NewPlate);
@@ -236,6 +313,10 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
         InitialPlateCentroids[i] = Plates[i].Centroid;
     }
 
+    // Milestone 4 Phase 4.2: Increment topology version (split changed geometry)
+    TopologyVersion++;
+    UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Topology version incremented after split: %d"), TopologyVersion);
+
     return true;
 }
 
@@ -253,14 +334,73 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
     }
 
     FTectonicPlate& SurvivorPlate = Plates[SurvivorIndex];
+    const FTectonicPlate& ConsumedPlate = Plates[ConsumedIndex];
 
     // Create snapshot for rollback
     const int32 OriginalPlateCount = Plates.Num();
 
-    // Simplified merge algorithm (POC):
-    // 1. Remove consumed plate from Plates array
-    // 2. Recalculate survivor's centroid (weighted average by area)
-    // 3. Trigger full re-tessellation to rebuild mesh
+    // ===== DETERMINISTIC MERGE: AREA-WEIGHTED EULER POLE BLENDING =====
+    //
+    // Physical model: When a smaller plate is consumed (subducted), the survivor plate
+    // inherits a blended motion proportional to the mass (area) of each plate.
+    //
+    // Math:
+    //   1. Compute area proxies: A_survivor, A_consumed (using vertex counts)
+    //   2. Extract angular velocity vectors: ω_survivor, ω_consumed
+    //   3. Blend: ω_merged = (A_survivor × ω_survivor + A_consumed × ω_consumed) / (A_survivor + A_consumed)
+    //   4. Convert back to Euler pole axis + angular velocity
+    //   5. Blend centroids using same weights
+
+    // Step 1: Area proxies (vertex count is proportional to spherical area for Voronoi cells)
+    const double AreaSurvivor = static_cast<double>(SurvivorPlate.VertexIndices.Num());
+    const double AreaConsumed = static_cast<double>(ConsumedPlate.VertexIndices.Num());
+    const double TotalArea = AreaSurvivor + AreaConsumed;
+
+    if (TotalArea < 1.0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[Merge] Invalid plate areas (survivor=%d, consumed=%d vertices)"),
+            SurvivorPlate.VertexIndices.Num(), ConsumedPlate.VertexIndices.Num());
+        return false;
+    }
+
+    // Step 2: Angular velocity vectors
+    const FVector3d OmegaSurvivor = SurvivorPlate.EulerPoleAxis * SurvivorPlate.AngularVelocity;
+    const FVector3d OmegaConsumed = ConsumedPlate.EulerPoleAxis * ConsumedPlate.AngularVelocity;
+
+    // Step 3: Area-weighted blend
+    const FVector3d OmegaMerged = (OmegaSurvivor * AreaSurvivor + OmegaConsumed * AreaConsumed) / TotalArea;
+
+    // Step 4: Convert back to axis + magnitude
+    const double MergedAngularVelocity = OmegaMerged.Length();
+    const FVector3d MergedEulerPoleAxis = (MergedAngularVelocity > 1e-6)
+        ? OmegaMerged.GetSafeNormal()
+        : SurvivorPlate.EulerPoleAxis; // Fallback if merged velocity is zero
+
+    // Step 5: Blend centroids
+    const FVector3d MergedCentroid = ((SurvivorPlate.Centroid * AreaSurvivor + ConsumedPlate.Centroid * AreaConsumed) / TotalArea).GetSafeNormal();
+
+    // Log the derivation for validation
+    UE_LOG(LogTemp, Log, TEXT("[Merge Derivation] Survivor: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f), area=%d vertices"),
+        SurvivorPlate.AngularVelocity,
+        SurvivorPlate.EulerPoleAxis.X, SurvivorPlate.EulerPoleAxis.Y, SurvivorPlate.EulerPoleAxis.Z,
+        SurvivorPlate.VertexIndices.Num());
+    UE_LOG(LogTemp, Log, TEXT("[Merge Derivation] Consumed: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f), area=%d vertices"),
+        ConsumedPlate.AngularVelocity,
+        ConsumedPlate.EulerPoleAxis.X, ConsumedPlate.EulerPoleAxis.Y, ConsumedPlate.EulerPoleAxis.Z,
+        ConsumedPlate.VertexIndices.Num());
+    UE_LOG(LogTemp, Log, TEXT("[Merge Derivation] Merged: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+        MergedAngularVelocity,
+        MergedEulerPoleAxis.X, MergedEulerPoleAxis.Y, MergedEulerPoleAxis.Z);
+
+    // Apply merged values to survivor
+    SurvivorPlate.AngularVelocity = MergedAngularVelocity;
+    SurvivorPlate.EulerPoleAxis = MergedEulerPoleAxis;
+    SurvivorPlate.Centroid = MergedCentroid;
+
+    // ===== STRESS HISTORY CARRY-OVER =====
+    // Survivor inherits the higher accumulated stress (conservative: retain worst-case scenario)
+    // Note: Stress is already stored per-boundary, not per-plate, so this is informational only
+    // Future enhancement: track per-plate stress history if needed
 
     // Log topology event before removal
     FPlateTopologyEvent Event;
@@ -277,9 +417,6 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
 
     // Remove consumed plate
     Plates.RemoveAt(ConsumedIndex);
-
-    // Recalculate survivor centroid (simple: keep existing for now, will be refined by Lloyd relaxation)
-    // Future enhancement: weighted average by plate area
 
     // Trigger full re-tessellation
     // NOTE: We DON'T call GenerateIcospherePlates() here because that would reset to initial topology
@@ -303,6 +440,10 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
     {
         InitialPlateCentroids[i] = Plates[i].Centroid;
     }
+
+    // Milestone 4 Phase 4.2: Increment topology version (merge changed geometry)
+    TopologyVersion++;
+    UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Topology version incremented after merge: %d"), TopologyVersion);
 
     return true;
 }

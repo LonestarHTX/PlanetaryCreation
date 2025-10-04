@@ -18,6 +18,9 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Components/LineBatchComponent.h"
 #include "Math/Quat.h"
+#include "UnrealEdGlobals.h"
+#include "Editor/UnrealEdEngine.h"
+#include "EditorViewportClient.h"
 #include "HAL/PlatformTime.h"
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
@@ -37,6 +40,9 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
 {
     if (UTectonicSimulationService* Service = GetService())
     {
+        // Milestone 4 Phase 4.1: Update LOD before stepping (camera may have moved)
+        UpdateLOD();
+
         Service->AdvanceSteps(Steps);
         BuildAndUpdateMesh();
     }
@@ -44,6 +50,9 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
 
 void FTectonicSimulationController::RebuildPreview()
 {
+    // Milestone 4 Phase 4.1: Update LOD before rebuilding
+    UpdateLOD();
+
     BuildAndUpdateMesh();
 }
 
@@ -80,6 +89,31 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
     EnsurePreviewActor();
 
     const int32 RenderLevel = Service->GetParameters().RenderSubdivisionLevel;
+    const int32 CurrentTopologyVersion = Service->GetTopologyVersion();
+    const int32 CurrentSurfaceVersion = Service->GetSurfaceDataVersion();
+
+    // Milestone 4 Phase 4.2: Check cache first
+    const FCachedLODMesh* CachedMesh = GetCachedLOD(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion);
+    if (CachedMesh)
+    {
+        UE_LOG(LogTemp, Log, TEXT("💾 [LOD Cache] Using cached L%d: %d verts, %d tris (cache hit)"),
+            RenderLevel, CachedMesh->VertexCount, CachedMesh->TriangleCount);
+
+        // Rebuild from cached snapshot (fast, already computed)
+        RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
+        int32 VertexCount = 0;
+        int32 TriangleCount = 0;
+        BuildMeshFromSnapshot(CachedMesh->Snapshot, StreamSet, VertexCount, TriangleCount);
+        UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
+
+        // Pre-warm neighboring LODs opportunistically
+        PreWarmNeighboringLODs();
+
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("🔨 [LOD Cache] L%d not cached, building... (Topo:%d, Surface:%d)"),
+        RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion);
 
     // Milestone 3 Task 4.3: Threshold check - async only for level 3+ (1280+ triangles)
     // Level 0-2 use synchronous path (fast enough, not worth threading overhead)
@@ -102,7 +136,13 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         UE_LOG(LogTemp, Log, TEXT("⚡ [SYNC] Mesh build: %d verts, %d tris, %.2fms (ThreadID: %u, level %d)"),
             VertexCount, TriangleCount, LastMeshBuildTimeMs, ThreadID, RenderLevel);
 
+        // Milestone 4 Phase 4.2: Cache the snapshot before using it
+        CacheLODMesh(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount);
+
         UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
+
+        // Pre-warm neighboring LODs opportunistically
+        PreWarmNeighboringLODs();
     }
     else
     {
@@ -120,7 +160,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         FMeshBuildSnapshot Snapshot = CreateMeshBuildSnapshot();
 
         // Kick off async mesh build on background thread
-        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, StartTime]()
+        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, StartTime, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]()
         {
             const uint32 BackgroundThreadID = FPlatformTLS::GetCurrentThreadId();
             UE_LOG(LogTemp, Log, TEXT("⚙️ [ASYNC] Building mesh on background thread (ThreadID: %u)"), BackgroundThreadID);
@@ -136,7 +176,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
             const double BuildTimeMs = (EndTime - StartTime) * 1000.0;
 
             // Return to game thread to apply mesh update
-            AsyncTask(ENamedThreads::GameThread, [this, StreamSet = MoveTemp(StreamSet), VertexCount, TriangleCount, BuildTimeMs, BackgroundThreadID]() mutable
+            AsyncTask(ENamedThreads::GameThread, [this, StreamSet = MoveTemp(StreamSet), VertexCount, TriangleCount, BuildTimeMs, BackgroundThreadID, Snapshot, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]() mutable
             {
                 const uint32 GameThreadID = FPlatformTLS::GetCurrentThreadId();
                 LastMeshBuildTimeMs = BuildTimeMs;
@@ -144,8 +184,14 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
                 UE_LOG(LogTemp, Log, TEXT("✅ [ASYNC] Mesh build completed: %d verts, %d tris, %.2fms (Background: %u → Game: %u)"),
                     VertexCount, TriangleCount, LastMeshBuildTimeMs, BackgroundThreadID, GameThreadID);
 
+                // Milestone 4 Phase 4.2: Cache the snapshot before using it
+                CacheLODMesh(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount);
+
                 UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
                 bAsyncMeshBuildInProgress.store(false);
+
+                // Pre-warm neighboring LODs opportunistically
+                PreWarmNeighboringLODs();
             });
         });
 
@@ -174,6 +220,7 @@ void FTectonicSimulationController::SetVelocityVisualizationEnabled(bool bEnable
     {
         bShowVelocityField = bEnabled;
         RebuildPreview(); // Refresh mesh with new visualization mode
+        DrawVelocityVectorField(); // Milestone 4 Task 3.2: Draw velocity arrows
     }
 }
 
@@ -191,7 +238,7 @@ void FTectonicSimulationController::SetBoundariesVisible(bool bVisible)
     if (bShowBoundaries != bVisible)
     {
         bShowBoundaries = bVisible;
-        DrawBoundaryLines(); // Refresh boundary overlay
+        DrawHighResolutionBoundaryOverlay(); // Milestone 4 Task 3.1: High-res overlay
     }
 }
 
@@ -267,6 +314,9 @@ void FTectonicSimulationController::EnsurePreviewActor() const
 
     PreviewActor = Actor;
 
+    // Milestone 5 Task 1.2: Initialize orbital camera controller
+    CameraController.Initialize(Actor);
+
     if (URealtimeMeshComponent* Component = Actor->GetRealtimeMeshComponent())
     {
         Component->SetMobility(EComponentMobility::Movable);
@@ -328,8 +378,11 @@ void FTectonicSimulationController::UpdatePreviewMesh(RealtimeMesh::FRealtimeMes
     const FRealtimeMeshStreamRange Range(0, ClampedVertices, 0, ClampedTriangles * 3);
     Mesh->UpdateSectionRange(SectionKey, Range);
 
-    // Milestone 3 Task 3.2: Draw boundary overlay after mesh update
-    DrawBoundaryLines();
+    // Milestone 4 Task 3.1: Refresh high-res boundary overlay after mesh update
+    DrawHighResolutionBoundaryOverlay();
+
+    // Milestone 4 Task 3.2: Refresh velocity vector field after mesh update
+    DrawVelocityVectorField();
 }
 
 void FTectonicSimulationController::DrawBoundaryLines()
@@ -613,4 +666,289 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
         Builder.AddTriangle(V0, V2, V1);
         OutTriangleCount++;
     }
+}
+
+// Milestone 4 Phase 4.1: Global LOD selection based on camera distance
+void FTectonicSimulationController::UpdateLOD()
+{
+    // Get editor viewport camera
+    if (!GEditor)
+    {
+        return;
+    }
+
+    FViewport* Viewport = GEditor->GetActiveViewport();
+    if (!Viewport || !Viewport->GetClient())
+    {
+        return;
+    }
+
+    FEditorViewportClient* ViewportClient = static_cast<FEditorViewportClient*>(Viewport->GetClient());
+    if (!ViewportClient)
+    {
+        return;
+    }
+
+    // Get camera location
+    const FVector CameraLocation = ViewportClient->GetViewLocation();
+
+    // Planet is centered at origin with radius 6370 km (1 UE unit = 1 km)
+    constexpr double PlanetRadius = 6370.0;
+    const double CameraDistance = CameraLocation.Length();
+    const double dOverR = CameraDistance / PlanetRadius;
+
+    // LOD selection (from Milestone4_LOD_Design.md):
+    // - Close: d/R < 3 → L7 (≈327,680 tris)
+    // - Medium: 3 ≤ d/R < 10 → L5 (≈20,480 tris)
+    // - Far: d/R ≥ 10 → L4 (≈5,120 tris)
+
+    int32 NewTargetLOD = 4; // Default far
+
+    if (dOverR < 3.0)
+    {
+        NewTargetLOD = 7; // Close
+    }
+    else if (dOverR < 10.0)
+    {
+        NewTargetLOD = 5; // Medium
+    }
+
+    // Hysteresis: 10% around boundaries to reduce thrashing
+    constexpr double Hysteresis = 0.1;
+
+    if (NewTargetLOD != TargetLODLevel)
+    {
+        // Check if we're within hysteresis zone
+        bool bApplyChange = true;
+
+        if (TargetLODLevel == 7 && NewTargetLOD == 5)
+        {
+            // Transitioning from L7 to L5: require d/R > 3.0 * (1 + hysteresis)
+            bApplyChange = (dOverR > 3.0 * (1.0 + Hysteresis));
+        }
+        else if (TargetLODLevel == 5 && NewTargetLOD == 7)
+        {
+            // Transitioning from L5 to L7: require d/R < 3.0 * (1 - hysteresis)
+            bApplyChange = (dOverR < 3.0 * (1.0 - Hysteresis));
+        }
+        else if (TargetLODLevel == 5 && NewTargetLOD == 4)
+        {
+            // Transitioning from L5 to L4: require d/R > 10.0 * (1 + hysteresis)
+            bApplyChange = (dOverR > 10.0 * (1.0 + Hysteresis));
+        }
+        else if (TargetLODLevel == 4 && NewTargetLOD == 5)
+        {
+            // Transitioning from L4 to L5: require d/R < 10.0 * (1 - hysteresis)
+            bApplyChange = (dOverR < 10.0 * (1.0 - Hysteresis));
+        }
+
+        if (bApplyChange)
+        {
+            TargetLODLevel = NewTargetLOD;
+            UE_LOG(LogTemp, Log, TEXT("[LOD] Target LOD changed: L%d (d/R=%.2f, distance=%.0f km)"),
+                TargetLODLevel, dOverR, CameraDistance);
+
+            // Trigger mesh rebuild at new LOD if different from current
+            if (TargetLODLevel != CurrentLODLevel)
+            {
+                UTectonicSimulationService* Service = GetService();
+                if (Service)
+                {
+                    // Milestone 4 Phase 4.1: Use non-destructive LOD update (preserves simulation state)
+                    Service->SetRenderSubdivisionLevel(TargetLODLevel);
+
+                    // Trigger rebuild
+                    CurrentLODLevel = TargetLODLevel;
+                    BuildAndUpdateMesh();
+                }
+            }
+        }
+    }
+
+    LastCameraDistance = CameraDistance;
+}
+
+// Milestone 4 Phase 4.2: LOD Caching Implementation
+
+bool FTectonicSimulationController::IsLODCached(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const
+{
+    const TUniquePtr<FCachedLODMesh>* CachedMesh = LODCache.Find(LODLevel);
+    if (!CachedMesh || !CachedMesh->IsValid())
+    {
+        return false;
+    }
+
+    // Check if cached version matches current versions
+    return (*CachedMesh)->TopologyVersion == TopologyVersion &&
+           (*CachedMesh)->SurfaceDataVersion == SurfaceDataVersion;
+}
+
+const FCachedLODMesh* FTectonicSimulationController::GetCachedLOD(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const
+{
+    if (!IsLODCached(LODLevel, TopologyVersion, SurfaceDataVersion))
+    {
+        return nullptr;
+    }
+
+    const TUniquePtr<FCachedLODMesh>* CachedMesh = LODCache.Find(LODLevel);
+    return CachedMesh ? CachedMesh->Get() : nullptr;
+}
+
+void FTectonicSimulationController::CacheLODMesh(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion,
+    const FMeshBuildSnapshot& Snapshot, int32 VertexCount, int32 TriangleCount)
+{
+    TUniquePtr<FCachedLODMesh> NewCache = MakeUnique<FCachedLODMesh>();
+    NewCache->Snapshot = Snapshot;
+    NewCache->VertexCount = VertexCount;
+    NewCache->TriangleCount = TriangleCount;
+    NewCache->TopologyVersion = TopologyVersion;
+    NewCache->SurfaceDataVersion = SurfaceDataVersion;
+    NewCache->CacheTimestamp = FPlatformTime::Seconds();
+
+    // Use Emplace() to handle potential race conditions (overwrites if key exists)
+    LODCache.Emplace(LODLevel, MoveTemp(NewCache));
+
+    UE_LOG(LogTemp, Log, TEXT("[LOD Cache] Cached L%d: %d verts, %d tris (Topo:%d, Surface:%d)"),
+        LODLevel, VertexCount, TriangleCount, TopologyVersion, SurfaceDataVersion);
+}
+
+void FTectonicSimulationController::InvalidateLODCache()
+{
+    const int32 NumCached = LODCache.Num();
+    LODCache.Empty();
+
+    UE_LOG(LogTemp, Warning, TEXT("[LOD Cache] Invalidated %d cached LOD meshes (topology changed)"), NumCached);
+}
+
+void FTectonicSimulationController::PreWarmNeighboringLODs()
+{
+    UTectonicSimulationService* Service = GetService();
+    if (!Service)
+    {
+        return;
+    }
+
+    const int32 CurrentTopologyVersion = Service->GetTopologyVersion();
+    const int32 CurrentSurfaceVersion = Service->GetSurfaceDataVersion();
+
+    // Determine which LODs to pre-warm based on current target
+    TArray<int32> LODsToPreWarm;
+
+    if (TargetLODLevel == 4)
+    {
+        // At L4 (far), pre-warm L5 (medium)
+        LODsToPreWarm.Add(5);
+    }
+    else if (TargetLODLevel == 5)
+    {
+        // At L5 (medium), pre-warm both L4 (far) and L7 (close)
+        LODsToPreWarm.Add(4);
+        LODsToPreWarm.Add(7);
+    }
+    else if (TargetLODLevel == 7)
+    {
+        // At L7 (close), pre-warm L5 (medium)
+        LODsToPreWarm.Add(5);
+    }
+
+    // Build any uncached neighboring LODs asynchronously
+    for (int32 LODLevel : LODsToPreWarm)
+    {
+        if (IsLODCached(LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion))
+        {
+            UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] L%d already cached, skipping pre-warm"), LODLevel);
+            continue;
+        }
+
+        if (bAsyncMeshBuildInProgress.load())
+        {
+            UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Async build in progress, deferring pre-warm of L%d"), LODLevel);
+            continue; // Don't queue multiple builds
+        }
+
+        UE_LOG(LogTemp, Log, TEXT("[LOD Cache] Pre-warming L%d..."), LODLevel);
+
+        // Trigger async build for this LOD
+        const int32 PreviousRenderLevel = Service->GetParameters().RenderSubdivisionLevel;
+        Service->SetRenderSubdivisionLevel(LODLevel);
+
+        // Build mesh snapshot
+        FMeshBuildSnapshot Snapshot = CreateMeshBuildSnapshot();
+
+        // Restore previous render level
+        Service->SetRenderSubdivisionLevel(PreviousRenderLevel);
+
+        // Kick off async build
+        bAsyncMeshBuildInProgress.store(true);
+        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion]()
+        {
+            RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
+            int32 VertexCount = 0;
+            int32 TriangleCount = 0;
+
+            BuildMeshFromSnapshot(Snapshot, StreamSet, VertexCount, TriangleCount);
+
+            // Return to game thread to cache result
+            AsyncTask(ENamedThreads::GameThread, [this, Snapshot, VertexCount, TriangleCount, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion]()
+            {
+                CacheLODMesh(LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount);
+                bAsyncMeshBuildInProgress.store(false);
+            });
+        });
+
+        // Only pre-warm one LOD at a time to avoid overwhelming the system
+        break;
+    }
+}
+
+void FTectonicSimulationController::GetCacheStats(int32& OutCachedLODs, int32& OutTotalCacheSize) const
+{
+    OutCachedLODs = LODCache.Num();
+    OutTotalCacheSize = 0;
+
+    for (const auto& CachePair : LODCache)
+    {
+        if (CachePair.Value.IsValid())
+        {
+            // Rough estimate: each vertex ~60 bytes (position, normal, tangent, UV, color)
+            // Each triangle: 12 bytes (3 × uint32 indices)
+            const int32 VertexBytes = CachePair.Value->VertexCount * 60;
+            const int32 IndexBytes = CachePair.Value->TriangleCount * 12;
+            OutTotalCacheSize += VertexBytes + IndexBytes;
+        }
+    }
+}
+
+// ============================================================================
+// Milestone 5 Task 1.2: Camera Control Methods
+// ============================================================================
+
+void FTectonicSimulationController::RotateCamera(float DeltaYaw, float DeltaPitch)
+{
+    CameraController.Rotate(DeltaYaw, DeltaPitch);
+}
+
+void FTectonicSimulationController::ZoomCamera(float DeltaDistance)
+{
+    CameraController.Zoom(DeltaDistance);
+}
+
+void FTectonicSimulationController::ResetCamera()
+{
+    CameraController.ResetToDefault();
+}
+
+void FTectonicSimulationController::TickCamera(float DeltaTime)
+{
+    CameraController.Tick(DeltaTime);
+}
+
+FVector2D FTectonicSimulationController::GetCameraAngles() const
+{
+    return CameraController.GetOrbitAngles();
+}
+
+float FTectonicSimulationController::GetCameraDistance() const
+{
+    return CameraController.GetCurrentDistance();
 }

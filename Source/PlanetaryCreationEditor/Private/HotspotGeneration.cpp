@@ -129,40 +129,20 @@ void UTectonicSimulationService::ApplyHotspotThermalContribution()
     if (!Parameters.bEnableHotspots || Hotspots.Num() == 0)
         return;
 
-    // Apply thermal contribution from hotspots to render vertex stress values
-    // This modulates existing stress field additively (paper Section 4.4)
-    for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
-    {
-        const FVector3d& VertexPos = RenderVertices[VertexIdx];
-        double TotalHotspotContribution = 0.0;
+    // Milestone 4 Phase 5: Thermal-only hotspot model (paper-aligned)
+    //
+    // Per paper physics: Hotspots are thermal anomalies that elevate temperature and drive volcanism,
+    // but do NOT directly add mechanical stress. Stress comes from plate interactions (subduction,
+    // divergence). Hotspots affect stress indirectly through temperature-driven viscosity changes.
+    //
+    // Thermal field computation (ComputeThermalField()) already handles hotspot temperature contribution.
+    // This function is retained for potential future thermal softening effects (stress modulation by temp),
+    // but currently does not add stress directly.
+    //
+    // NOTE: Original implementation added hotspot heat directly to stress field, creating artificial
+    // coupling. Removed to align with paper's separation of thermal vs. mechanical effects.
 
-        for (const FMantleHotspot& Hotspot : Hotspots)
-        {
-            // Calculate angular distance from hotspot (great circle distance)
-            const double CosDistance = FMath::Clamp(FVector3d::DotProduct(VertexPos, Hotspot.Position), -1.0, 1.0);
-            const double AngularDistance = FMath::Acos(CosDistance);
-
-            if (AngularDistance > Hotspot.InfluenceRadius)
-                continue; // Outside influence radius
-
-            // Gaussian falloff: T(r) = T_max * exp(-r^2 / σ^2)
-            // σ = InfluenceRadius / 2 (reaches ~13.5% at radius edge)
-            const double Sigma = Hotspot.InfluenceRadius / 2.0;
-            const double Falloff = FMath::Exp(-FMath::Square(AngularDistance) / FMath::Square(Sigma));
-
-            TotalHotspotContribution += Hotspot.ThermalOutput * Falloff;
-        }
-
-        // Add thermal contribution to stress (scaled to MPa range)
-        // Scale factor converts thermal units to stress: 1.0 thermal unit → ~10 MPa stress
-        if (TotalHotspotContribution > 0.0)
-        {
-            const double ThermalStressContribution = TotalHotspotContribution * 10.0; // Scale to MPa
-            VertexStressValues[VertexIdx] = FMath::Clamp(
-                VertexStressValues[VertexIdx] + ThermalStressContribution,
-                0.0,
-                100.0 // Cap at max stress for visualization
-            );
-        }
-    }
+    // Future enhancement: Apply thermal softening multiplier to existing stress
+    // E.g., VertexStressValues[i] *= (1.0 - thermalSofteningFactor)
+    // where thermalSofteningFactor depends on local temperature from ComputeThermalField()
 }

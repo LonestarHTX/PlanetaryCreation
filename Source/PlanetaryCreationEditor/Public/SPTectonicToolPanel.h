@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Widgets/SCompoundWidget.h"
+#include "TectonicPlaybackController.h"
 
 class FTectonicSimulationController;
 
@@ -13,6 +14,10 @@ public:
     SLATE_END_ARGS()
 
     void Construct(const FArguments& InArgs);
+    virtual ~SPTectonicToolPanel();
+
+    // Slate Tick override to update camera
+    virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 private:
     FReply HandleStepClicked();
@@ -21,6 +26,25 @@ private:
     FText GetCurrentTimeLabel() const;
     FText GetPlateCountLabel() const;
     FText GetPerformanceStatsLabel() const; // Milestone 3 Task 4.5
+
+    // Milestone 5 Task 1.1: Playback controls
+    FReply HandlePlayClicked();
+    FReply HandlePauseClicked();
+    FReply HandleStopClicked();
+    FText GetPlaybackButtonText() const;
+    bool IsPlaybackPlaying() const;
+    bool IsPlaybackStopped() const;
+
+    // Playback speed controls
+    void OnPlaybackSpeedChanged(float NewValue);
+    float GetPlaybackSpeed() const;
+    FText GetPlaybackSpeedLabel() const;
+
+    // Timeline scrubber
+    void OnTimelineScrubbed(float NewValue);
+    float GetTimelineValue() const;
+    float GetTimelineMaxValue() const;
+    FText GetTimelineLabel() const;
 
     // Parameter accessors for spin boxes
     int32 GetSeedValue() const;
@@ -42,7 +66,27 @@ private:
     ECheckBoxState GetBoundaryOverlayState() const;
     void OnBoundaryOverlayChanged(ECheckBoxState NewState);
 
+    // Milestone 5 Task 1.3: Undo/Redo controls
+    FReply HandleUndoClicked();
+    FReply HandleRedoClicked();
+    bool IsUndoEnabled() const;
+    bool IsRedoEnabled() const;
+    FText GetHistoryStatusText() const;
+
+    // Milestone 5 Task 1.2: Camera controls
+    FReply HandleRotateLeftClicked();
+    FReply HandleRotateRightClicked();
+    FReply HandleTiltUpClicked();
+    FReply HandleTiltDownClicked();
+    FReply HandleZoomInClicked();
+    FReply HandleZoomOutClicked();
+    FReply HandleResetCameraClicked();
+    FText GetCameraStatusText() const;
+
     TWeakPtr<FTectonicSimulationController> ControllerWeak;
+
+    // Milestone 5 Task 1.1: Playback controller
+    TUniquePtr<FTectonicPlaybackController> PlaybackController;
 
     // Cached parameter values (updated on regenerate)
     int32 CachedSeed = 42;

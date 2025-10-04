@@ -71,7 +71,7 @@ void FPlanetaryCreationEditorModule::RegisterMenus()
 
     LevelEditorModule.GetToolBarExtensibilityManager()->AddExtender(LevelEditorToolbarExtender);
 
-    FGlobalTabmanager::Get()->TryInvokeTab(TectonicToolTabName);
+    // Note: Tab auto-invoke removed - user opens via Window → Tectonic Tool or toolbar button
 }
 
 void FPlanetaryCreationEditorModule::UnregisterMenus()

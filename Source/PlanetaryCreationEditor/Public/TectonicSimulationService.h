@@ -318,6 +318,34 @@ struct FTectonicSimulationParameters
     double HotspotDriftSpeed = 0.01;
 
     /**
+     * Milestone 4 Task 5.0: Enable Voronoi distance warping with noise.
+     * "More irregular continent shapes can be obtained by warping the geodesic distances
+     * to the centroids using a simple noise function." (Paper Section 3)
+     * When true, applies 3D noise to distance calculations in Voronoi mapping.
+     * Default true for irregular plate shapes.
+     */
+    UPROPERTY()
+    bool bEnableVoronoiWarping = true;
+
+    /**
+     * Milestone 4 Task 5.0: Voronoi warping noise amplitude.
+     * Controls how much noise distorts plate boundaries (as fraction of distance).
+     * 0.0 = perfect Voronoi cells (uniform), 0.5 = moderate irregularity (realistic continents).
+     * Default 0.5 (50% distance variation, paper-aligned for irregular continent shapes).
+     */
+    UPROPERTY()
+    double VoronoiWarpingAmplitude = 0.5;
+
+    /**
+     * Milestone 4 Task 5.0: Voronoi warping noise frequency.
+     * Controls noise scale/detail for boundary distortion.
+     * Higher values = finer boundary details, lower values = smoother curves.
+     * Default 2.0 (medium-scale continental irregularities).
+     */
+    UPROPERTY()
+    double VoronoiWarpingFrequency = 2.0;
+
+    /**
      * Milestone 4 Task 2.1: Thermal output multiplier for major hotspots.
      * Scales thermal contribution to stress/elevation fields.
      * Default 2.0 (major hotspots are 2x more powerful than minor).
@@ -394,6 +422,9 @@ public:
     /** Accessor for plates (Milestone 2). */
     const TArray<FTectonicPlate>& GetPlates() const { return Plates; }
 
+    /** Non-const accessor for plates (for test manipulation). */
+    TArray<FTectonicPlate>& GetPlatesForModification() { return Plates; }
+
     /** Accessor for shared vertex pool (Milestone 2). */
     const TArray<FVector3d>& GetSharedVertices() const { return SharedVertices; }
 
@@ -430,6 +461,13 @@ public:
     /** Update simulation parameters and reset (Milestone 2 - Phase 3). */
     void SetParameters(const FTectonicSimulationParameters& NewParams);
 
+    /**
+     * Milestone 4 Phase 4.1: Update render subdivision level without resetting simulation state.
+     * This allows LOD changes during camera movement without destroying tectonic history.
+     * Only regenerates render mesh and Voronoi mapping; preserves plates, stress, rifts, etc.
+     */
+    void SetRenderSubdivisionLevel(int32 NewLevel);
+
     /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
     void ExportMetricsToCSV();
 
@@ -463,6 +501,62 @@ public:
     /** Milestone 4 Task 1.1: Re-tessellation performance tracking (public for tests). */
     double LastRetessellationTimeMs = 0.0;
     int32 RetessellationCount = 0;
+
+    /** Milestone 4 Phase 4.2: Version tracking for LOD cache invalidation. */
+    int32 GetTopologyVersion() const { return TopologyVersion; }
+    int32 GetSurfaceDataVersion() const { return SurfaceDataVersion; }
+
+    /** Milestone 5 Task 1.3: Full simulation history snapshot for undo/redo. */
+    struct FSimulationHistorySnapshot
+    {
+        double CurrentTimeMy;
+        TArray<FTectonicPlate> Plates;
+        TArray<FVector3d> SharedVertices;
+        TArray<FVector3d> RenderVertices;
+        TArray<int32> RenderTriangles;
+        TArray<int32> VertexPlateAssignments;
+        TArray<FVector3d> VertexVelocities;
+        TArray<double> VertexStressValues;
+        TArray<double> VertexTemperatureValues;
+        TMap<TPair<int32, int32>, FPlateBoundary> Boundaries;
+        TArray<FPlateTopologyEvent> TopologyEvents;
+        TArray<FMantleHotspot> Hotspots;
+        TArray<FVector3d> InitialPlateCentroids;
+        int32 TopologyVersion;
+        int32 SurfaceDataVersion;
+
+        FSimulationHistorySnapshot() : CurrentTimeMy(0.0), TopologyVersion(0), SurfaceDataVersion(0) {}
+    };
+
+    /** Milestone 5 Task 1.3: Capture current state as history snapshot. */
+    void CaptureHistorySnapshot();
+
+    /** Milestone 5 Task 1.3: Undo to previous snapshot. Returns true if successful. */
+    bool Undo();
+
+    /** Milestone 5 Task 1.3: Redo to next snapshot. Returns true if successful. */
+    bool Redo();
+
+    /** Milestone 5 Task 1.3: Check if undo is available. */
+    bool CanUndo() const { return CurrentHistoryIndex > 0; }
+
+    /** Milestone 5 Task 1.3: Check if redo is available. */
+    bool CanRedo() const { return CurrentHistoryIndex < HistoryStack.Num() - 1; }
+
+    /** Milestone 5 Task 1.3: Get current history index (for UI display). */
+    int32 GetHistoryIndex() const { return CurrentHistoryIndex; }
+
+    /** Milestone 5 Task 1.3: Get history stack size (for UI display). */
+    int32 GetHistorySize() const { return HistoryStack.Num(); }
+
+    /** Milestone 5 Task 1.3: Get snapshot at index (for UI display). */
+    const FSimulationHistorySnapshot* GetHistorySnapshotAt(int32 Index) const
+    {
+        return HistoryStack.IsValidIndex(Index) ? &HistoryStack[Index] : nullptr;
+    }
+
+    /** Milestone 5 Task 1.3: Jump to specific history index (for timeline scrubbing). */
+    bool JumpToHistoryIndex(int32 Index);
 
 private:
     void GenerateDefaultSphereSamples();
@@ -573,4 +667,19 @@ private:
 
     /** Milestone 4 Task 2.1: Active mantle hotspots/plumes. */
     TArray<FMantleHotspot> Hotspots;
+
+    /** Milestone 4 Phase 4.2: Topology version (increments on re-tessellation/split/merge). */
+    int32 TopologyVersion = 0;
+
+    /** Milestone 4 Phase 4.2: Surface data version (increments on stress/elevation changes). */
+    int32 SurfaceDataVersion = 0;
+
+    /** Milestone 5 Task 1.3: History stack for undo/redo (limited to 100 snapshots by default). */
+    TArray<FSimulationHistorySnapshot> HistoryStack;
+
+    /** Milestone 5 Task 1.3: Current position in history stack (for undo/redo navigation). */
+    int32 CurrentHistoryIndex = -1;
+
+    /** Milestone 5 Task 1.3: Maximum history size (prevents unbounded memory growth). */
+    int32 MaxHistorySize = 100;
 };

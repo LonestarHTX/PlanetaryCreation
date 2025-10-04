@@ -61,10 +61,55 @@
 - **Tasks:**
   - Expand automation suite for determinism, mesh integrity, UI regression.
   - Profile with Unreal Insights; document memory/CPU budgets.
+  - Ship lightweight orbital inspection camera (orbit + smooth zoom) for reviewer workflows.
+  - Expose undo/redo controls in the editor (toolbar buttons + `Ctrl+Z`/`Ctrl+Y`) using the rollback snapshots.
+  - Implement continuous playback controls (Play/Pause, step rate selector) that respect determinism & rollback history.
   - Author user guide and release notes in `Docs/`.
 - **Dependencies:** Automation framework, profiling tools, AGENTS.md workflow.
 - **Risks:** Hardware variability; lock seeds and tolerances.
 - **Validation:** Green automation runs, profiling reports, final editor demo.
+
+### Milestone 6 – Amplification & Performance Parity (Weeks 9–11)
+- **Owners:** Simulation Engineer, Rendering Engineer, Performance Engineer
+- **Tasks:**
+  - Implement Stage B terrain amplification (procedural noise + exemplar blending at ~100 m scale).
+  - Add terrane extraction/reattachment and localized uplift during continental collisions.
+  - Implement continental erosion & sediment transport tied to stress/elevation history.
+  - Apply SIMD optimizations to stress interpolation/boundary loops and prototype GPU compute for thermal/stress fields.
+  - Update automation/CSV exports to include new amplification metrics; reproduce paper figures at Level 7 for parity.
+- **Dependencies:** Milestone 5 data exports, exemplar datasets, profiling harness.
+- **Risks:** Amplification instability, GPU integration complexity; mitigate with staged rollouts and regression tests.
+- **Validation:** Side-by-side parity screenshots vs paper, Level 7 performance within budget (<120 ms), amplification regression suite.
+
+### Milestone 7 – Presentation & UX (Weeks 11–13)
+- **Owners:** Tools Engineer, Rendering Engineer, UX Designer
+- **Tasks:**
+  - Restore deferred material/lighting enhancements (ocean vs continental crust, volcanic emissive, day/night lighting).
+  - Implement Spore-style multi-band camera transitions with collision easing and surface glide.
+  - Extend UI with timeline scrubber, snapshot browser, analytics overlays, and continuous playback refinements (recording, speed modulation).
+  - Refresh validation gallery/tutorials to showcase amplified terrain.
+- **Dependencies:** Milestone 6 amplified terrain, camera design doc, UI framework.
+- **Risks:** UX scope creep; mitigate with phased rollout and usability reviews.
+- **Validation:** UX sign-off, updated gallery, playtest feedback.
+
+### Milestone 8 – Climate & Hydrosphere Coupling (Weeks 13–15)
+- **Owners:** Simulation Engineer, Rendering Engineer, Tools Engineer
+- **Tasks:**
+  - Implement ocean temperature/height feedback driven by tectonic activity.
+  - Couple procedural climate zones (temperature/precipitation) to thermal field.
+  - Visualize climate overlays, vector fields, and integrate into export pipeline.
+- **Dependencies:** Milestones 4–7 data exports, environment materials.
+- **Risks:** Performance impact from layered simulation; mitigate with toggles.
+- **Validation:** Climate visualization walkthrough, automation tests for climate data.
+
+### Milestone 9 – Shipping Readiness & Cinematic Polish (Weeks 15–17)
+- **Owners:** Tools Engineer, Rendering Engineer, QA Lead
+- **Tasks:**
+  - Final optimization pass (profiling, GPU offloads, streaming budgets, console-class targets).
+  - Implement cinematic materials, screenshot/video tooling, release packaging, documentation.
+- **Dependencies:** All prior milestones, marketing assets.
+- **Risks:** Scope creep; lock feature set.
+- **Validation:** Final QA sign-off, release checklist, documentation handoff.
 
 ## Cross-Cutting Workstreams
 - Weekly integration sync between Simulation and Rendering leads to track data contracts.

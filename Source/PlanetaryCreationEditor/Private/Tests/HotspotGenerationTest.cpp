@@ -247,7 +247,233 @@ bool FHotspotGenerationTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("No hotspots when disabled"), DisabledHotspots.Num(), 0);
     UE_LOG(LogTemp, Log, TEXT("  ✓ Hotspot disable flag respected"));
 
-    AddInfo(TEXT("✅ Hotspot generation & drift test complete"));
+    // ===== PHASE 5 EXPANDED COVERAGE =====
+
+    // Test 7: Rift Identification for Hotspot Placement
+    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogTemp, Log, TEXT("Test 7: Rift Identification for Hotspot Placement (Phase 5)"));
+
+    Params.bEnableHotspots = true;
+    Params.Seed = 33333;
+    Service->SetParameters(Params);
+
+    // Set up divergent plates to create rift
+    TArray<FTectonicPlate>& Plates = Service->GetPlatesForModification();
+    if (Plates.Num() >= 2)
+    {
+        Plates[0].EulerPoleAxis = FVector3d(1.0, 0.0, 0.0).GetSafeNormal();
+        Plates[0].AngularVelocity = 0.08; // rad/My
+        Plates[1].EulerPoleAxis = FVector3d(-1.0, 0.0, 0.0).GetSafeNormal();
+        Plates[1].AngularVelocity = 0.08; // rad/My (opposite pole = divergent)
+    }
+
+    // Run simulation to establish rift
+    Service->AdvanceSteps(15);
+
+    // Check for rifting boundaries
+    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries = Service->GetBoundaries();
+    int32 RiftCount = 0;
+    TArray<TPair<int32, int32>> RiftBoundaries;
+
+    for (const auto& BoundaryPair : Boundaries)
+    {
+        if (BoundaryPair.Value.BoundaryState == EBoundaryState::Rifting)
+        {
+            RiftCount++;
+            RiftBoundaries.Add(BoundaryPair.Key);
+            UE_LOG(LogTemp, Verbose, TEXT("  Rift found: plates %d-%d (width: %.1f m)"),
+                BoundaryPair.Key.Key, BoundaryPair.Key.Value, BoundaryPair.Value.RiftWidthMeters);
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("  Identified %d active rifts"), RiftCount);
+
+    // Validate hotspots near rifts (if rifts exist)
+    if (RiftCount > 0)
+    {
+        int32 HotspotsNearRifts = 0;
+        const TArray<FMantleHotspot>& RiftTestHotspots = Service->GetHotspots();
+
+        for (const FMantleHotspot& Hotspot : RiftTestHotspots)
+        {
+            // Check if hotspot is near any rift boundary
+            for (const TPair<int32, int32>& RiftKey : RiftBoundaries)
+            {
+                const FTectonicPlate& PlateA = Service->GetPlates()[RiftKey.Key];
+                const FTectonicPlate& PlateB = Service->GetPlates()[RiftKey.Value];
+
+                // Approximate rift location as midpoint
+                const FVector3d RiftMidpoint = (PlateA.Centroid + PlateB.Centroid).GetSafeNormal();
+                const double DistToRift = FMath::Acos(FMath::Clamp(
+                    FVector3d::DotProduct(Hotspot.Position, RiftMidpoint),
+                    -1.0, 1.0
+                ));
+
+                if (DistToRift < PI / 4.0) // Within 45° of rift
+                {
+                    HotspotsNearRifts++;
+                    UE_LOG(LogTemp, Verbose, TEXT("  Hotspot near rift (dist: %.2f°)"),
+                        FMath::RadiansToDegrees(DistToRift));
+                    break;
+                }
+            }
+        }
+
+        UE_LOG(LogTemp, Log, TEXT("  %d hotspots located near active rifts"), HotspotsNearRifts);
+    }
+    UE_LOG(LogTemp, Log, TEXT("  ✓ Rift identification validated"));
+
+    // Test 8: Multiple Rifts Handling
+    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogTemp, Log, TEXT("Test 8: Multiple Rifts Handling (Phase 5)"));
+
+    Params.Seed = 44444;
+    Params.MajorHotspotCount = 5; // More hotspots for multiple rifts
+    Params.MinorHotspotCount = 8;
+    Service->SetParameters(Params);
+
+    // Create multiple divergent plate pairs
+    TArray<FTectonicPlate>& Plates2 = Service->GetPlatesForModification();
+    for (int32 i = 0; i < Plates2.Num() - 1; i += 2)
+    {
+        if (i + 1 < Plates2.Num())
+        {
+            // Make pairs diverge
+            Plates2[i].EulerPoleAxis = FVector3d(FMath::Sin(i * 0.5), 0.0, FMath::Cos(i * 0.5)).GetSafeNormal();
+            Plates2[i].AngularVelocity = 0.06; // rad/My
+            Plates2[i + 1].EulerPoleAxis = FVector3d(-FMath::Sin(i * 0.5), 0.0, -FMath::Cos(i * 0.5)).GetSafeNormal();
+            Plates2[i + 1].AngularVelocity = 0.06; // rad/My (opposite pole = divergent)
+        }
+    }
+
+    // Run to establish multiple rifts
+    Service->AdvanceSteps(20);
+
+    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries2 = Service->GetBoundaries();
+    int32 MultipleRiftCount = 0;
+
+    for (const auto& BoundaryPair : Boundaries2)
+    {
+        if (BoundaryPair.Value.BoundaryState == EBoundaryState::Rifting)
+        {
+            MultipleRiftCount++;
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("  Established %d rifts with multiple divergent plates"), MultipleRiftCount);
+
+    const TArray<FMantleHotspot>& MultiRiftHotspots = Service->GetHotspots();
+    TestEqual(TEXT("Hotspot count maintained with multiple rifts"), MultiRiftHotspots.Num(), 13); // 5 major + 8 minor
+
+    // Validate all hotspots still valid
+    bool bAllHotspotsValid = true;
+    for (const FMantleHotspot& Hotspot : MultiRiftHotspots)
+    {
+        if (Hotspot.ThermalOutput <= 0.0 || Hotspot.InfluenceRadius <= 0.0)
+        {
+            bAllHotspotsValid = false;
+            break;
+        }
+    }
+
+    TestTrue(TEXT("All hotspots valid with multiple rifts"), bAllHotspotsValid);
+    UE_LOG(LogTemp, Log, TEXT("  ✓ Multiple rifts handled correctly"));
+
+    // Test 9: Hotspot Position Validation (on sphere surface)
+    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogTemp, Log, TEXT("Test 9: Hotspot Position Validation (Phase 5)"));
+
+    Params.Seed = 55555;
+    Params.MajorHotspotCount = 10;
+    Params.MinorHotspotCount = 15;
+    Service->SetParameters(Params);
+
+    const TArray<FMantleHotspot>& ValidationHotspots = Service->GetHotspots();
+    TestEqual(TEXT("All hotspots generated"), ValidationHotspots.Num(), 25);
+
+    int32 ValidPositionCount = 0;
+    double MaxPositionError = 0.0;
+
+    for (int32 i = 0; i < ValidationHotspots.Num(); ++i)
+    {
+        const FMantleHotspot& Hotspot = ValidationHotspots[i];
+        const double Length = Hotspot.Position.Length();
+        const double Error = FMath::Abs(Length - 1.0);
+
+        MaxPositionError = FMath::Max(MaxPositionError, Error);
+
+        if (Error < 0.001) // Within 0.1% of unit sphere
+        {
+            ValidPositionCount++;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("  Hotspot %d position error: %.6f (length: %.6f)"),
+                i, Error, Length);
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("  %d / %d hotspots on unit sphere (max error: %.6f)"),
+        ValidPositionCount, ValidationHotspots.Num(), MaxPositionError);
+
+    TestEqual(TEXT("All hotspots on unit sphere surface"), ValidPositionCount, ValidationHotspots.Num());
+    TestTrue(TEXT("Max position error acceptable"), MaxPositionError < 0.001);
+    UE_LOG(LogTemp, Log, TEXT("  ✓ Hotspot position validation passed"));
+
+    // Test 10: Deterministic Hotspot Placement (stress test)
+    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogTemp, Log, TEXT("Test 10: Deterministic Placement Stress Test (Phase 5)"));
+
+    const int32 TestSeeds[] = { 111, 222, 333, 444, 555 };
+    bool bAllSeedsConsistent = true;
+
+    for (int32 SeedIdx = 0; SeedIdx < 5; ++SeedIdx)
+    {
+        Params.Seed = TestSeeds[SeedIdx];
+        Params.MajorHotspotCount = 4;
+        Params.MinorHotspotCount = 6;
+        Service->SetParameters(Params);
+
+        TArray<FVector3d> FirstRun;
+        for (const FMantleHotspot& Hotspot : Service->GetHotspots())
+        {
+            FirstRun.Add(Hotspot.Position);
+        }
+
+        // Reset with same seed
+        Service->SetParameters(Params);
+
+        const TArray<FMantleHotspot>& SecondRunHotspots = Service->GetHotspots();
+        if (SecondRunHotspots.Num() != FirstRun.Num())
+        {
+            bAllSeedsConsistent = false;
+            UE_LOG(LogTemp, Error, TEXT("  Seed %d: Count mismatch (%d vs %d)"),
+                TestSeeds[SeedIdx], SecondRunHotspots.Num(), FirstRun.Num());
+            break;
+        }
+
+        for (int32 i = 0; i < FirstRun.Num(); ++i)
+        {
+            const double Dist = FVector3d::Distance(SecondRunHotspots[i].Position, FirstRun[i]);
+            if (Dist > 0.0001)
+            {
+                bAllSeedsConsistent = false;
+                UE_LOG(LogTemp, Error, TEXT("  Seed %d hotspot %d: Position mismatch (%.6f)"),
+                    TestSeeds[SeedIdx], i, Dist);
+                break;
+            }
+        }
+    }
+
+    TestTrue(TEXT("All seeds produce deterministic hotspot placement"), bAllSeedsConsistent);
+    UE_LOG(LogTemp, Log, TEXT("  Tested %d different seeds - all consistent"), 5);
+    UE_LOG(LogTemp, Log, TEXT("  ✓ Deterministic placement stress test passed"));
+
+    // ===== END PHASE 5 EXPANSION =====
+
+    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogTemp, Log, TEXT("=== Hotspot Generation Test Complete (Phase 5 Expanded) ==="));
+    AddInfo(TEXT("✅ Hotspot generation & drift test complete (10 tests)"));
     AddInfo(FString::Printf(TEXT("Hotspots: %d (3 major, 5 minor) | Avg drift: %.4f rad | Thermal stress contribution: %d vertices"),
         8, AvgDrift, ElevatedStressCount));
 

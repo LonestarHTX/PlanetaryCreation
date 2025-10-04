@@ -244,5 +244,9 @@ bool UTectonicSimulationService::PerformRetessellation()
     UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Completed in %.2f ms (count: %d, plates rebuilt: %d)"),
         LastRetessellationTimeMs, RetessellationCount, DriftedPlateIDs.Num());
 
+    // Milestone 4 Phase 4.2: Increment topology version (topology changed)
+    TopologyVersion++;
+    UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Topology version incremented: %d"), TopologyVersion);
+
     return true;
 }
