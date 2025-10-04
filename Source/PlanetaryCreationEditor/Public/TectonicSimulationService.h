@@ -51,6 +51,25 @@ enum class EBoundaryType : uint8
     Transform    // Shear - plates sliding past
 };
 
+/** Milestone 4 Task 1.3: Boundary lifecycle states (paper Section 4.1). */
+UENUM()
+enum class EBoundaryState : uint8
+{
+    Nascent,    // Recently formed, low stress
+    Active,     // Actively accumulating stress/spreading
+    Dormant,    // Low velocity, stress decaying
+    Rifting     // Milestone 4 Task 2.2: Active rift formation (divergent only)
+};
+
+/** Milestone 4 Task 1.2: Plate topology event types. */
+UENUM()
+enum class EPlateTopologyEventType : uint8
+{
+    Split,      // Plate split along rift
+    Merge,      // Plate consumed by subduction
+    None
+};
+
 /** Boundary metadata between two plates. */
 USTRUCT()
 struct FPlateBoundary
@@ -75,6 +94,99 @@ struct FPlateBoundary
      * - Transform boundaries: minimal accumulation
      */
     double AccumulatedStress = 0.0;
+
+    /**
+     * Milestone 4 Task 1.3: Boundary lifecycle state.
+     * Tracks boundary evolution (Nascent → Active → Dormant).
+     */
+    UPROPERTY()
+    EBoundaryState BoundaryState = EBoundaryState::Nascent;
+
+    /**
+     * Milestone 4 Task 1.3: Simulation time when boundary entered current state (My).
+     */
+    double StateTransitionTimeMy = 0.0;
+
+    /**
+     * Milestone 4 Task 1.2: Time (My) that boundary has been divergent (for rift split detection).
+     * Reset to 0 when boundary type changes.
+     */
+    double DivergentDurationMy = 0.0;
+
+    /**
+     * Milestone 4 Task 1.2: Time (My) that boundary has been convergent (for merge detection).
+     * Reset to 0 when boundary type changes.
+     */
+    double ConvergentDurationMy = 0.0;
+
+    /**
+     * Milestone 4 Task 2.2: Rift width (meters) for rifting divergent boundaries.
+     * Incremented over time based on divergence rate. Triggers split when threshold exceeded.
+     */
+    double RiftWidthMeters = 0.0;
+
+    /**
+     * Milestone 4 Task 2.2: Rift formation time (My) when boundary entered rifting state.
+     * Used to track rift age for visualization/analytics.
+     */
+    double RiftFormationTimeMy = 0.0;
+};
+
+/** Milestone 4 Task 1.2: Records a plate topology change event for logging/CSV export. */
+USTRUCT()
+struct FPlateTopologyEvent
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    EPlateTopologyEventType EventType = EPlateTopologyEventType::None;
+
+    /** Plate IDs involved (for split: [OriginalID, NewID], for merge: [ConsumedID, SurvivorID]). */
+    UPROPERTY()
+    TArray<int32> PlateIDs;
+
+    /** Simulation time when event occurred (My). */
+    double TimestampMy = 0.0;
+
+    /** Boundary stress at time of event (MPa, for validation). */
+    double StressAtEvent = 0.0;
+
+    /** Relative velocity at time of event (rad/My, for validation). */
+    double VelocityAtEvent = 0.0;
+};
+
+/** Milestone 4 Task 2.1: Hotspot type classification (paper Section 4.4). */
+UENUM()
+enum class EHotspotType : uint8
+{
+    Major,      // Large, long-lived plumes (e.g., Hawaii, Iceland)
+    Minor       // Smaller, shorter-lived plumes
+};
+
+/** Milestone 4 Task 2.1: Mantle hotspot/plume representation. */
+USTRUCT()
+struct FMantleHotspot
+{
+    GENERATED_BODY()
+
+    /** Unique hotspot identifier. */
+    int32 HotspotID = INDEX_NONE;
+
+    /** Position on unit sphere in mantle reference frame (drifts independently of plates). */
+    FVector3d Position = FVector3d::ZeroVector;
+
+    /** Hotspot type (major vs minor, affects thermal output and lifetime). */
+    UPROPERTY()
+    EHotspotType Type = EHotspotType::Minor;
+
+    /** Thermal output (arbitrary units, affects stress/elevation contribution). */
+    double ThermalOutput = 1.0;
+
+    /** Influence radius (radians) for thermal contribution falloff. */
+    double InfluenceRadius = 0.1; // ~5.7° on unit sphere
+
+    /** Drift velocity in mantle frame (rad/My), allows hotspots to migrate over time. */
+    FVector3d DriftVelocity = FVector3d::ZeroVector;
 };
 
 /** Simulation parameters (Phase 3 - UI integration). */
@@ -127,11 +239,12 @@ struct FTectonicSimulationParameters
     double RetessellationThresholdDegrees = 30.0;
 
     /**
-     * Milestone 3 Task 3.3: Enable dynamic re-tessellation (framework stub).
-     * Default false for M3. When true (M4+), triggers mesh rebuild when plates drift.
+     * Milestone 4 Task 1.1: Enable dynamic re-tessellation.
+     * When true, triggers mesh rebuild when plates drift beyond RetessellationThresholdDegrees.
+     * Default true for M4+ (change to false to disable and use M3 logging behavior).
      */
     UPROPERTY()
-    bool bEnableDynamicRetessellation = false;
+    bool bEnableDynamicRetessellation = true;
 
     /** Mantle viscosity coefficient (placeholder - used in Milestone 3). */
     UPROPERTY()
@@ -140,6 +253,114 @@ struct FTectonicSimulationParameters
     /** Thermal diffusion constant (placeholder - used in Milestone 3). */
     UPROPERTY()
     double ThermalDiffusion = 1.0;
+
+    /**
+     * Milestone 4 Task 1.2: Plate split velocity threshold (rad/My).
+     * Divergent boundaries exceeding this velocity for sustained duration trigger rifting/split.
+     * Default 0.05 rad/My ≈ 3-5 cm/yr on Earth scale (realistic mid-ocean ridge spreading rate).
+     */
+    UPROPERTY()
+    double SplitVelocityThreshold = 0.05;
+
+    /**
+     * Milestone 4 Task 1.2: Sustained divergence duration required to trigger split (My).
+     * Prevents transient velocity spikes from causing spurious splits.
+     * Default 20 My (paper-aligned, ~1 Wilson cycle phase).
+     */
+    UPROPERTY()
+    double SplitDurationThreshold = 20.0;
+
+    /**
+     * Milestone 4 Task 1.2: Plate merge stress threshold (MPa).
+     * Convergent boundaries exceeding this stress trigger subduction/merge if plate is small enough.
+     * Default 80 MPa (80% of max stress cap, indicates sustained collision).
+     */
+    UPROPERTY()
+    double MergeStressThreshold = 80.0;
+
+    /**
+     * Milestone 4 Task 1.2: Plate area ratio threshold for merge eligibility.
+     * Smaller plate must be <N% of larger plate's area to be consumed.
+     * Default 0.25 (smaller plate must be <25% of larger, prevents balanced collision merges).
+     */
+    UPROPERTY()
+    double MergeAreaRatioThreshold = 0.25;
+
+    /**
+     * Milestone 4 Task 1.2: Enable plate split/merge topology changes.
+     * Default false for backward compatibility. Set true to activate split/merge detection.
+     */
+    UPROPERTY()
+    bool bEnablePlateTopologyChanges = false;
+
+    /**
+     * Milestone 4 Task 2.1: Number of major hotspots to generate (paper Section 4.4).
+     * Major hotspots have higher thermal output and longer lifetimes.
+     * Default 3 (paper recommendation for Earth-like planets).
+     */
+    UPROPERTY()
+    int32 MajorHotspotCount = 3;
+
+    /**
+     * Milestone 4 Task 2.1: Number of minor hotspots to generate.
+     * Minor hotspots have lower thermal output and shorter lifetimes.
+     * Default 5 (paper recommendation for Earth-like planets).
+     */
+    UPROPERTY()
+    int32 MinorHotspotCount = 5;
+
+    /**
+     * Milestone 4 Task 2.1: Hotspot drift speed in mantle frame (rad/My).
+     * Controls how fast hotspots migrate over time. 0 = stationary.
+     * Default 0.01 rad/My (~0.6 cm/yr on Earth scale, realistic mantle plume drift).
+     */
+    UPROPERTY()
+    double HotspotDriftSpeed = 0.01;
+
+    /**
+     * Milestone 4 Task 2.1: Thermal output multiplier for major hotspots.
+     * Scales thermal contribution to stress/elevation fields.
+     * Default 2.0 (major hotspots are 2x more powerful than minor).
+     */
+    UPROPERTY()
+    double MajorHotspotThermalOutput = 2.0;
+
+    /**
+     * Milestone 4 Task 2.1: Thermal output multiplier for minor hotspots.
+     * Default 1.0 (baseline thermal contribution).
+     */
+    UPROPERTY()
+    double MinorHotspotThermalOutput = 1.0;
+
+    /**
+     * Milestone 4 Task 2.1: Enable hotspot generation and thermal coupling.
+     * Default false for backward compatibility. Set true to activate hotspot system.
+     */
+    UPROPERTY()
+    bool bEnableHotspots = false;
+
+    /**
+     * Milestone 4 Task 2.2: Rift progression rate (meters per My per rad/My velocity).
+     * Controls how fast rifts widen based on divergent velocity.
+     * Default 50000.0 m/My/(rad/My) ≈ realistic rift widening (~5 cm/yr at Earth scale).
+     */
+    UPROPERTY()
+    double RiftProgressionRate = 50000.0;
+
+    /**
+     * Milestone 4 Task 2.2: Rift width threshold for triggering plate split (meters).
+     * When rift width exceeds this value, boundary triggers split.
+     * Default 500000.0 m (500 km, realistic for mature ocean basin rifts).
+     */
+    UPROPERTY()
+    double RiftSplitThresholdMeters = 500000.0;
+
+    /**
+     * Milestone 4 Task 2.2: Enable rift propagation model.
+     * Default false for backward compatibility. Set true to activate rift tracking.
+     */
+    UPROPERTY()
+    bool bEnableRiftPropagation = false;
 };
 
 /**
@@ -191,11 +412,20 @@ public:
     /** Accessor for per-vertex stress values (Milestone 3 Task 2.3, cosmetic). */
     const TArray<double>& GetVertexStressValues() const { return VertexStressValues; }
 
+    /** Milestone 4 Task 2.3: Accessor for per-vertex temperature values (K). */
+    const TArray<double>& GetVertexTemperatureValues() const { return VertexTemperatureValues; }
+
     /** Accessor for boundary adjacency map (Milestone 2). */
     const TMap<TPair<int32, int32>, FPlateBoundary>& GetBoundaries() const { return Boundaries; }
 
     /** Accessor for simulation parameters (Milestone 2). */
     const FTectonicSimulationParameters& GetParameters() const { return Parameters; }
+
+    /** Milestone 4 Task 1.2: Accessor for topology event log. */
+    const TArray<FPlateTopologyEvent>& GetTopologyEvents() const { return TopologyEvents; }
+
+    /** Milestone 4 Task 2.1: Accessor for active hotspots. */
+    const TArray<FMantleHotspot>& GetHotspots() const { return Hotspots; }
 
     /** Update simulation parameters and reset (Milestone 2 - Phase 3). */
     void SetParameters(const FTectonicSimulationParameters& NewParams);
@@ -282,6 +512,39 @@ private:
     /** Phase 2 Task 5: Update boundary classifications based on relative velocities. */
     void UpdateBoundaryClassifications();
 
+    /** Milestone 4 Task 1.2: Detect and execute plate splits (rift-driven). */
+    void DetectAndExecutePlateSplits();
+
+    /** Milestone 4 Task 1.2: Detect and execute plate merges (subduction-driven). */
+    void DetectAndExecutePlateMerges();
+
+    /** Milestone 4 Task 1.2: Execute plate split along divergent boundary. */
+    bool SplitPlate(int32 PlateID, const TPair<int32, int32>& BoundaryKey, const FPlateBoundary& Boundary);
+
+    /** Milestone 4 Task 1.2: Execute plate merge (consume smaller plate into larger). */
+    bool MergePlates(int32 ConsumedPlateID, int32 SurvivorPlateID, const TPair<int32, int32>& BoundaryKey, const FPlateBoundary& Boundary);
+
+    /** Milestone 4 Task 1.2: Calculate plate area (spherical triangles). */
+    double ComputePlateArea(const FTectonicPlate& Plate) const;
+
+    /** Milestone 4 Task 1.3: Update boundary lifecycle states (Nascent/Active/Dormant). */
+    void UpdateBoundaryStates(double DeltaTimeMy);
+
+    /** Milestone 4 Task 2.1: Generate hotspot seeds deterministically. */
+    void GenerateHotspots();
+
+    /** Milestone 4 Task 2.1: Update hotspot positions in mantle frame (drift over time). */
+    void UpdateHotspotDrift(double DeltaTimeMy);
+
+    /** Milestone 4 Task 2.1: Apply hotspot thermal contribution to plate stress/elevation. */
+    void ApplyHotspotThermalContribution();
+
+    /** Milestone 4 Task 2.2: Update rift progression for divergent boundaries. */
+    void UpdateRiftProgression(double DeltaTimeMy);
+
+    /** Milestone 4 Task 2.3: Compute thermal field from hotspots and subduction zones. */
+    void ComputeThermalField();
+
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
     TArray<FVector3d> BaseSphereSamples;
@@ -300,7 +563,14 @@ private:
     TArray<int32> VertexPlateAssignments; // Maps each RenderVertex index to a Plate ID (Voronoi cell)
     TArray<FVector3d> VertexVelocities; // Velocity vector (v = ω × r) for each RenderVertex (Task 2.2)
     TArray<double> VertexStressValues; // Interpolated stress (MPa) for each RenderVertex (Task 2.3, cosmetic)
+    TArray<double> VertexTemperatureValues; // Milestone 4 Task 2.3: Thermal field (K) from hotspots + subduction
 
     /** Milestone 3 Task 3.3: Initial plate centroid positions (captured after Lloyd relaxation). */
     TArray<FVector3d> InitialPlateCentroids;
+
+    /** Milestone 4 Task 1.2: Log of plate topology change events (splits/merges). */
+    TArray<FPlateTopologyEvent> TopologyEvents;
+
+    /** Milestone 4 Task 2.1: Active mantle hotspots/plumes. */
+    TArray<FMantleHotspot> Hotspots;
 };

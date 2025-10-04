@@ -210,6 +210,10 @@ bool UTectonicSimulationService::PerformRetessellation()
     GenerateRenderMesh();
     BuildVoronoiMapping();
 
+    // Refresh derived fields (velocity, stress) after Voronoi rebuild
+    ComputeVelocityField();
+    InterpolateStressToVertices();
+
     // Step 4: Validate result
     if (!ValidateRetessellation(Snapshot))
     {

@@ -58,6 +58,12 @@ void UTectonicSimulationService::ResetSimulation()
     {
         InitialPlateCentroids[i] = Plates[i].Centroid;
     }
+
+    // Milestone 4 Task 2.1: Generate hotspots (deterministic from seed)
+    GenerateHotspots();
+
+    // Milestone 4 Task 1.2: Clear topology event log
+    TopologyEvents.Empty();
 }
 
 void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
@@ -83,14 +89,44 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Milestone 3 Task 2.3: Update stress at boundaries (cosmetic visualization)
         UpdateBoundaryStress(StepDurationMy);
 
+        // Milestone 4 Task 1.3: Update boundary lifecycle states (Nascent/Active/Dormant)
+        UpdateBoundaryStates(StepDurationMy);
+
+        // Milestone 4 Task 2.2: Update rift progression for divergent boundaries
+        UpdateRiftProgression(StepDurationMy);
+
+        // Milestone 4 Task 2.1: Update hotspot drift in mantle frame
+        UpdateHotspotDrift(StepDurationMy);
+
         CurrentTimeMy += StepDurationMy;
     }
 
     // Milestone 3 Task 2.3: Interpolate stress to render vertices (after all steps)
     InterpolateStressToVertices();
 
-    // Milestone 3 Task 3.3: Check if re-tessellation would be needed (log only for M3)
-    CheckRetessellationNeeded();
+    // Milestone 4 Task 2.3: Compute thermal field from hotspots + subduction
+    ComputeThermalField();
+
+    // Milestone 4 Task 2.1: Apply hotspot thermal contribution to stress field
+    ApplyHotspotThermalContribution();
+
+    // Milestone 4 Task 1.2: Detect and execute plate splits/merges
+    if (Parameters.bEnablePlateTopologyChanges)
+    {
+        DetectAndExecutePlateSplits();
+        DetectAndExecutePlateMerges();
+    }
+
+    // Milestone 4 Task 1.1: Perform re-tessellation if plates have drifted beyond threshold
+    if (Parameters.bEnableDynamicRetessellation)
+    {
+        PerformRetessellation();
+    }
+    else
+    {
+        // M3 compatibility: Just check and log (don't rebuild)
+        CheckRetessellationNeeded();
+    }
 
     // Milestone 3 Task 4.5: Record step time for UI display
     const double EndTime = FPlatformTime::Seconds();
@@ -542,6 +578,17 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     // Build CSV content
     TArray<FString> CSVLines;
 
+    // Milestone 4 Task 1.3/2.1/2.2/2.3: CSV v3.0 schema version header
+    CSVLines.Add(TEXT("# Planetary Creation Tectonic Simulation Metrics"));
+    CSVLines.Add(TEXT("# CSV Schema Version: 3.0"));
+    CSVLines.Add(TEXT("# Changes from v2.0: Added BoundaryState, StateTransitionTime, DivergentDuration, ConvergentDuration, ThermalFlux (boundary section)"));
+    CSVLines.Add(TEXT("#                     Added TopologyEvents section (splits/merges)"));
+    CSVLines.Add(TEXT("#                     Added Hotspots section (Task 2.1: positions, thermal output, drift)"));
+    CSVLines.Add(TEXT("#                     Added RiftWidth, RiftAge columns (Task 2.2: rift progression tracking)"));
+    CSVLines.Add(TEXT("#                     Added TemperatureK column (Task 2.3: analytic thermal field from hotspots + subduction)"));
+    CSVLines.Add(TEXT("# Backward compatible: v2.0 readers will ignore new columns"));
+    CSVLines.Add(TEXT(""));
+
     // Header
     CSVLines.Add(TEXT("PlateID,CentroidX,CentroidY,CentroidZ,CrustType,CrustThickness,EulerPoleAxisX,EulerPoleAxisY,EulerPoleAxisZ,AngularVelocity"));
 
@@ -560,9 +607,9 @@ void UTectonicSimulationService::ExportMetricsToCSV()
         ));
     }
 
-    // Add separator and boundary data
+    // Add separator and boundary data (CSV v3.0: added BoundaryState, StateTransitionTime, ThermalFlux, Task 2.2: RiftWidth, RiftAge)
     CSVLines.Add(TEXT("")); // Empty line
-    CSVLines.Add(TEXT("PlateA_ID,PlateB_ID,BoundaryType,RelativeVelocity,AccumulatedStress_MPa"));
+    CSVLines.Add(TEXT("PlateA_ID,PlateB_ID,BoundaryType,BoundaryState,StateTransitionTime_My,RelativeVelocity,AccumulatedStress_MPa,DivergentDuration_My,ConvergentDuration_My,ThermalFlux,RiftWidth_m,RiftAge_My"));
 
     for (const auto& BoundaryPair : Boundaries)
     {
@@ -577,11 +624,35 @@ void UTectonicSimulationService::ExportMetricsToCSV()
             case EBoundaryType::Transform:  BoundaryTypeName = TEXT("Transform"); break;
         }
 
-        CSVLines.Add(FString::Printf(TEXT("%d,%d,%s,%.8f,%.2f"),
+        FString BoundaryStateName;
+        switch (Boundary.BoundaryState)
+        {
+            case EBoundaryState::Nascent: BoundaryStateName = TEXT("Nascent"); break;
+            case EBoundaryState::Active:  BoundaryStateName = TEXT("Active"); break;
+            case EBoundaryState::Dormant: BoundaryStateName = TEXT("Dormant"); break;
+            case EBoundaryState::Rifting: BoundaryStateName = TEXT("Rifting"); break; // Milestone 4 Task 2.2
+        }
+
+        // Milestone 4 Task 1.3: Thermal flux (placeholder - will be populated by Task 2.3)
+        const double ThermalFlux = 0.0;
+
+        // Milestone 4 Task 2.2: Rift width and age (only valid for rifting boundaries)
+        const double RiftAgeMy = (Boundary.BoundaryState == EBoundaryState::Rifting && Boundary.RiftFormationTimeMy > 0.0)
+            ? (CurrentTimeMy - Boundary.RiftFormationTimeMy)
+            : 0.0;
+
+        CSVLines.Add(FString::Printf(TEXT("%d,%d,%s,%s,%.2f,%.8f,%.2f,%.2f,%.2f,%.4f,%.0f,%.2f"),
             PlateIDs.Key, PlateIDs.Value,
             *BoundaryTypeName,
+            *BoundaryStateName,
+            Boundary.StateTransitionTimeMy,
             Boundary.RelativeVelocity,
-            Boundary.AccumulatedStress
+            Boundary.AccumulatedStress,
+            Boundary.DivergentDurationMy,
+            Boundary.ConvergentDurationMy,
+            ThermalFlux,
+            Boundary.RiftWidthMeters,
+            RiftAgeMy
         ));
     }
 
@@ -617,9 +688,71 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     CSVLines.Add(FString::Printf(TEXT("ConvergentBoundaries,%d"), ConvergentCount));
     CSVLines.Add(FString::Printf(TEXT("TransformBoundaries,%d"), TransformCount));
 
-    // Milestone 3: Export vertex-level data (stress, velocity, elevation)
+    // Milestone 4 Task 1.3: Export topology events (CSV v3.0)
     CSVLines.Add(TEXT("")); // Empty line
-    CSVLines.Add(TEXT("VertexIndex,PositionX,PositionY,PositionZ,PlateID,VelocityX,VelocityY,VelocityZ,VelocityMagnitude,StressMPa,ElevationKm"));
+    CSVLines.Add(TEXT("EventType,OriginalPlateID,NewPlateID,Timestamp_My,StressAtEvent_MPa,VelocityAtEvent"));
+
+    for (const FPlateTopologyEvent& Event : TopologyEvents)
+    {
+        FString EventTypeName;
+        switch (Event.EventType)
+        {
+            case EPlateTopologyEventType::Split: EventTypeName = TEXT("Split"); break;
+            case EPlateTopologyEventType::Merge: EventTypeName = TEXT("Merge"); break;
+            default: EventTypeName = TEXT("None"); break;
+        }
+
+        // For split: [OriginalID, NewID], for merge: [ConsumedID, SurvivorID]
+        const int32 PlateID1 = Event.PlateIDs.IsValidIndex(0) ? Event.PlateIDs[0] : INDEX_NONE;
+        const int32 PlateID2 = Event.PlateIDs.IsValidIndex(1) ? Event.PlateIDs[1] : INDEX_NONE;
+
+        CSVLines.Add(FString::Printf(TEXT("%s,%d,%d,%.2f,%.2f,%.8f"),
+            *EventTypeName,
+            PlateID1,
+            PlateID2,
+            Event.TimestampMy,
+            Event.StressAtEvent,
+            Event.VelocityAtEvent
+        ));
+    }
+
+    if (TopologyEvents.Num() == 0)
+    {
+        CSVLines.Add(TEXT("# No topology events this simulation"));
+    }
+
+    // Milestone 4 Task 2.1: Export hotspot data
+    CSVLines.Add(TEXT("")); // Empty line
+    CSVLines.Add(TEXT("HotspotID,Type,PositionX,PositionY,PositionZ,ThermalOutput,InfluenceRadius_rad,DriftVelocityX,DriftVelocityY,DriftVelocityZ"));
+
+    for (const FMantleHotspot& Hotspot : Hotspots)
+    {
+        FString TypeName;
+        switch (Hotspot.Type)
+        {
+            case EHotspotType::Major: TypeName = TEXT("Major"); break;
+            case EHotspotType::Minor: TypeName = TEXT("Minor"); break;
+            default: TypeName = TEXT("Unknown"); break;
+        }
+
+        CSVLines.Add(FString::Printf(TEXT("%d,%s,%.8f,%.8f,%.8f,%.2f,%.6f,%.8f,%.8f,%.8f"),
+            Hotspot.HotspotID,
+            *TypeName,
+            Hotspot.Position.X, Hotspot.Position.Y, Hotspot.Position.Z,
+            Hotspot.ThermalOutput,
+            Hotspot.InfluenceRadius,
+            Hotspot.DriftVelocity.X, Hotspot.DriftVelocity.Y, Hotspot.DriftVelocity.Z
+        ));
+    }
+
+    if (Hotspots.Num() == 0)
+    {
+        CSVLines.Add(TEXT("# No hotspots active (bEnableHotspots=false)"));
+    }
+
+    // Milestone 3: Export vertex-level data (stress, velocity, elevation, Task 2.3: temperature)
+    CSVLines.Add(TEXT("")); // Empty line
+    CSVLines.Add(TEXT("VertexIndex,PositionX,PositionY,PositionZ,PlateID,VelocityX,VelocityY,VelocityZ,VelocityMagnitude,StressMPa,ElevationKm,TemperatureK"));
 
     // Milestone 3 Task 2.4: Compression modulus for stress-to-elevation conversion
     constexpr double CompressionModulus = 1.0; // 1 MPa = 1 km elevation (simplified)
@@ -633,15 +766,17 @@ void UTectonicSimulationService::ExportMetricsToCSV()
         const double VelocityMag = Velocity.Length();
         const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
         const double ElevationKm = (StressMPa / CompressionModulus) * Parameters.ElevationScale;
+        const double TemperatureK = VertexTemperatureValues.IsValidIndex(i) ? VertexTemperatureValues[i] : 0.0; // Milestone 4 Task 2.3
 
-        CSVLines.Add(FString::Printf(TEXT("%d,%.8f,%.8f,%.8f,%d,%.8f,%.8f,%.8f,%.8f,%.2f,%.2f"),
+        CSVLines.Add(FString::Printf(TEXT("%d,%.8f,%.8f,%.8f,%d,%.8f,%.8f,%.8f,%.8f,%.2f,%.2f,%.1f"),
             i,
             Position.X, Position.Y, Position.Z,
             PlateID,
             Velocity.X, Velocity.Y, Velocity.Z,
             VelocityMag,
             StressMPa,
-            ElevationKm
+            ElevationKm,
+            TemperatureK
         ));
     }
 

@@ -263,3 +263,15 @@ Build on the Milestone 3 scaffold to deliver visible tectonic activity. Mileston
 
 **Total:** ~7.5 weeks including buffer and design spikes.
 
+
+### Nice-to-Have: Static Mesh Snapshot Export
+- Capture the retessellated planet at key milestones and bake to static meshes for Nanite/cinematic use.
+- Store snapshots per plate configuration so designers can build a “planet catalog.”
+- Would enable downstream ideas like a planet-creator mode or sharing pre-baked worlds.
+- Not part of Milestone 4 scope; log for future milestone planning (potential Milestone 6/7 feature).
+
+### Nice-to-Have: Spore-Style Planet Camera Rig
+- Implement orbital camera rig with inertia, zoom-to-radius control, and pitch clamps for smoother planet navigation.
+- Spawns alongside the preview actor; supports mouse drag for yaw/pitch and scroll-wheel radius changes.
+- Optional future enhancement: height-based zoom tiers that swap overlays/LODs as you zoom out.
+- Schedule after core M4 deliverables or as part of UI polish in Milestone 6.
