@@ -13,7 +13,16 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
 
 ## Build Commands
 
-**Rebuild from command line (Windows):**
+**Rebuild from command line (WSL/Linux):**
+```bash
+# Use UnrealBuildTool directly (works from WSL bash)
+"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe" \
+  PlanetaryCreationEditor Win64 Development \
+  -project="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
+  -WaitMutex -FromMsBuild
+```
+
+**Rebuild from command line (Windows cmd.exe):**
 ```bash
 "C:\Program Files\Epic Games\UE_5.5\Engine\Build\BatchFiles\Build.bat" PlanetaryCreationEditor Win64 Development -project="<ProjectPath>\PlanetaryCreation.uproject"
 ```

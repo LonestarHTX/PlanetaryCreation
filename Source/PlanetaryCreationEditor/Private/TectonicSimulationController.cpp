@@ -15,6 +15,8 @@
 #include "Materials/MaterialExpressionVertexColor.h"
 #include "TectonicSimulationService.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Components/LineBatchComponent.h"
+#include "Math/Quat.h"
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
 FTectonicSimulationController::~FTectonicSimulationController() = default;
@@ -49,7 +51,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
     {
         EnsurePreviewActor();
 
-        // Phase 5: Render actual tectonic plates with unique colors
+        // Milestone 3: Render high-density mesh with plate coloring from Voronoi mapping
         RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
         int32 VertexCount = 0;
         int32 TriangleCount = 0;
@@ -57,90 +59,134 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         {
             using namespace RealtimeMesh;
 
-            const TArray<FTectonicPlate>& Plates = Service->GetPlates();
-            const TArray<FVector3d>& SharedVertices = Service->GetSharedVertices();
+            const TArray<FVector3d>& RenderVertices = Service->GetRenderVertices();
+            const TArray<int32>& RenderTriangles = Service->GetRenderTriangles();
+            const TArray<int32>& VertexPlateAssignments = Service->GetVertexPlateAssignments();
+            const TArray<FVector3d>& VertexVelocities = Service->GetVertexVelocities();
+            const TArray<double>& VertexStressValues = Service->GetVertexStressValues();
+            const FTectonicSimulationParameters& Params = Service->GetParameters();
 
-            if (Plates.Num() > 0 && SharedVertices.Num() > 0)
+            if (RenderVertices.Num() > 0 && RenderTriangles.Num() > 0 && VertexPlateAssignments.Num() == RenderVertices.Num())
             {
-                TRealtimeMeshBuilderLocal<uint16, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
+                TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
                 Builder.EnableTangents();
                 Builder.EnableTexCoords();
                 Builder.EnableColors();
-                // Note: Not enabling PolyGroups to avoid raytracing complexity
 
-                const float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km for editor tooling
+                const float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km
 
                 // Helper to generate stable color from plate ID
                 auto GetPlateColor = [](int32 PlateID) -> FColor
                 {
-                    // Use golden ratio for color distribution
                     const float GoldenRatio = 0.618033988749895f;
                     const float Hue = FMath::Fmod(PlateID * GoldenRatio, 1.0f);
-
-                    // Convert HSV to RGB (Saturation=0.7, Value=0.9 for pastel look)
                     FLinearColor HSV(Hue * 360.0f, 0.7f, 0.9f);
                     FLinearColor RGB = HSV.HSVToLinearRGB();
                     return RGB.ToFColor(false);
                 };
 
-                // Helper: Apply Rodrigues rotation to a vertex given Euler pole and total rotation
-                auto RotateVertex = [](const FVector3d& Vertex, const FVector3d& EulerPoleAxis, double TotalRotationAngle) -> FVector3d
+                // Helper to map velocity magnitude to color (blue=slow, red=fast)
+                auto GetVelocityColor = [](const FVector3d& Velocity) -> FColor
                 {
-                    const double CosTheta = FMath::Cos(TotalRotationAngle);
-                    const double SinTheta = FMath::Sin(TotalRotationAngle);
-                    const double DotProduct = FVector3d::DotProduct(EulerPoleAxis, Vertex);
-
-                    const FVector3d Rotated =
-                        Vertex * CosTheta +
-                        FVector3d::CrossProduct(EulerPoleAxis, Vertex) * SinTheta +
-                        EulerPoleAxis * DotProduct * (1.0 - CosTheta);
-
-                    return Rotated.GetSafeNormal();
+                    const double VelMagnitude = Velocity.Length(); // radians/My
+                    // Typical plate velocities: 0.01-0.1 rad/My
+                    // Map to hue: 240° (blue) at 0.01 rad/My → 0° (red) at 0.1 rad/My
+                    const double NormalizedVel = FMath::Clamp((VelMagnitude - 0.01) / (0.1 - 0.01), 0.0, 1.0);
+                    const float Hue = FMath::Lerp(240.0f, 0.0f, static_cast<float>(NormalizedVel)); // Blue → Red
+                    FLinearColor HSV(Hue, 0.8f, 0.9f); // High saturation, high brightness
+                    FLinearColor RGB = HSV.HSVToLinearRGB();
+                    return RGB.ToFColor(false);
                 };
 
-                // Build vertices and triangles per-plate (avoid shared vertices for color correctness)
-                for (const FTectonicPlate& Plate : Plates)
+                // Helper to map stress to color (green=0 → yellow → red=100 MPa)
+                auto GetStressColor = [](double StressMPa) -> FColor
                 {
-                    if (Plate.VertexIndices.Num() == 3) // Triangular plate
+                    const double NormalizedStress = FMath::Clamp(StressMPa / 100.0, 0.0, 1.0);
+                    // Hue: 120° (green) at 0 MPa → 60° (yellow) → 0° (red) at 100 MPa
+                    const float Hue = FMath::Lerp(120.0f, 0.0f, static_cast<float>(NormalizedStress));
+                    FLinearColor HSV(Hue, 0.8f, 0.9f);
+                    FLinearColor RGB = HSV.HSVToLinearRGB();
+                    return RGB.ToFColor(false);
+                };
+
+                // Build vertices with elevation displacement and visualization
+                TArray<int32> VertexToBuilderIndex;
+                VertexToBuilderIndex.SetNumUninitialized(RenderVertices.Num());
+
+                // Store displaced positions for normal recalculation
+                TArray<FVector3f> DisplacedPositions;
+                DisplacedPositions.SetNumUninitialized(RenderVertices.Num());
+
+                // Milestone 3 Task 2.4: Compression modulus for stress-to-elevation conversion
+                constexpr double CompressionModulus = 1.0; // 1 MPa = 1 km elevation (simplified)
+                constexpr double MaxElevationKm = 10.0; // ±10km clamp
+
+                for (int32 i = 0; i < RenderVertices.Num(); ++i)
+                {
+                    const FVector3d& Vertex = RenderVertices[i];
+                    const int32 PlateID = VertexPlateAssignments[i];
+                    const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
+
+                    // Choose color based on visualization mode
+                    FColor VertexColor;
+                    if (bShowVelocityField && VertexVelocities.IsValidIndex(i))
                     {
-                        const FColor PlateColor = GetPlateColor(Plate.PlateID);
-
-                        // Calculate total rotation: AngularVelocity * CurrentTime
-                        const double CurrentTimeMy = Service->GetCurrentTimeMy();
-                        const double TotalRotation = Plate.AngularVelocity * CurrentTimeMy;
-
-                        // Add 3 vertices for this plate with the plate's color
-                        TArray<int32, TInlineAllocator<3>> PlateVerts;
-                        for (int32 i = 0; i < 3; ++i)
-                        {
-                            // Rotate the vertex using the same Euler pole that rotated the centroid
-                            const FVector3d& OriginalVertex = SharedVertices[Plate.VertexIndices[i]];
-                            const FVector3d RotatedVertex = RotateVertex(OriginalVertex, Plate.EulerPoleAxis, TotalRotation);
-                            const FVector3f Position = FVector3f(RotatedVertex * RadiusUnits);
-                            const FVector3f Normal = Position.GetSafeNormal();
-
-                            // Calculate tangent for proper lighting
-                            const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
-                            FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
-                            const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
-
-                            const int32 VertexId = Builder.AddVertex(Position)
-                                .SetNormalAndTangent(Normal, TangentX)
-                                .SetColor(PlateColor)
-                                .SetTexCoord(TexCoord);
-
-                            PlateVerts.Add(VertexId);
-                            VertexCount++;
-                        }
-
-                        // Add triangle with CCW winding when viewed from outside (reverse order fixes inside-out)
-                        Builder.AddTriangle(PlateVerts[0], PlateVerts[2], PlateVerts[1]);
-                        TriangleCount++;
+                        VertexColor = GetVelocityColor(VertexVelocities[i]);
                     }
+                    else if (CurrentElevationMode != EElevationMode::Flat)
+                    {
+                        VertexColor = GetStressColor(StressMPa); // Stress heatmap in elevation mode
+                    }
+                    else
+                    {
+                        VertexColor = GetPlateColor(PlateID); // Default plate colors
+                    }
+
+                    // Base position on sphere
+                    FVector3f Position = FVector3f(Vertex * RadiusUnits);
+
+                    // Milestone 3 Task 2.4: Elevation displacement (only in Displaced mode)
+                    if (CurrentElevationMode == EElevationMode::Displaced)
+                    {
+                        const FVector3f Normal = Position.GetSafeNormal();
+                        const double ElevationKm = (StressMPa / CompressionModulus) * Params.ElevationScale;
+                        const double ClampedElevation = FMath::Clamp(ElevationKm, -MaxElevationKm, MaxElevationKm);
+                        Position += Normal * static_cast<float>(ClampedElevation);
+                    }
+
+                    DisplacedPositions[i] = Position;
+
+                    // Normal (will be recalculated if displaced)
+                    const FVector3f Normal = Position.GetSafeNormal();
+
+                    // Calculate tangent for proper lighting
+                    const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
+                    const FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
+                    const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
+
+                    const int32 VertexId = Builder.AddVertex(Position)
+                        .SetNormalAndTangent(Normal, TangentX)
+                        .SetColor(VertexColor)
+                        .SetTexCoord(TexCoord);
+
+                    VertexToBuilderIndex[i] = VertexId;
+                    VertexCount++;
                 }
 
-                UE_LOG(LogTemp, Verbose, TEXT("Rendered %d plates with %d vertices and %d triangles"),
-                    Plates.Num(), VertexCount, TriangleCount);
+                // Build triangles (groups of 3 indices)
+                for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
+                {
+                    const int32 V0 = VertexToBuilderIndex[RenderTriangles[i]];
+                    const int32 V1 = VertexToBuilderIndex[RenderTriangles[i + 1]];
+                    const int32 V2 = VertexToBuilderIndex[RenderTriangles[i + 2]];
+
+                    // CCW winding when viewed from outside
+                    Builder.AddTriangle(V0, V2, V1);
+                    TriangleCount++;
+                }
+
+                UE_LOG(LogTemp, Verbose, TEXT("Rendered mesh with %d vertices and %d triangles (subdivision level %d)"),
+                    VertexCount, TriangleCount, Service->GetParameters().RenderSubdivisionLevel);
             }
         }
 
@@ -160,6 +206,33 @@ double FTectonicSimulationController::GetCurrentTimeMy() const
 UTectonicSimulationService* FTectonicSimulationController::GetSimulationService() const
 {
     return GetService();
+}
+
+void FTectonicSimulationController::SetVelocityVisualizationEnabled(bool bEnabled)
+{
+    if (bShowVelocityField != bEnabled)
+    {
+        bShowVelocityField = bEnabled;
+        RebuildPreview(); // Refresh mesh with new visualization mode
+    }
+}
+
+void FTectonicSimulationController::SetElevationMode(EElevationMode Mode)
+{
+    if (CurrentElevationMode != Mode)
+    {
+        CurrentElevationMode = Mode;
+        RebuildPreview(); // Refresh mesh with new elevation mode
+    }
+}
+
+void FTectonicSimulationController::SetBoundariesVisible(bool bVisible)
+{
+    if (bShowBoundaries != bVisible)
+    {
+        bShowBoundaries = bVisible;
+        DrawBoundaryLines(); // Refresh boundary overlay
+    }
 }
 
 UTectonicSimulationService* FTectonicSimulationController::GetService() const
@@ -294,4 +367,154 @@ void FTectonicSimulationController::UpdatePreviewMesh(RealtimeMesh::FRealtimeMes
     const int32 ClampedTriangles = FMath::Max(TriangleCount, 0);
     const FRealtimeMeshStreamRange Range(0, ClampedVertices, 0, ClampedTriangles * 3);
     Mesh->UpdateSectionRange(SectionKey, Range);
+
+    // Milestone 3 Task 3.2: Draw boundary overlay after mesh update
+    DrawBoundaryLines();
+}
+
+void FTectonicSimulationController::DrawBoundaryLines()
+{
+#if WITH_EDITOR
+    // Clear existing lines if boundaries are hidden or no world/service available
+    if (!GEditor)
+    {
+        return;
+    }
+
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World)
+    {
+        return;
+    }
+
+    ULineBatchComponent* LineBatcher = World->PersistentLineBatcher;
+    if (!LineBatcher)
+    {
+        LineBatcher = World->LineBatcher;
+    }
+    if (!LineBatcher)
+    {
+        LineBatcher = NewObject<ULineBatchComponent>(World);
+        LineBatcher->RegisterComponentWithWorld(World);
+        World->PersistentLineBatcher = LineBatcher;
+    }
+    if (!LineBatcher)
+    {
+        return;
+    }
+
+    // Clear previous boundary lines for our batch only (avoid nuking other debug layers)
+    constexpr uint32 BoundaryBatchId = 0x42544F4C; // 'BTOL' (Boundary Toggle Overlay Lines)
+    LineBatcher->ClearBatch(BoundaryBatchId);
+
+    if (!bShowBoundaries)
+    {
+        return; // Overlay hidden – nothing more to draw
+    }
+
+    UTectonicSimulationService* Service = GetService();
+    if (!Service)
+    {
+        return;
+    }
+
+    const TArray<FTectonicPlate>& Plates = Service->GetPlates();
+    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries = Service->GetBoundaries();
+    const TArray<FVector3d>& SharedVertices = Service->GetSharedVertices();
+    const double CurrentTimeMy = Service->GetCurrentTimeMy();
+
+    UE_LOG(LogTemp, Verbose, TEXT("Drawing %d boundaries at time %.2f My"), Boundaries.Num(), CurrentTimeMy);
+
+    constexpr float RadiusUnits = 6370.0f; // Match mesh scale (1 unit = 1 km)
+    constexpr float LineThickness = 20.0f; // Thick lines for visibility
+    constexpr float LineDuration = 0.0f; // Persistent (cleared manually)
+
+    auto GetBoundaryColor = [](EBoundaryType Type) -> FColor
+    {
+        switch (Type)
+        {
+        case EBoundaryType::Convergent: return FColor::Red;
+        case EBoundaryType::Divergent:  return FColor::Green;
+        case EBoundaryType::Transform:  return FColor::Yellow;
+        default:                         return FColor::White;
+        }
+    };
+
+    auto RotateVertex = [](const FVector3d& Vertex, const FVector3d& Axis, double AngleRadians) -> FVector3d
+    {
+        if (Axis.IsNearlyZero())
+        {
+            return Vertex;
+        }
+
+        const UE::Math::TQuat<double> Rotation(Axis.GetSafeNormal(), AngleRadians);
+        return Rotation.RotateVector(Vertex);
+    };
+
+    for (const auto& BoundaryPair : Boundaries)
+    {
+        const TPair<int32, int32>& Key = BoundaryPair.Key;
+        const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+        if (Boundary.SharedEdgeVertices.Num() < 2)
+        {
+            continue;
+        }
+
+        const int32 V0Index = Boundary.SharedEdgeVertices[0];
+        const int32 V1Index = Boundary.SharedEdgeVertices[1];
+        if (!SharedVertices.IsValidIndex(V0Index) || !SharedVertices.IsValidIndex(V1Index))
+        {
+            continue;
+        }
+
+        const FTectonicPlate* PlateA = Plates.FindByPredicate([&Key](const FTectonicPlate& P) { return P.PlateID == Key.Key; });
+        const FTectonicPlate* PlateB = Plates.FindByPredicate([&Key](const FTectonicPlate& P) { return P.PlateID == Key.Value; });
+        if (!PlateA || !PlateB)
+        {
+            continue;
+        }
+
+        // Milestone 3 Task 3.2: Draw boundary as centroid→midpoint→centroid segments
+        // (per plan: "Draw line segment from PlateA centroid → midpoint → PlateB centroid")
+        const FVector3d& V0Original = SharedVertices[V0Index];
+        const FVector3d& V1Original = SharedVertices[V1Index];
+
+        const double RotationAngleA = PlateA->AngularVelocity * CurrentTimeMy;
+        const double RotationAngleB = PlateB->AngularVelocity * CurrentTimeMy;
+
+        const FVector3d V0FromA = RotateVertex(V0Original, PlateA->EulerPoleAxis, RotationAngleA);
+        const FVector3d V1FromA = RotateVertex(V1Original, PlateA->EulerPoleAxis, RotationAngleA);
+        const FVector3d V0FromB = RotateVertex(V0Original, PlateB->EulerPoleAxis, RotationAngleB);
+        const FVector3d V1FromB = RotateVertex(V1Original, PlateB->EulerPoleAxis, RotationAngleB);
+
+        // Average both plate rotations so the overlay sits between them.
+        const FVector3d V0Current = ((V0FromA + V0FromB) * 0.5).GetSafeNormal();
+        const FVector3d V1Current = ((V1FromA + V1FromB) * 0.5).GetSafeNormal();
+
+        if (V0Current.IsNearlyZero() || V1Current.IsNearlyZero())
+        {
+            continue;
+        }
+
+        const FVector3d BoundaryMidpoint = ((V0Current + V1Current) * 0.5).GetSafeNormal();
+        if (BoundaryMidpoint.IsNearlyZero())
+        {
+            continue;
+        }
+
+        // Offset boundaries slightly above mesh surface to prevent z-fighting
+        // Use max elevation (10km) + small buffer to ensure visibility above displaced geometry
+        constexpr float BoundaryOffsetKm = 15.0f;
+        const FVector CentroidA = FVector(PlateA->Centroid * (RadiusUnits + BoundaryOffsetKm));
+        const FVector Midpoint = FVector(BoundaryMidpoint * (RadiusUnits + BoundaryOffsetKm));
+        const FVector CentroidB = FVector(PlateB->Centroid * (RadiusUnits + BoundaryOffsetKm));
+
+        const FColor LineColor = GetBoundaryColor(Boundary.BoundaryType);
+
+        // Draw two segments: PlateA centroid → midpoint, midpoint → PlateB centroid
+        LineBatcher->DrawLine(CentroidA, Midpoint, LineColor, SDPG_World, LineThickness, LineDuration, BoundaryBatchId);
+        LineBatcher->DrawLine(Midpoint, CentroidB, LineColor, SDPG_World, LineThickness, LineDuration, BoundaryBatchId);
+    }
+#endif
 }

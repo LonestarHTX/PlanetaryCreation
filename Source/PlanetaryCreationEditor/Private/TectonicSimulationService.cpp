@@ -3,6 +3,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
+#include "SphericalKDTree.h"
 
 void UTectonicSimulationService::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -16,6 +17,11 @@ void UTectonicSimulationService::Deinitialize()
     Plates.Reset();
     SharedVertices.Reset();
     Boundaries.Reset();
+    RenderVertices.Reset();
+    RenderTriangles.Reset();
+    VertexPlateAssignments.Reset();
+    VertexVelocities.Reset();
+    VertexStressValues.Reset();
     Super::Deinitialize();
 }
 
@@ -29,6 +35,29 @@ void UTectonicSimulationService::ResetSimulation()
     InitializeEulerPoles();
     BuildBoundaryAdjacencyMap();
     ValidateSolidAngleCoverage();
+
+    // Milestone 3: Generate high-density render mesh
+    GenerateRenderMesh();
+
+    // Milestone 3 Task 3.1: Apply Lloyd relaxation BEFORE Voronoi mapping
+    // Note: Lloyd uses render mesh vertices to compute Voronoi cells, so must run after GenerateRenderMesh()
+    ApplyLloydRelaxation();
+
+    // Milestone 3 Phase 2: Build Voronoi mapping (event-driven, refreshed after Lloyd)
+    BuildVoronoiMapping();
+
+    // Milestone 3 Task 2.2: Compute velocity field (event-driven, same trigger as Voronoi)
+    ComputeVelocityField();
+
+    // Milestone 3 Task 2.3: Initialize stress field (zero at start)
+    InterpolateStressToVertices();
+
+    // Milestone 3 Task 3.3: Capture initial plate positions for re-tessellation detection
+    InitialPlateCentroids.SetNum(Plates.Num());
+    for (int32 i = 0; i < Plates.Num(); ++i)
+    {
+        InitialPlateCentroids[i] = Plates[i].Centroid;
+    }
 }
 
 void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
@@ -37,6 +66,9 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     {
         return;
     }
+
+    // Milestone 3 Task 4.5: Track step performance
+    const double StartTime = FPlatformTime::Seconds();
 
     constexpr double StepDurationMy = 2.0; // Paper defines delta t = 2 My per iteration
 
@@ -48,8 +80,21 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Phase 2 Task 5: Update boundary classifications based on relative velocities
         UpdateBoundaryClassifications();
 
+        // Milestone 3 Task 2.3: Update stress at boundaries (cosmetic visualization)
+        UpdateBoundaryStress(StepDurationMy);
+
         CurrentTimeMy += StepDurationMy;
     }
+
+    // Milestone 3 Task 2.3: Interpolate stress to render vertices (after all steps)
+    InterpolateStressToVertices();
+
+    // Milestone 3 Task 3.3: Check if re-tessellation would be needed (log only for M3)
+    CheckRetessellationNeeded();
+
+    // Milestone 3 Task 4.5: Record step time for UI display
+    const double EndTime = FPlatformTime::Seconds();
+    LastStepTimeMs = (EndTime - StartTime) * 1000.0;
 }
 
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
@@ -86,12 +131,12 @@ void UTectonicSimulationService::GenerateIcospherePlates()
 
     // Phase 1 Task 1: Generate icosphere subdivision to approximate desired plate count
     // An icosahedron has 20 faces. Each subdivision level quadruples face count:
-    // Level 0: 20 faces
-    // Level 1: 80 faces
-    // Level 2: 320 faces
-    // Target ~12-20 plates → use level 0 (20 faces) for now
+    // Level 0: 20 faces (baseline from paper, ~Earth's 7-15 plates)
+    // Level 1: 80 faces (experimental high-resolution mode)
+    // Level 2: 320 faces (experimental ultra-high resolution)
+    // Level 3: 1280 faces (experimental maximum resolution)
 
-    const int32 SubdivisionLevel = 0; // TODO: Calculate from Parameters.PlateCount
+    const int32 SubdivisionLevel = FMath::Clamp(Parameters.SubdivisionLevel, 0, 3);
     SubdivideIcosphere(SubdivisionLevel);
 
     // Assign plate IDs and initialize properties
@@ -151,11 +196,31 @@ void UTectonicSimulationService::SubdivideIcosphere(int32 SubdivisionLevel)
         {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}
     };
 
-    // TODO(Milestone-3): Implement subdivision for higher detail
-    // For now, using base icosahedron (20 faces = 20 plates)
-    if (SubdivisionLevel > 0)
+    // Subdivide icosphere to requested level (reuse same logic as GenerateRenderMesh)
+    for (int32 Level = 0; Level < SubdivisionLevel; ++Level)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Icosphere subdivision level %d requested but not yet implemented. Using base icosahedron."), SubdivisionLevel);
+        TArray<TArray<int32>> NewFaces;
+        TMap<TPair<int32, int32>, int32> MidpointCache;
+
+        for (const TArray<int32>& Face : Faces)
+        {
+            // Get or create midpoints for each edge
+            const int32 V0 = Face[0];
+            const int32 V1 = Face[1];
+            const int32 V2 = Face[2];
+
+            const int32 A = GetMidpointIndex(V0, V1, MidpointCache, Vertices);
+            const int32 B = GetMidpointIndex(V1, V2, MidpointCache, Vertices);
+            const int32 C = GetMidpointIndex(V2, V0, MidpointCache, Vertices);
+
+            // Split triangle into 4 smaller triangles
+            NewFaces.Add({V0, A, C});
+            NewFaces.Add({V1, B, A});
+            NewFaces.Add({V2, C, B});
+            NewFaces.Add({A, B, C});
+        }
+
+        Faces = MoveTemp(NewFaces);
     }
 
     // Store vertices in shared pool
@@ -364,12 +429,28 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
         const FVector3d& V0_Original = SharedVertices[Boundary.SharedEdgeVertices[0]];
         const FVector3d& V1_Original = SharedVertices[Boundary.SharedEdgeVertices[1]];
 
-        // Determine which plate "owns" this boundary edge for rotation
-        // Use PlateA's rotation for boundary geometry (arbitrary but consistent)
-        const double TotalRotationA = PlateA->AngularVelocity * CurrentTimeMy;
-        const FVector3d V0_Rotated = RotateVertex(V0_Original, PlateA->EulerPoleAxis, TotalRotationA);
-        const FVector3d V1_Rotated = RotateVertex(V1_Original, PlateA->EulerPoleAxis, TotalRotationA);
-        const FVector3d BoundaryMidpoint = ((V0_Rotated + V1_Rotated) * 0.5).GetSafeNormal();
+        const double RotationAngleA = PlateA->AngularVelocity * CurrentTimeMy;
+        const double RotationAngleB = PlateB->AngularVelocity * CurrentTimeMy;
+
+        const FVector3d V0_FromA = RotateVertex(V0_Original, PlateA->EulerPoleAxis, RotationAngleA);
+        const FVector3d V1_FromA = RotateVertex(V1_Original, PlateA->EulerPoleAxis, RotationAngleA);
+        const FVector3d V0_FromB = RotateVertex(V0_Original, PlateB->EulerPoleAxis, RotationAngleB);
+        const FVector3d V1_FromB = RotateVertex(V1_Original, PlateB->EulerPoleAxis, RotationAngleB);
+
+        // Average both plate rotations so the midpoint stays between drifting plates.
+        const FVector3d V0_Current = ((V0_FromA + V0_FromB) * 0.5).GetSafeNormal();
+        const FVector3d V1_Current = ((V1_FromA + V1_FromB) * 0.5).GetSafeNormal();
+
+        if (V0_Current.IsNearlyZero() || V1_Current.IsNearlyZero())
+        {
+            continue;
+        }
+
+        const FVector3d BoundaryMidpoint = ((V0_Current + V1_Current) * 0.5).GetSafeNormal();
+        if (BoundaryMidpoint.IsNearlyZero())
+        {
+            continue;
+        }
 
         // Compute velocity at boundary for each plate: v = ω × r
         // ω is the angular velocity vector = AngularVelocity * EulerPoleAxis
@@ -381,12 +462,35 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
 
         // Relative velocity: vRel = vA - vB
         const FVector3d RelativeVelocity = VelocityA - VelocityB;
+        Boundary.RelativeVelocity = RelativeVelocity.Length();
 
-        // Boundary normal: deterministic orientation using PlateA's centroid
-        // Cross the edge vector with a vector from boundary toward PlateA's centroid
-        const FVector3d EdgeVector = (V1_Rotated - V0_Rotated).GetSafeNormal();
-        const FVector3d ToPlateA = (PlateA->Centroid - BoundaryMidpoint).GetSafeNormal();
-        const FVector3d BoundaryNormal = FVector3d::CrossProduct(EdgeVector, ToPlateA).GetSafeNormal();
+        // Build a boundary normal that is tangent to the sphere and consistently oriented.
+        const FVector3d EdgeVector = (V1_Current - V0_Current).GetSafeNormal();
+        if (EdgeVector.IsNearlyZero())
+        {
+            continue;
+        }
+
+        // Project Plate A's centroid direction onto the tangent plane so the sign check
+        // is unaffected by radial components (which would otherwise flip classification).
+        const FVector3d PlateATangent = (PlateA->Centroid - FVector3d::DotProduct(PlateA->Centroid, BoundaryMidpoint) * BoundaryMidpoint);
+
+        FVector3d BoundaryNormal = FVector3d::CrossProduct(BoundaryMidpoint, EdgeVector);
+
+        if (!BoundaryNormal.Normalize())
+        {
+            continue; // Degenerate geometry, skip classification this frame
+        }
+
+        FVector3d PlateTangentNormalized = PlateATangent;
+        const bool bHasPlateTangent = PlateTangentNormalized.Normalize();
+
+        // Ensure the normal points toward Plate A's side of the boundary so the
+        // dot(RelativeVelocity, BoundaryNormal) sign matches physical intuition.
+        if (bHasPlateTangent && FVector3d::DotProduct(BoundaryNormal, PlateTangentNormalized) < 0.0)
+        {
+            BoundaryNormal *= -1.0;
+        }
 
         // Project relative velocity onto boundary normal
         const double NormalComponent = FVector3d::DotProduct(RelativeVelocity, BoundaryNormal);
@@ -409,7 +513,6 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
             TransformCount++;
         }
 
-        Boundary.RelativeVelocity = RelativeVelocity.Length();
     }
 
     UE_LOG(LogTemp, VeryVerbose, TEXT("Boundary classification: %d divergent, %d convergent, %d transform"),
@@ -459,7 +562,7 @@ void UTectonicSimulationService::ExportMetricsToCSV()
 
     // Add separator and boundary data
     CSVLines.Add(TEXT("")); // Empty line
-    CSVLines.Add(TEXT("PlateA_ID,PlateB_ID,BoundaryType,RelativeVelocity"));
+    CSVLines.Add(TEXT("PlateA_ID,PlateB_ID,BoundaryType,RelativeVelocity,AccumulatedStress_MPa"));
 
     for (const auto& BoundaryPair : Boundaries)
     {
@@ -474,10 +577,11 @@ void UTectonicSimulationService::ExportMetricsToCSV()
             case EBoundaryType::Transform:  BoundaryTypeName = TEXT("Transform"); break;
         }
 
-        CSVLines.Add(FString::Printf(TEXT("%d,%d,%s,%.8f"),
+        CSVLines.Add(FString::Printf(TEXT("%d,%d,%s,%.8f,%.2f"),
             PlateIDs.Key, PlateIDs.Value,
             *BoundaryTypeName,
-            Boundary.RelativeVelocity
+            Boundary.RelativeVelocity,
+            Boundary.AccumulatedStress
         ));
     }
 
@@ -513,6 +617,39 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     CSVLines.Add(FString::Printf(TEXT("ConvergentBoundaries,%d"), ConvergentCount));
     CSVLines.Add(FString::Printf(TEXT("TransformBoundaries,%d"), TransformCount));
 
+    // Milestone 3: Export vertex-level data (stress, velocity, elevation)
+    CSVLines.Add(TEXT("")); // Empty line
+    CSVLines.Add(TEXT("VertexIndex,PositionX,PositionY,PositionZ,PlateID,VelocityX,VelocityY,VelocityZ,VelocityMagnitude,StressMPa,ElevationKm"));
+
+    // Milestone 3 Task 2.4: Compression modulus for stress-to-elevation conversion
+    constexpr double CompressionModulus = 1.0; // 1 MPa = 1 km elevation (simplified)
+
+    const int32 MaxVerticesToExport = FMath::Min(RenderVertices.Num(), 1000); // Limit to first 1000 vertices for CSV size
+    for (int32 i = 0; i < MaxVerticesToExport; ++i)
+    {
+        const FVector3d& Position = RenderVertices[i];
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(i) ? VertexPlateAssignments[i] : INDEX_NONE;
+        const FVector3d& Velocity = VertexVelocities.IsValidIndex(i) ? VertexVelocities[i] : FVector3d::ZeroVector;
+        const double VelocityMag = Velocity.Length();
+        const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
+        const double ElevationKm = (StressMPa / CompressionModulus) * Parameters.ElevationScale;
+
+        CSVLines.Add(FString::Printf(TEXT("%d,%.8f,%.8f,%.8f,%d,%.8f,%.8f,%.8f,%.8f,%.2f,%.2f"),
+            i,
+            Position.X, Position.Y, Position.Z,
+            PlateID,
+            Velocity.X, Velocity.Y, Velocity.Z,
+            VelocityMag,
+            StressMPa,
+            ElevationKm
+        ));
+    }
+
+    if (RenderVertices.Num() > MaxVerticesToExport)
+    {
+        CSVLines.Add(FString::Printf(TEXT("# Note: Vertex data truncated to %d of %d vertices for CSV size"), MaxVerticesToExport, RenderVertices.Num()));
+    }
+
     // Write to file
     const FString CSVContent = FString::Join(CSVLines, TEXT("\n"));
     if (FFileHelper::SaveStringToFile(CSVContent, *FilePath))
@@ -522,5 +659,462 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     else
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to export metrics to: %s"), *FilePath);
+    }
+}
+
+// Milestone 3 Task 1.1: Generate high-density render mesh
+void UTectonicSimulationService::GenerateRenderMesh()
+{
+    RenderVertices.Reset();
+    RenderTriangles.Reset();
+
+    // Start with base icosahedron vertices
+    const double Phi = (1.0 + FMath::Sqrt(5.0)) / 2.0;
+    TArray<FVector3d> Vertices = {
+        FVector3d(-1,  Phi, 0).GetSafeNormal(),
+        FVector3d( 1,  Phi, 0).GetSafeNormal(),
+        FVector3d(-1, -Phi, 0).GetSafeNormal(),
+        FVector3d( 1, -Phi, 0).GetSafeNormal(),
+        FVector3d(0, -1,  Phi).GetSafeNormal(),
+        FVector3d(0,  1,  Phi).GetSafeNormal(),
+        FVector3d(0, -1, -Phi).GetSafeNormal(),
+        FVector3d(0,  1, -Phi).GetSafeNormal(),
+        FVector3d( Phi, 0, -1).GetSafeNormal(),
+        FVector3d( Phi, 0,  1).GetSafeNormal(),
+        FVector3d(-Phi, 0, -1).GetSafeNormal(),
+        FVector3d(-Phi, 0,  1).GetSafeNormal()
+    };
+
+    // Base icosahedron faces (20 triangles)
+    TArray<TArray<int32>> Faces = {
+        {0, 11, 5}, {0, 5, 1}, {0, 1, 7}, {0, 7, 10}, {0, 10, 11},
+        {1, 5, 9}, {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
+        {3, 9, 4}, {3, 4, 2}, {3, 2, 6}, {3, 6, 8}, {3, 8, 9},
+        {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}
+    };
+
+    // Subdivide based on RenderSubdivisionLevel
+    const int32 SubdivLevel = FMath::Clamp(Parameters.RenderSubdivisionLevel, 0, 6);
+
+    for (int32 Level = 0; Level < SubdivLevel; ++Level)
+    {
+        TArray<TArray<int32>> NewFaces;
+        TMap<TPair<int32, int32>, int32> MidpointCache;
+
+        for (const TArray<int32>& Face : Faces)
+        {
+            // Get or create midpoints for each edge
+            const int32 V0 = Face[0];
+            const int32 V1 = Face[1];
+            const int32 V2 = Face[2];
+
+            const int32 A = GetMidpointIndex(V0, V1, MidpointCache, Vertices);
+            const int32 B = GetMidpointIndex(V1, V2, MidpointCache, Vertices);
+            const int32 C = GetMidpointIndex(V2, V0, MidpointCache, Vertices);
+
+            // Split triangle into 4 smaller triangles
+            NewFaces.Add({V0, A, C});
+            NewFaces.Add({V1, B, A});
+            NewFaces.Add({V2, C, B});
+            NewFaces.Add({A, B, C});
+        }
+
+        Faces = MoveTemp(NewFaces);
+    }
+
+    // Store final vertices and triangles
+    RenderVertices = Vertices;
+    RenderTriangles.Reserve(Faces.Num() * 3);
+
+    for (const TArray<int32>& Face : Faces)
+    {
+        RenderTriangles.Add(Face[0]);
+        RenderTriangles.Add(Face[1]);
+        RenderTriangles.Add(Face[2]);
+    }
+
+    const int32 ExpectedFaceCount = 20 * FMath::Pow(4.0f, static_cast<float>(SubdivLevel));
+    UE_LOG(LogTemp, Log, TEXT("Generated render mesh: Level %d, %d vertices, %d triangles (expected %d)"),
+        SubdivLevel, RenderVertices.Num(), Faces.Num(), ExpectedFaceCount);
+
+    // Validate Euler characteristic (V - E + F = 2)
+    const int32 V = RenderVertices.Num();
+    const int32 F = Faces.Num();
+    const int32 E = (F * 3) / 2; // Each edge shared by 2 faces
+    const int32 EulerChar = V - E + F;
+
+    if (EulerChar != 2)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Render mesh Euler characteristic validation failed: V=%d, E=%d, F=%d, χ=%d (expected 2)"),
+            V, E, F, EulerChar);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("Render mesh topology validated: Euler characteristic χ=2"));
+    }
+}
+
+int32 UTectonicSimulationService::GetMidpointIndex(int32 V0, int32 V1, TMap<TPair<int32, int32>, int32>& MidpointCache, TArray<FVector3d>& Vertices)
+{
+    // Ensure consistent edge key ordering
+    const TPair<int32, int32> EdgeKey = (V0 < V1) ? TPair<int32, int32>(V0, V1) : TPair<int32, int32>(V1, V0);
+
+    // Check cache
+    if (const int32* CachedIndex = MidpointCache.Find(EdgeKey))
+    {
+        return *CachedIndex;
+    }
+
+    // Create new midpoint vertex
+    const FVector3d Midpoint = ((Vertices[V0] + Vertices[V1]) * 0.5).GetSafeNormal();
+    const int32 NewIndex = Vertices.Add(Midpoint);
+    MidpointCache.Add(EdgeKey, NewIndex);
+
+    return NewIndex;
+}
+
+// Milestone 3 Task 2.1: Build Voronoi mapping
+void UTectonicSimulationService::BuildVoronoiMapping()
+{
+    VertexPlateAssignments.Reset();
+
+    if (RenderVertices.Num() == 0 || Plates.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot build Voronoi mapping: RenderVertices=%d, Plates=%d"),
+            RenderVertices.Num(), Plates.Num());
+        return;
+    }
+
+    const double StartTime = FPlatformTime::Seconds();
+
+    // For small plate counts (N<50), brute force is faster than KD-tree
+    // due to cache locality and no tree traversal overhead
+    VertexPlateAssignments.SetNumUninitialized(RenderVertices.Num());
+
+    for (int32 i = 0; i < RenderVertices.Num(); ++i)
+    {
+        int32 ClosestPlateID = INDEX_NONE;
+        double MinDistSq = TNumericLimits<double>::Max();
+
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            const double DistSq = FVector3d::DistSquared(RenderVertices[i], Plate.Centroid);
+            if (DistSq < MinDistSq)
+            {
+                MinDistSq = DistSq;
+                ClosestPlateID = Plate.PlateID;
+            }
+        }
+
+        VertexPlateAssignments[i] = ClosestPlateID;
+    }
+
+    const double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
+
+    UE_LOG(LogTemp, Log, TEXT("Built Voronoi mapping: %d vertices → %d plates in %.2f ms (avg %.3f μs per vertex)"),
+        RenderVertices.Num(), Plates.Num(), ElapsedMs, (ElapsedMs * 1000.0) / RenderVertices.Num());
+
+    // Validate all vertices assigned
+    int32 UnassignedCount = 0;
+    for (int32 PlateID : VertexPlateAssignments)
+    {
+        if (PlateID == INDEX_NONE)
+        {
+            UnassignedCount++;
+        }
+    }
+
+    if (UnassignedCount > 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Voronoi mapping incomplete: %d vertices unassigned"), UnassignedCount);
+    }
+}
+
+void UTectonicSimulationService::ComputeVelocityField()
+{
+    // Milestone 3 Task 2.2: Compute per-vertex velocity v = ω × r
+    // where ω = plate's angular velocity vector (EulerPoleAxis * AngularVelocity)
+    // and r = vertex position on unit sphere
+
+    VertexVelocities.SetNumUninitialized(RenderVertices.Num());
+
+    for (int32 i = 0; i < RenderVertices.Num(); ++i)
+    {
+        const int32 PlateID = VertexPlateAssignments[i];
+        if (PlateID == INDEX_NONE)
+        {
+            VertexVelocities[i] = FVector3d::ZeroVector;
+            continue;
+        }
+
+        // Find the plate
+        const FTectonicPlate* Plate = Plates.FindByPredicate([PlateID](const FTectonicPlate& P)
+        {
+            return P.PlateID == PlateID;
+        });
+
+        if (!Plate)
+        {
+            VertexVelocities[i] = FVector3d::ZeroVector;
+            continue;
+        }
+
+        // Compute angular velocity vector: ω = axis * magnitude (rad/My)
+        const FVector3d Omega = Plate->EulerPoleAxis * Plate->AngularVelocity;
+
+        // Compute velocity: v = ω × r
+        // Cross product gives tangent vector in direction of motion
+        const FVector3d Velocity = FVector3d::CrossProduct(Omega, RenderVertices[i]);
+
+        VertexVelocities[i] = Velocity;
+    }
+}
+
+void UTectonicSimulationService::UpdateBoundaryStress(double DeltaTimeMy)
+{
+    // Milestone 3 Task 2.3: COSMETIC STRESS VISUALIZATION (simplified model)
+    // NOT physically accurate - for visual effect only
+
+    constexpr double MaxStressMPa = 100.0; // Cap at 100 MPa (~10km elevation equivalent)
+    constexpr double DecayTimeConstant = 10.0; // τ = 10 My for exponential decay
+
+    for (auto& BoundaryPair : Boundaries)
+    {
+        FPlateBoundary& Boundary = BoundaryPair.Value;
+
+        switch (Boundary.BoundaryType)
+        {
+        case EBoundaryType::Convergent:
+            // Convergent: accumulate stress based on relative velocity
+            // Stress += relativeVelocity × ΔT (simplified linear model)
+            // relativeVelocity is in rad/My, convert to stress units
+            {
+                const double StressRate = Boundary.RelativeVelocity * 1000.0; // Arbitrary scaling for visualization
+                Boundary.AccumulatedStress += StressRate * DeltaTimeMy;
+                Boundary.AccumulatedStress = FMath::Min(Boundary.AccumulatedStress, MaxStressMPa);
+            }
+            break;
+
+        case EBoundaryType::Divergent:
+            // Divergent: exponential decay toward zero
+            // S(t) = S₀ × exp(-Δt/τ)
+            {
+                const double DecayFactor = FMath::Exp(-DeltaTimeMy / DecayTimeConstant);
+                Boundary.AccumulatedStress *= DecayFactor;
+            }
+            break;
+
+        case EBoundaryType::Transform:
+            // Transform: minimal accumulation (small fraction of convergent rate)
+            {
+                const double StressRate = Boundary.RelativeVelocity * 100.0; // 10x less than convergent
+                Boundary.AccumulatedStress += StressRate * DeltaTimeMy;
+                Boundary.AccumulatedStress = FMath::Min(Boundary.AccumulatedStress, MaxStressMPa * 0.5); // Lower cap
+            }
+            break;
+        }
+    }
+}
+
+void UTectonicSimulationService::InterpolateStressToVertices()
+{
+    // Milestone 3 Task 2.3: Interpolate boundary stress to render vertices
+    // Using distance-based Gaussian falloff with σ = 10° angular distance
+
+    VertexStressValues.SetNumZeroed(RenderVertices.Num());
+
+    constexpr double SigmaDegrees = 10.0;
+    const double SigmaRadians = FMath::DegreesToRadians(SigmaDegrees);
+    const double TwoSigmaSquared = 2.0 * SigmaRadians * SigmaRadians;
+
+    // For each vertex, sum weighted contributions from all boundaries
+    for (int32 i = 0; i < RenderVertices.Num(); ++i)
+    {
+        const FVector3d& VertexPos = RenderVertices[i];
+        double TotalWeight = 0.0;
+        double WeightedStress = 0.0;
+
+        for (const auto& BoundaryPair : Boundaries)
+        {
+            const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+            if (Boundary.SharedEdgeVertices.Num() < 2)
+            {
+                continue; // Need at least 2 vertices for boundary edge
+            }
+
+            // Calculate distance from vertex to boundary edge (approximate as midpoint)
+            const int32 V0Index = Boundary.SharedEdgeVertices[0];
+            const int32 V1Index = Boundary.SharedEdgeVertices[1];
+
+            if (!SharedVertices.IsValidIndex(V0Index) || !SharedVertices.IsValidIndex(V1Index))
+            {
+                continue;
+            }
+
+            const FVector3d& EdgeV0 = SharedVertices[V0Index];
+            const FVector3d& EdgeV1 = SharedVertices[V1Index];
+            const FVector3d EdgeMidpoint = (EdgeV0 + EdgeV1).GetSafeNormal();
+
+            // Angular distance from vertex to boundary (great circle distance on unit sphere)
+            const double DotProduct = FVector3d::DotProduct(VertexPos, EdgeMidpoint);
+            const double AngularDistance = FMath::Acos(FMath::Clamp(DotProduct, -1.0, 1.0));
+
+            // Gaussian weight: exp(-distance² / (2σ²))
+            const double Weight = FMath::Exp(-(AngularDistance * AngularDistance) / TwoSigmaSquared);
+
+            WeightedStress += Boundary.AccumulatedStress * Weight;
+            TotalWeight += Weight;
+        }
+
+        if (TotalWeight > 1e-9)
+        {
+            VertexStressValues[i] = WeightedStress / TotalWeight;
+        }
+    }
+}
+
+void UTectonicSimulationService::ApplyLloydRelaxation()
+{
+    // Milestone 3 Task 3.1: Lloyd's algorithm for even centroid distribution
+    // Algorithm:
+    // 1. For each plate, compute Voronoi cell (all render vertices closest to this plate)
+    // 2. Calculate centroid of Voronoi cell (spherical average)
+    // 3. Move plate centroid toward cell centroid (weighted step α = 0.5)
+    // 4. Repeat until convergence (max delta < ε) or max iterations reached
+
+    const int32 MaxIterations = Parameters.LloydIterations;
+    if (MaxIterations <= 0)
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("Lloyd relaxation disabled (iterations=0)"));
+        return;
+    }
+
+    constexpr double ConvergenceThreshold = 0.01; // radians (~0.57°)
+    constexpr double Alpha = 0.5; // Step weight for stability
+
+    UE_LOG(LogTemp, Log, TEXT("Starting Lloyd relaxation with %d iterations, ε=%.4f rad"), MaxIterations, ConvergenceThreshold);
+
+    for (int32 Iteration = 0; Iteration < MaxIterations; ++Iteration)
+    {
+        // Step 1: Assign render vertices to Voronoi cells (compute nearest plate centroid)
+        TArray<TArray<FVector3d>> VoronoiCells;
+        VoronoiCells.SetNum(Plates.Num());
+
+        for (int32 i = 0; i < RenderVertices.Num(); ++i)
+        {
+            // Find nearest plate centroid to this render vertex
+            int32 NearestPlateIdx = 0;
+            double MinDistanceSquared = TNumericLimits<double>::Max();
+
+            for (int32 PlateIdx = 0; PlateIdx < Plates.Num(); ++PlateIdx)
+            {
+                const double DistanceSquared = FVector3d::DistSquared(RenderVertices[i], Plates[PlateIdx].Centroid);
+                if (DistanceSquared < MinDistanceSquared)
+                {
+                    MinDistanceSquared = DistanceSquared;
+                    NearestPlateIdx = PlateIdx;
+                }
+            }
+
+            VoronoiCells[NearestPlateIdx].Add(RenderVertices[i]);
+        }
+
+        // Step 2: Compute cell centroids and update plate centroids
+        double MaxDelta = 0.0;
+
+        for (int32 PlateIdx = 0; PlateIdx < Plates.Num(); ++PlateIdx)
+        {
+            FTectonicPlate& Plate = Plates[PlateIdx];
+            const TArray<FVector3d>& Cell = VoronoiCells[PlateIdx];
+
+            if (Cell.Num() == 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Lloyd iteration %d: Plate %d has empty Voronoi cell"), Iteration, PlateIdx);
+                continue;
+            }
+
+            // Compute spherical centroid (normalized sum of cell vertices)
+            FVector3d CellCentroid = FVector3d::ZeroVector;
+            for (const FVector3d& Vertex : Cell)
+            {
+                CellCentroid += Vertex;
+            }
+            CellCentroid.Normalize();
+
+            // Step 3: Move plate centroid toward cell centroid (weighted)
+            const FVector3d OldCentroid = Plate.Centroid;
+            const FVector3d NewCentroid = ((1.0 - Alpha) * Plate.Centroid + Alpha * CellCentroid).GetSafeNormal();
+            Plate.Centroid = NewCentroid;
+
+            // Track maximum centroid movement for convergence check
+            const double Delta = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(OldCentroid, NewCentroid), -1.0, 1.0));
+            MaxDelta = FMath::Max(MaxDelta, Delta);
+        }
+
+        UE_LOG(LogTemp, Verbose, TEXT("Lloyd iteration %d: max delta = %.6f rad (%.4f°)"),
+            Iteration, MaxDelta, FMath::RadiansToDegrees(MaxDelta));
+
+        // Early termination if converged
+        if (MaxDelta < ConvergenceThreshold)
+        {
+            UE_LOG(LogTemp, Log, TEXT("Lloyd relaxation converged after %d iterations (delta=%.6f rad < ε=%.4f rad)"),
+                Iteration + 1, MaxDelta, ConvergenceThreshold);
+            return;
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Lloyd relaxation completed %d iterations (did not fully converge)"), MaxIterations);
+}
+
+void UTectonicSimulationService::CheckRetessellationNeeded()
+{
+    // Milestone 3 Task 3.3: Framework stub for dynamic re-tessellation detection
+    // Full implementation deferred to M4
+
+    if (InitialPlateCentroids.Num() != Plates.Num())
+    {
+        // Mismatch indicates simulation was reset - re-capture initial positions
+        InitialPlateCentroids.SetNum(Plates.Num());
+        for (int32 i = 0; i < Plates.Num(); ++i)
+        {
+            InitialPlateCentroids[i] = Plates[i].Centroid;
+        }
+        return;
+    }
+
+    const double ThresholdRadians = FMath::DegreesToRadians(Parameters.RetessellationThresholdDegrees);
+    double MaxDrift = 0.0;
+    int32 MaxDriftPlateID = INDEX_NONE;
+
+    for (int32 i = 0; i < Plates.Num(); ++i)
+    {
+        const FVector3d& InitialCentroid = InitialPlateCentroids[i];
+        const FVector3d& CurrentCentroid = Plates[i].Centroid;
+
+        // Angular distance on unit sphere
+        const double DotProduct = FVector3d::DotProduct(InitialCentroid, CurrentCentroid);
+        const double AngularDistance = FMath::Acos(FMath::Clamp(DotProduct, -1.0, 1.0));
+
+        if (AngularDistance > MaxDrift)
+        {
+            MaxDrift = AngularDistance;
+            MaxDriftPlateID = Plates[i].PlateID;
+        }
+    }
+
+    // Log warning if threshold exceeded (M3 behavior - no actual re-tessellation)
+    if (MaxDrift > ThresholdRadians)
+    {
+        if (Parameters.bEnableDynamicRetessellation)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Re-tessellation triggered: Plate %d drifted %.2f° (threshold: %.2f°). Implementation deferred to M4."),
+                MaxDriftPlateID, FMath::RadiansToDegrees(MaxDrift), Parameters.RetessellationThresholdDegrees);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Verbose, TEXT("Re-tessellation would be needed: Plate %d drifted %.2f° (threshold: %.2f°), but bEnableDynamicRetessellation=false"),
+                MaxDriftPlateID, FMath::RadiansToDegrees(MaxDrift), Parameters.RetessellationThresholdDegrees);
+        }
     }
 }
