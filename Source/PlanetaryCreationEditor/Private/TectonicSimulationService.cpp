@@ -341,6 +341,18 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
         NewLevel, RenderVertices.Num(), RenderTriangles.Num() / 3);
 }
 
+void UTectonicSimulationService::SetAutomaticLODEnabled(bool bEnabled)
+{
+    if (Parameters.bEnableAutomaticLOD == bEnabled)
+    {
+        return;
+    }
+
+    Parameters.bEnableAutomaticLOD = bEnabled;
+
+    UE_LOG(LogTemp, Log, TEXT("[LOD] Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+}
+
 void UTectonicSimulationService::GenerateDefaultSphereSamples()
 {
     BaseSphereSamples.Reset();

@@ -691,6 +691,9 @@ public:
      */
     void SetRenderSubdivisionLevel(int32 NewLevel);
 
+    /** Milestone 4 Phase 4.1: Toggle automatic LOD selection without touching simulation history. */
+    void SetAutomaticLODEnabled(bool bEnabled);
+
     /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
     void ExportMetricsToCSV();
 
