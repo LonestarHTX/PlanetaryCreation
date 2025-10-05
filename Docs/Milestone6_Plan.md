@@ -383,7 +383,7 @@ double ComputeOceanicAmplification(const FVector3d& Position, const FOceanicCrus
 **Effort:** 7 days
 **Paper Reference:** Section 5 (Exemplar-Based Generation)
 **Deliverables:**
-- Exemplar library: 10+ real-world DEM patches (USGS SRTM 90m resolution)
+- Exemplar library: 10+ real-world DEM patches (USGS SRTM 90m resolution) — ✅ cataloged via `Docs/StageB_SRTM_Exemplar_Catalog.csv`
 - Terrain type classification: Andean, Himalayan, Old Mountains, Plains
 - Primitive blending system: Weighted heightfield synthesis
 - Fold direction alignment: Rotate primitives to match tectonic fold `f`
@@ -1244,7 +1244,7 @@ bool FAmplificationDeterminismTest::RunTest(const FString& Parameters)
 - [ ] `CLAUDE.md` (updated with M6 patterns)
 
 ### Assets
-- [ ] Exemplar library: 10 USGS SRTM DEM tiles (Andes, Himalayas, Appalachians, Plains)
+- [x] Exemplar library: 19 curated SRTM90 DEM patches (Docs/StageB_SRTM_Exemplar_Catalog.csv)
 - [ ] `UExemplarLibrary` DataAsset (`Content/PlanetaryCreation/Exemplars/`)
 - [ ] Material shaders: PBR with elevation-based coloring
 

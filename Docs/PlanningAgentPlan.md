@@ -77,7 +77,7 @@
   - Implement continental erosion & sediment transport tied to stress/elevation history.
   - Apply SIMD optimizations to stress interpolation/boundary loops and prototype GPU compute for thermal/stress fields.
   - Update automation/CSV exports to include new amplification metrics; reproduce paper figures at Level 7 for parity.
-- **Dependencies:** Milestone 5 data exports, exemplar datasets, profiling harness.
+- **Dependencies:** Milestone 5 data exports, exemplar datasets *(✅ Stage B SRTM catalog & cutter ready)*, profiling harness.
 - **Risks:** Amplification instability, GPU integration complexity; mitigate with staged rollouts and regression tests.
 - **Validation:** Side-by-side parity screenshots vs paper, Level 7 performance within budget (<120 ms), amplification regression suite.
 
