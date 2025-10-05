@@ -22,19 +22,52 @@ void FSphericalKDTree::Build(const TArray<FVector3d>& Points, const TArray<int32
 
 int32 FSphericalKDTree::FindNearest(const FVector3d& Query, double& OutDistanceSq) const
 {
-	if (!RootNode)
-	{
-		OutDistanceSq = TNumericLimits<double>::Max();
-		return INDEX_NONE;
-	}
+        if (!RootNode)
+        {
+                OutDistanceSq = TNumericLimits<double>::Max();
+                return INDEX_NONE;
+        }
 
-	int32 BestID = INDEX_NONE;
-	double BestDistSq = TNumericLimits<double>::Max();
+        int32 BestID = INDEX_NONE;
+        double BestDistSq = TNumericLimits<double>::Max();
 
-	FindNearestRecursive(RootNode.Get(), Query, BestID, BestDistSq);
+        FindNearestRecursive(RootNode.Get(), Query, BestID, BestDistSq);
 
-	OutDistanceSq = BestDistSq;
-	return BestID;
+        OutDistanceSq = BestDistSq;
+        return BestID;
+}
+
+void FSphericalKDTree::FindKNearest(const FVector3d& Query, int32 K, TArray<int32>& OutIDs, TArray<double>* OutDistancesSq) const
+{
+        OutIDs.Reset();
+        if (OutDistancesSq)
+        {
+                OutDistancesSq->Reset();
+        }
+
+        if (!RootNode || K <= 0)
+        {
+                return;
+        }
+
+        TArray<TPair<double, int32>> Best;
+        Best.Reserve(K);
+        FindKNearestRecursive(RootNode.Get(), Query, K, Best);
+
+        OutIDs.Reserve(Best.Num());
+        if (OutDistancesSq)
+        {
+                OutDistancesSq->Reserve(Best.Num());
+        }
+
+        for (const TPair<double, int32>& Neighbor : Best)
+        {
+                OutIDs.Add(Neighbor.Value);
+                if (OutDistancesSq)
+                {
+                        OutDistancesSq->Add(Neighbor.Key);
+                }
+        }
 }
 
 void FSphericalKDTree::Clear()
@@ -78,10 +111,10 @@ TUniquePtr<FSphericalKDTree::FKDNode> FSphericalKDTree::BuildRecursive(TArray<TP
 
 void FSphericalKDTree::FindNearestRecursive(const FKDNode* Node, const FVector3d& Query, int32& BestID, double& BestDistSq) const
 {
-	if (!Node)
-	{
-		return;
-	}
+        if (!Node)
+        {
+                return;
+        }
 
 	// Calculate distance to current node
 	const double DistSq = FVector3d::DistSquared(Query, Node->Point);
@@ -107,5 +140,51 @@ void FSphericalKDTree::FindNearestRecursive(const FKDNode* Node, const FVector3d
 	// For 20 plates, the overhead of searching both branches is negligible (~40 checks total)
 	// vs the O(N) brute force (642*20 = 12,840 checks).
 	// TODO: For larger datasets, implement proper spherical cap intersection test.
-	FindNearestRecursive(FarSide, Query, BestID, BestDistSq);
+        FindNearestRecursive(FarSide, Query, BestID, BestDistSq);
+}
+
+namespace
+{
+        static void InsertCandidate(TArray<TPair<double, int32>>& Best, int32 K, double DistSq, int32 PointID)
+        {
+                if (K <= 0)
+                {
+                        return;
+                }
+
+                int32 InsertIndex = 0;
+                while (InsertIndex < Best.Num() && Best[InsertIndex].Key <= DistSq)
+                {
+                        ++InsertIndex;
+                }
+
+                Best.Insert(TPair<double, int32>(DistSq, PointID), InsertIndex);
+
+                if (Best.Num() > K)
+                {
+                        Best.Pop();
+                }
+        }
+}
+
+void FSphericalKDTree::FindKNearestRecursive(const FKDNode* Node, const FVector3d& Query, int32 K, TArray<TPair<double, int32>>& Best) const
+{
+        if (!Node)
+        {
+                return;
+        }
+
+        const double DistSq = FVector3d::DistSquared(Query, Node->Point);
+        InsertCandidate(Best, K, DistSq, Node->PointID);
+
+        const int32 Axis = Node->SplitAxis;
+        const double AxisDiff = Query[Axis] - Node->Point[Axis];
+
+        const FKDNode* NearSide = (AxisDiff < 0.0) ? Node->Left.Get() : Node->Right.Get();
+        const FKDNode* FarSide = (AxisDiff < 0.0) ? Node->Right.Get() : Node->Left.Get();
+
+        FindKNearestRecursive(NearSide, Query, K, Best);
+
+        // For small spherical datasets we still traverse both sides to maintain correctness.
+        FindKNearestRecursive(FarSide, Query, K, Best);
 }

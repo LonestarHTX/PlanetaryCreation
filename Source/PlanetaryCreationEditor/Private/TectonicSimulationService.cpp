@@ -1235,6 +1235,146 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     }
 }
 
+void UTectonicSimulationService::TransferElevationFromPreviousMesh(const TArray<FVector3d>& OldVertices, const TArray<double>& OldElevations, const TArray<double>& OldAmplifiedElevations)
+{
+    const int32 NewVertexCount = RenderVertices.Num();
+
+    if (NewVertexCount == 0)
+    {
+        VertexElevationValues.Reset();
+        VertexAmplifiedElevation.Reset();
+        return;
+    }
+
+    VertexElevationValues.SetNum(NewVertexCount);
+    VertexAmplifiedElevation.SetNum(NewVertexCount);
+
+    if (OldVertices.Num() == 0 || OldElevations.Num() != OldVertices.Num())
+    {
+        for (int32 VertexIdx = 0; VertexIdx < NewVertexCount; ++VertexIdx)
+        {
+            VertexElevationValues[VertexIdx] = 0.0;
+            VertexAmplifiedElevation[VertexIdx] = 0.0;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Missing prior elevation data; defaulting to 0 m for %d vertices."),
+            NewVertexCount);
+        return;
+    }
+
+    FSphericalKDTree KDTree;
+    TArray<int32> PointIDs;
+    PointIDs.Reserve(OldVertices.Num());
+    for (int32 Index = 0; Index < OldVertices.Num(); ++Index)
+    {
+        PointIDs.Add(Index);
+    }
+    KDTree.Build(OldVertices, PointIDs);
+
+    if (!KDTree.IsValid())
+    {
+        for (int32 VertexIdx = 0; VertexIdx < NewVertexCount; ++VertexIdx)
+        {
+            VertexElevationValues[VertexIdx] = 0.0;
+            VertexAmplifiedElevation[VertexIdx] = 0.0;
+        }
+        UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] KD-tree build failed; elevations reset to 0 m for %d vertices."),
+            NewVertexCount);
+        return;
+    }
+
+    const int32 NeighborCount = FMath::Min(3, OldVertices.Num());
+    const bool bHasAmplifiedData = (OldAmplifiedElevations.Num() == OldVertices.Num());
+
+    TArray<int32> NeighborIDs;
+    NeighborIDs.Reserve(NeighborCount);
+
+    TArray<double> NeighborDistances;
+    NeighborDistances.Reserve(NeighborCount);
+
+    double MaxDeviation = 0.0;
+
+    for (int32 VertexIdx = 0; VertexIdx < NewVertexCount; ++VertexIdx)
+    {
+        const FVector3d& NewVertex = RenderVertices[VertexIdx];
+
+        NeighborIDs.Reset();
+        NeighborDistances.Reset();
+        KDTree.FindKNearest(NewVertex, NeighborCount, NeighborIDs, &NeighborDistances);
+
+        double InterpolatedElevation = 0.0;
+        double InterpolatedAmplified = 0.0;
+        double WeightSum = 0.0;
+        bool bUsedExactMatch = false;
+
+        for (int32 NeighborIdx = 0; NeighborIdx < NeighborIDs.Num(); ++NeighborIdx)
+        {
+            const int32 OldIndex = NeighborIDs[NeighborIdx];
+            if (!OldElevations.IsValidIndex(OldIndex))
+            {
+                continue;
+            }
+
+            const double DistSq = NeighborDistances.IsValidIndex(NeighborIdx)
+                ? NeighborDistances[NeighborIdx]
+                : FVector3d::DistSquared(NewVertex, OldVertices[OldIndex]);
+
+            if (DistSq <= KINDA_SMALL_NUMBER)
+            {
+                InterpolatedElevation = OldElevations[OldIndex];
+                InterpolatedAmplified = bHasAmplifiedData ? OldAmplifiedElevations[OldIndex] : OldElevations[OldIndex];
+                bUsedExactMatch = true;
+                WeightSum = 1.0;
+                break;
+            }
+
+            const double Distance = FMath::Sqrt(DistSq);
+            const double Weight = 1.0 / FMath::Max(Distance, 1e-6);
+
+            InterpolatedElevation += OldElevations[OldIndex] * Weight;
+            if (bHasAmplifiedData)
+            {
+                InterpolatedAmplified += OldAmplifiedElevations[OldIndex] * Weight;
+            }
+            else
+            {
+                InterpolatedAmplified += OldElevations[OldIndex] * Weight;
+            }
+
+            WeightSum += Weight;
+        }
+
+        if (!bUsedExactMatch)
+        {
+            if (WeightSum > 0.0)
+            {
+                InterpolatedElevation /= WeightSum;
+                InterpolatedAmplified /= WeightSum;
+            }
+            else
+            {
+                InterpolatedElevation = 0.0;
+                InterpolatedAmplified = InterpolatedElevation;
+            }
+        }
+
+        VertexElevationValues[VertexIdx] = InterpolatedElevation;
+        VertexAmplifiedElevation[VertexIdx] = InterpolatedAmplified;
+
+        if (NeighborIDs.Num() > 0)
+        {
+            const int32 ClosestIndex = NeighborIDs[0];
+            if (OldElevations.IsValidIndex(ClosestIndex))
+            {
+                MaxDeviation = FMath::Max(MaxDeviation, FMath::Abs(InterpolatedElevation - OldElevations[ClosestIndex]));
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Transferred elevations to %d vertices (max Δ=%.2f m)"),
+        NewVertexCount, MaxDeviation);
+}
+
 void UTectonicSimulationService::ComputeVelocityField()
 {
     // Milestone 3 Task 2.2: Compute per-vertex velocity v = ω × r

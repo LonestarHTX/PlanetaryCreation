@@ -905,6 +905,9 @@ private:
     /** Milestone 3 Task 2.1: Build Voronoi mapping from render vertices to plates. */
     void BuildVoronoiMapping();
 
+    /** Transfer pre-retessellation elevation data onto regenerated render mesh. */
+    void TransferElevationFromPreviousMesh(const TArray<FVector3d>& OldVertices, const TArray<double>& OldElevations, const TArray<double>& OldAmplifiedElevations);
+
     /** Milestone 3 Task 2.2: Compute per-vertex velocity field (v = ω × r). */
     void ComputeVelocityField();
 
