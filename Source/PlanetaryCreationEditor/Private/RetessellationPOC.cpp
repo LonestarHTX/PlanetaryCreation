@@ -234,6 +234,11 @@ bool UTectonicSimulationService::PerformRetessellation()
             const bool bIsOceanic = (Plates[PlateIdx].CrustType == ECrustType::Oceanic);
             // Only reset elevation if it's inconsistent with current plate type
             // Oceanic should be deeply negative (abyssal plains), continental should be near sea level
+            // CRITICAL: Check bounds before accessing VertexElevationValues (may not be resized yet)
+            if (!VertexElevationValues.IsValidIndex(VertexIdx))
+            {
+                continue;
+            }
             const bool bElevationMatchesType = bIsOceanic ?
                 (VertexElevationValues[VertexIdx] < PaperElevationConstants::SeaLevel_m) :
                 (VertexElevationValues[VertexIdx] >= PaperElevationConstants::SeaLevel_m - 500.0); // Allow some erosion below sea level
