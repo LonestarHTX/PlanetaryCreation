@@ -2341,6 +2341,19 @@ void UTectonicSimulationService::ComputeRidgeDirections()
     const int32 VertexCount = RenderVertices.Num();
     checkf(VertexRidgeDirections.Num() == VertexCount, TEXT("VertexRidgeDirections not initialized"));
 
+    const auto IsPlateInBoundary = [](const TPair<int32, int32>& BoundaryKey, int32 PlateID)
+    {
+        return BoundaryKey.Key == PlateID || BoundaryKey.Value == PlateID;
+    };
+
+    const auto ComputeSegmentTangent = [](const FVector3d& PlaneNormal, const FVector3d& PointOnGreatCircle)
+    {
+        const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, PointOnGreatCircle).GetSafeNormal();
+        return Tangent.IsNearlyZero() ? FVector3d::ZAxisVector : Tangent;
+    };
+
+    const double SegmentAngleTolerance = 1e-3; // Radians
+
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
@@ -2361,6 +2374,8 @@ void UTectonicSimulationService::ComputeRidgeDirections()
             continue;
         }
 
+        const FVector3d VertexNormal = VertexPosition.GetSafeNormal();
+
         // Find nearest divergent boundary involving this plate
         FVector3d NearestBoundaryTangent = FVector3d::ZAxisVector; // Default fallback
         double MinDistance = TNumericLimits<double>::Max();
@@ -2374,30 +2389,66 @@ void UTectonicSimulationService::ComputeRidgeDirections()
             if (Boundary.BoundaryType != EBoundaryType::Divergent)
                 continue;
 
-            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+            if (!IsPlateInBoundary(BoundaryKey, PlateID))
                 continue;
 
             // Boundary is defined by shared edge vertices
             if (Boundary.SharedEdgeVertices.Num() < 2)
                 continue;
 
-            // Compute distance from vertex to boundary (simplified: distance to first edge vertex)
-            const int32 EdgeVertexIdx = Boundary.SharedEdgeVertices[0];
-            if (!SharedVertices.IsValidIndex(EdgeVertexIdx))
-                continue;
-
-            const FVector3d& EdgeVertex = SharedVertices[EdgeVertexIdx];
-            const double Distance = FVector3d::Distance(VertexPosition, EdgeVertex);
-
-            if (Distance < MinDistance)
+            for (int32 EdgeIdx = 0; EdgeIdx < Boundary.SharedEdgeVertices.Num() - 1; ++EdgeIdx)
             {
-                MinDistance = Distance;
+                const int32 EdgeV0Idx = Boundary.SharedEdgeVertices[EdgeIdx];
+                const int32 EdgeV1Idx = Boundary.SharedEdgeVertices[EdgeIdx + 1];
+                if (!SharedVertices.IsValidIndex(EdgeV0Idx) || !SharedVertices.IsValidIndex(EdgeV1Idx))
+                {
+                    continue;
+                }
 
-                // Ridge direction = tangent to boundary on sphere surface
-                // Tangent is perpendicular to both radius and edge-to-vertex direction
-                const FVector3d RadialDir = VertexPosition.GetSafeNormal();
-                const FVector3d ToEdge = (EdgeVertex - VertexPosition).GetSafeNormal();
-                NearestBoundaryTangent = FVector3d::CrossProduct(RadialDir, ToEdge).GetSafeNormal();
+                const FVector3d EdgeV0 = SharedVertices[EdgeV0Idx].GetSafeNormal();
+                const FVector3d EdgeV1 = SharedVertices[EdgeV1Idx].GetSafeNormal();
+
+                const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
+                if (PlaneNormal.IsNearlyZero())
+                {
+                    continue;
+                }
+
+                // Project vertex onto plane of great circle
+                const double Projection = FVector3d::DotProduct(VertexNormal, PlaneNormal);
+                const FVector3d Projected = (VertexNormal - Projection * PlaneNormal);
+                if (Projected.IsNearlyZero())
+                {
+                    continue;
+                }
+
+                const FVector3d GreatCirclePoint = Projected.GetSafeNormal();
+
+                const double ArcAB = FMath::Acos(FMath::Clamp(EdgeV0 | EdgeV1, -1.0, 1.0));
+                const double ArcAC = FMath::Acos(FMath::Clamp(EdgeV0 | GreatCirclePoint, -1.0, 1.0));
+                const double ArcCB = FMath::Acos(FMath::Clamp(GreatCirclePoint | EdgeV1, -1.0, 1.0));
+
+                const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + SegmentAngleTolerance);
+
+                auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
+                {
+                    const double AngularDistance = FMath::Acos(FMath::Clamp(VertexNormal | PointOnCircle, -1.0, 1.0));
+                    if (AngularDistance < MinDistance)
+                    {
+                        MinDistance = AngularDistance;
+                        NearestBoundaryTangent = ComputeSegmentTangent(PlaneNormal, PointOnCircle);
+                    }
+                };
+
+                if (bWithinSegment)
+                {
+                    ConsiderPoint(GreatCirclePoint);
+                }
+                else
+                {
+                    ConsiderPoint(EdgeV0);
+                    ConsiderPoint(EdgeV1);
+                }
             }
         }
 

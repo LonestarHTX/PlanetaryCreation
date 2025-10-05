@@ -72,8 +72,12 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexAmplifiedElevation = Service->GetVertexAmplifiedElevation(); // M6 Task 2.1: Stage B amplified elevation
         Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
         Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
-        Snapshot.bUseAmplifiedElevation = Service->GetParameters().bEnableOceanicAmplification &&
-                                          Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
+        const FTectonicSimulationParameters& Parameters = Service->GetParameters();
+        const bool bAmplificationEnabled = (Parameters.bEnableOceanicAmplification ||
+            Parameters.bEnableContinentalAmplification);
+
+        Snapshot.bUseAmplifiedElevation = bAmplificationEnabled &&
+                                          Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
     }
 
     // Capture visualization state from controller
@@ -618,6 +622,14 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
     constexpr double CompressionModulus = 100.0; // 1 MPa = 100 m elevation (cosmetic visualization)
     constexpr double MaxElevationMeters = 10000.0; // ±10 km clamp
 
+    auto VertexToEquirectangularUV = [](const FVector3f& Direction) -> FVector2f
+    {
+        const FVector3f Normalized = Direction.GetSafeNormal();
+        const double U = 0.5 + (FMath::Atan2(Normalized.Y, Normalized.X) / (2.0 * PI));
+        const double V = 0.5 - (FMath::Asin(FMath::Clamp<double>(Normalized.Z, -1.0, 1.0)) / PI);
+        return FVector2f(static_cast<float>(U), static_cast<float>(V));
+    };
+
     for (int32 i = 0; i < RenderVertices.Num(); ++i)
     {
         const FVector3d& Vertex = RenderVertices[i];
@@ -672,7 +684,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
         // Calculate tangent for proper lighting
         const FVector3f UpVector = (FMath::Abs(Normal.Z) > 0.99f) ? FVector3f(1.0f, 0.0f, 0.0f) : FVector3f(0.0f, 0.0f, 1.0f);
         const FVector3f TangentX = FVector3f::CrossProduct(Normal, UpVector).GetSafeNormal();
-        const FVector2f TexCoord((Normal.X + 1.0f) * 0.5f, (Normal.Y + 1.0f) * 0.5f);
+        const FVector2f TexCoord = VertexToEquirectangularUV(Normal);
 
         const int32 VertexId = Builder.AddVertex(Position)
             .SetNormalAndTangent(Normal, TangentX)

@@ -2,6 +2,7 @@
 // Generates color-coded PNG showing elevation gradient
 
 #include "Misc/AutomationTest.h"
+#include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHeightmapVisualizationTest,
@@ -41,6 +42,46 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
     {
         UE_LOG(LogTemp, Log, TEXT("✅ Heightmap visualization exported to: %s"), *OutputPath);
         AddInfo(FString::Printf(TEXT("Heightmap exported to: %s"), *OutputPath));
+    }
+
+    // Verify continental amplification enables amplified displacement even without oceanic amplification.
+    {
+        FTectonicSimulationParameters ContinentalOnlyParams = Params;
+        ContinentalOnlyParams.bEnableOceanicAmplification = false;
+        ContinentalOnlyParams.bEnableContinentalAmplification = true;
+        Service->SetParameters(ContinentalOnlyParams);
+        Service->AdvanceSteps(5);
+
+        FTectonicSimulationController Controller;
+        Controller.Initialize();
+
+        const FMeshBuildSnapshot Snapshot = Controller.CreateMeshBuildSnapshot();
+        TestTrue(TEXT("Continental-only amplification enables Stage B elevations"), Snapshot.bUseAmplifiedElevation);
+
+        bool bFoundContinentalAmplification = false;
+        for (int32 VertexIdx = 0; VertexIdx < Snapshot.RenderVertices.Num(); ++VertexIdx)
+        {
+            if (!Snapshot.VertexAmplifiedElevation.IsValidIndex(VertexIdx) ||
+                !Snapshot.VertexElevationValues.IsValidIndex(VertexIdx))
+            {
+                continue;
+            }
+
+            const double Difference = FMath::Abs(Snapshot.VertexAmplifiedElevation[VertexIdx] - Snapshot.VertexElevationValues[VertexIdx]);
+            if (Difference > 1.0)
+            {
+                bFoundContinentalAmplification = true;
+                break;
+            }
+        }
+
+        TestTrue(TEXT("At least one vertex shows continental Stage B displacement"), bFoundContinentalAmplification);
+
+        Controller.Shutdown();
+
+        // Restore combined amplification parameters for downstream tests.
+        Service->SetParameters(Params);
+        Service->AdvanceSteps(1);
     }
 
     return true;
