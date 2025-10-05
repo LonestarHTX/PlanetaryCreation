@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshDataStream.h"
 #include "OrbitCameraController.h"
+#include "TectonicSimulationService.h"
 
 class UTectonicSimulationService;
 
@@ -30,6 +31,9 @@ struct FMeshBuildSnapshot
 
     /** Milestone 5 Phase 3: Planet radius in meters (for unit conversion to UE centimeters). */
     double PlanetRadius = 127400.0;
+
+    /** Milestone 6 Task 2.3: Simulation parameters (needed for heightmap visualization toggle). */
+    FTectonicSimulationParameters Parameters;
 };
 
 /** Milestone 4 Phase 4.2: Cached LOD mesh snapshot (snapshot of simulation state, not StreamSet). */
