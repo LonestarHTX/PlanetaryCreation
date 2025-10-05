@@ -207,6 +207,12 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             ApplyOceanicAmplification();
         }
 
+        // Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based)
+        if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
+        {
+            ApplyContinentalAmplification();
+        }
+
         // Milestone 4 Task 1.2: Detect and execute plate splits/merges
         if (Parameters.bEnablePlateTopologyChanges)
         {
@@ -2317,6 +2323,11 @@ double ComputeGaborNoiseApproximation(const FVector3d& Position, const FVector3d
 double ComputeOceanicAmplification(const FVector3d& Position, int32 PlateID, double CrustAge_My, double BaseElevation_m,
     const FVector3d& RidgeDirection, const TArray<FTectonicPlate>& Plates, const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries);
 
+// Forward declarations from ContinentalAmplification.cpp
+double ComputeContinentalAmplification(const FVector3d& Position, int32 PlateID, double BaseElevation_m,
+    const TArray<FTectonicPlate>& Plates, const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
+    double OrogenyAge_My, EBoundaryType NearestBoundaryType, const FString& ProjectContentDir, int32 Seed);
+
 void UTectonicSimulationService::ComputeRidgeDirections()
 {
     // Paper Section 5: "using the recorded parameters r_c, i.e. the local direction parallel to the ridge"
@@ -2435,6 +2446,82 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
             RidgeDirection,
             Plates,
             Boundaries
+        );
+
+        VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;
+    }
+
+    // Milestone 4 Phase 4.2: Increment surface data version (elevation changed)
+    SurfaceDataVersion++;
+}
+
+// ============================================================================
+// Milestone 6 Task 2.2: Continental Amplification (Stage B)
+// ============================================================================
+
+void UTectonicSimulationService::ApplyContinentalAmplification()
+{
+    // Paper Section 5: Apply exemplar-based amplification to continental crust
+    // Terrain type classification + heightfield blending
+
+    const int32 VertexCount = RenderVertices.Num();
+    checkf(VertexAmplifiedElevation.Num() == VertexCount, TEXT("VertexAmplifiedElevation not initialized"));
+    checkf(VertexElevationValues.Num() == VertexCount, TEXT("VertexElevationValues not initialized (must run erosion first)"));
+    checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized"));
+
+    // Get project content directory for loading exemplar data
+    const FString ProjectContentDir = FPaths::ProjectContentDir();
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const FVector3d& VertexPosition = RenderVertices[VertexIdx];
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        const double BaseElevation_m = VertexAmplifiedElevation[VertexIdx]; // Use oceanic-amplified elevation as base
+        const double CrustAge_My = VertexCrustAge[VertexIdx];
+
+        // Compute orogeny age and nearest boundary type (simplified for now)
+        // TODO: Track orogeny age per-vertex in future milestone
+        const double OrogenyAge_My = CrustAge_My; // Approximate: use crust age as orogeny age
+        EBoundaryType NearestBoundaryType = EBoundaryType::Transform; // Default
+
+        // Find nearest convergent boundary (for orogeny detection)
+        double MinDistanceToBoundary = TNumericLimits<double>::Max();
+        for (const auto& BoundaryPair : Boundaries)
+        {
+            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+            const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+                continue;
+
+            // Simplified distance check (would need proper geodesic distance)
+            if (Boundary.SharedEdgeVertices.Num() > 0)
+            {
+                // Use first vertex as representative
+                const int32 BoundaryVertexIdx = Boundary.SharedEdgeVertices[0];
+                if (RenderVertices.IsValidIndex(BoundaryVertexIdx))
+                {
+                    const double Distance = FVector3d::Distance(VertexPosition, RenderVertices[BoundaryVertexIdx]);
+                    if (Distance < MinDistanceToBoundary)
+                    {
+                        MinDistanceToBoundary = Distance;
+                        NearestBoundaryType = Boundary.BoundaryType;
+                    }
+                }
+            }
+        }
+
+        // Call amplification function from ContinentalAmplification.cpp
+        const double AmplifiedElevation = ComputeContinentalAmplification(
+            VertexPosition,
+            PlateID,
+            BaseElevation_m,
+            Plates,
+            Boundaries,
+            OrogenyAge_My,
+            NearestBoundaryType,
+            ProjectContentDir,
+            Parameters.Seed
         );
 
         VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;

@@ -32,7 +32,10 @@ public class PlanetaryCreationEditor : ModuleRules
             "Blutility",
             "EditorStyle",
             "UMG",
-            "WorkspaceMenuStructure"
+            "WorkspaceMenuStructure",
+            "ImageWrapper",
+            "Json",
+            "JsonUtilities"
         });
     }
 }

@@ -532,6 +532,13 @@ struct FTectonicSimulationParameters
     bool bEnableOceanicAmplification = false;
 
     /**
+     * Milestone 6 Task 2.2: Enable Stage B continental amplification (exemplar-based terrain synthesis).
+     * Default false for backward compatibility. Set true to activate continental amplification.
+     */
+    UPROPERTY()
+    bool bEnableContinentalAmplification = false;
+
+    /**
      * Milestone 6 Task 2.1: Minimum render subdivision level for amplification.
      * Amplification only applies at LOD levels >= this value (prevents wasted computation at low LOD).
      * Default 5 (10,242 vertices, high-detail preview per plan).
@@ -925,6 +932,9 @@ private:
 
     /** Milestone 6 Task 2.1: Apply Stage B oceanic amplification (transform faults, fine detail). */
     void ApplyOceanicAmplification();
+
+    /** Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based terrain synthesis). */
+    void ApplyContinentalAmplification();
 
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
