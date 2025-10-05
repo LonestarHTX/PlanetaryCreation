@@ -69,10 +69,16 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexPlateAssignments = Service->GetVertexPlateAssignments();
         Snapshot.VertexVelocities = Service->GetVertexVelocities();
         Snapshot.VertexStressValues = Service->GetVertexStressValues();
-        Snapshot.VertexElevationValues = Service->GetVertexElevationValues(); // M5 Phase 3.7: Use actual elevations from erosion
+
+        // Copy erosion-driven elevation directly from the simulation service.
+        const TArray<double>& ServiceElevationValues = Service->GetVertexElevationValues();
+        Snapshot.VertexElevationValues = ServiceElevationValues; // M5 Phase 3.7: Use actual elevations from erosion
         Snapshot.VertexAmplifiedElevation = Service->GetVertexAmplifiedElevation(); // M6 Task 2.1: Stage B amplified elevation
-        Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
-        Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
+
+        const FTectonicSimulationParameters& Parameters = Service->GetParameters();
+        Snapshot.ElevationScale = Parameters.ElevationScale;
+        Snapshot.PlanetRadius = Parameters.PlanetRadius; // M5 Phase 3: For unit conversion
+        Snapshot.Parameters = Parameters; // M6 Task 2.3: For heightmap visualization mode
 
         // DEBUG: Log elevation array state
         if (Snapshot.VertexElevationValues.Num() > 0)
@@ -87,11 +93,17 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         {
             UE_LOG(LogTemp, Error, TEXT("[DEBUG] Snapshot VertexElevationValues is EMPTY!"));
         }
+
+        if (Snapshot.Parameters.bEnableHeightmapVisualization &&
+            Snapshot.VertexElevationValues.Num() != Snapshot.RenderVertices.Num())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Heightmap visualization requested but elevation array size is %d (expected %d)"),
+                Snapshot.VertexElevationValues.Num(), Snapshot.RenderVertices.Num());
+        }
         // M6 Task 2.3: Enable amplified elevation if EITHER oceanic OR continental amplification is active
-        Snapshot.bUseAmplifiedElevation = (Service->GetParameters().bEnableOceanicAmplification ||
-                                           Service->GetParameters().bEnableContinentalAmplification) &&
-                                          Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
-        Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
+        Snapshot.bUseAmplifiedElevation = (Parameters.bEnableOceanicAmplification ||
+                                           Parameters.bEnableContinentalAmplification) &&
+                                          Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
 
         // DEBUG: Log heightmap visualization state
         UE_LOG(LogTemp, Warning, TEXT("[DEBUG] CreateMeshBuildSnapshot: bEnableHeightmapVisualization = %s"),
