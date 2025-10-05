@@ -614,9 +614,7 @@ void SPTectonicToolPanel::OnSubdivisionValueCommitted(int32 NewValue, ETextCommi
     {
         if (UTectonicSimulationService* Service = Controller->GetSimulationService())
         {
-            FTectonicSimulationParameters NewParams = Service->GetParameters();
-            NewParams.RenderSubdivisionLevel = CachedSubdivisionLevel;
-            Service->SetParameters(NewParams);
+            Service->SetRenderSubdivisionLevel(CachedSubdivisionLevel);
 
             // Refresh preview mesh
             Controller->RebuildPreview();
