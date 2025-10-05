@@ -44,3 +44,14 @@ Thumbs.db
 # Optional: uncomment to use Git LFS for large binary assets
 # *.uasset filter=lfs diff=lfs merge=lfs -text
 # *.umap filter=lfs diff=lfs merge=lfs -text
+*_key.txt
+
+# Stage B SRTM data (binary files - don't commit)
+StageB_SRTM90/raw/*.tif
+StageB_SRTM90/cropped/*.tif
+Content/PlanetaryCreation/Exemplars/COG/*.tif
+Content/PlanetaryCreation/Exemplars/PNG16/*.png
+
+# BUT keep manifests and documentation
+!StageB_SRTM90/metadata/*.json
+!Content/PlanetaryCreation/Exemplars/*.json

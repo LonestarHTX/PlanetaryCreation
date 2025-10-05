@@ -1,6 +1,621 @@
 {
   "version": 1,
-  "exemplars": []
+  "exemplars": [
+    {
+      "id": "O01",
+      "name": "Ancient - Great Smoky Mountains",
+      "region": "Ancient",
+      "feature": "Great Smoky Mountains",
+      "cog_path": "Exemplars/COG/O01.tif",
+      "png16_path": "Exemplars/PNG16/O01.png",
+      "elevation_min_m": 228.6391143798828,
+      "elevation_max_m": 1678.884765625,
+      "elevation_mean_m": 675.057340378873,
+      "elevation_stddev_m": 311.20635760572736,
+      "bounds": {
+        "west": -84.40013888887623,
+        "south": 35.20013888888561,
+        "east": -83.60013888887613,
+        "north": 35.9001388888857
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000001887
+      },
+      "source_tiles": [
+        "N35W084"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "O02",
+      "name": "Ancient - Blue Ridge (Virginia)",
+      "region": "Ancient",
+      "feature": "Blue Ridge (Virginia)",
+      "cog_path": "Exemplars/COG/O02.tif",
+      "png16_path": "Exemplars/PNG16/O02.png",
+      "elevation_min_m": 136.27737426757812,
+      "elevation_max_m": 1268.002197265625,
+      "elevation_mean_m": 466.0807592188579,
+      "elevation_stddev_m": 200.8965837274348,
+      "bounds": {
+        "west": -79.80013888887562,
+        "south": 37.40013888888589,
+        "east": -79.00013888887553,
+        "north": 38.100138888885986
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000001887
+      },
+      "source_tiles": [
+        "N37W080"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "O03",
+      "name": "Ancient - Scottish Cairngorms",
+      "region": "Ancient",
+      "feature": "Scottish Cairngorms",
+      "cog_path": "Exemplars/COG/O03.tif",
+      "png16_path": "Exemplars/PNG16/O03.png",
+      "elevation_min_m": 35.851341247558594,
+      "elevation_max_m": 1142.3763427734375,
+      "elevation_mean_m": 481.59846589210804,
+      "elevation_stddev_m": 212.7166922526665,
+      "bounds": {
+        "west": -3.9501388888655575,
+        "south": 56.60013888888844,
+        "east": -3.1001388888654446,
+        "north": 57.30013888888853
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0016601562500002205
+      },
+      "source_tiles": [
+        "N56W004"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "O05",
+      "name": "Ancient - Drakensberg high escarpment",
+      "region": "Ancient",
+      "feature": "Drakensberg high escarpment",
+      "cog_path": "Exemplars/COG/O05.tif",
+      "png16_path": "Exemplars/PNG16/O05.png",
+      "elevation_min_m": 956.6465454101562,
+      "elevation_max_m": 3209.064453125,
+      "elevation_mean_m": 1329.7596667649968,
+      "elevation_stddev_m": 377.7765242238929,
+      "bounds": {
+        "west": 28.999861111138785,
+        "south": -29.199861111122935,
+        "east": 29.799861111138892,
+        "north": -28.499861111122843
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002096
+      },
+      "source_tiles": [
+        "S29E029"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A01",
+      "name": "Andean - Cordillera Blanca",
+      "region": "Andean",
+      "feature": "Cordillera Blanca",
+      "cog_path": "Exemplars/COG/A01.tif",
+      "png16_path": "Exemplars/PNG16/A01.png",
+      "elevation_min_m": 1927.36083984375,
+      "elevation_max_m": 5875.8603515625,
+      "elevation_mean_m": 3516.9586186278357,
+      "elevation_stddev_m": 896.4093222258637,
+      "bounds": {
+        "west": -77.90013888887538,
+        "south": -9.59986111112033,
+        "east": -77.10013888887526,
+        "north": -8.899861111120238
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "S09W078"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A02",
+      "name": "Andean - Huayhuash knot",
+      "region": "Andean",
+      "feature": "Huayhuash knot",
+      "cog_path": "Exemplars/COG/A02.tif",
+      "png16_path": "Exemplars/PNG16/A02.png",
+      "elevation_min_m": 1845.608642578125,
+      "elevation_max_m": 4634.36572265625,
+      "elevation_mean_m": 3642.1300351256505,
+      "elevation_stddev_m": 569.4486950451156,
+      "bounds": {
+        "west": -76.95013888887524,
+        "south": -10.29986111112042,
+        "east": -76.20013888887514,
+        "north": -9.69986111112034
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0014648437500001943
+      },
+      "source_tiles": [
+        "S10W077"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A03",
+      "name": "Andean - Vilcabamba (Cusco)",
+      "region": "Andean",
+      "feature": "Vilcabamba (Cusco)",
+      "cog_path": "Exemplars/COG/A03.tif",
+      "png16_path": "Exemplars/PNG16/A03.png",
+      "elevation_min_m": 571.745361328125,
+      "elevation_max_m": 4324.43310546875,
+      "elevation_mean_m": 1859.863945708946,
+      "elevation_stddev_m": 808.7007683776562,
+      "bounds": {
+        "west": -73.80013888887483,
+        "south": -13.199861111120804,
+        "east": -73.10013888887474,
+        "north": -12.599861111120724
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.001367187500000172
+      },
+      "source_tiles": [
+        "S13W074"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A04",
+      "name": "Andean - Ausangate\u2013Sibinacocha",
+      "region": "Andean",
+      "feature": "Ausangate\u2013Sibinacocha",
+      "cog_path": "Exemplars/COG/A04.tif",
+      "png16_path": "Exemplars/PNG16/A04.png",
+      "elevation_min_m": 4219.30224609375,
+      "elevation_max_m": 5657.11279296875,
+      "elevation_mean_m": 4810.464474978512,
+      "elevation_stddev_m": 282.8244735423329,
+      "bounds": {
+        "west": -71.40013888887451,
+        "south": -14.599861111120997,
+        "east": -70.60013888887441,
+        "north": -13.899861111120906
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000001887
+      },
+      "source_tiles": [
+        "S14W071"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A05",
+      "name": "Andean - Lake Titicaca escarpment",
+      "region": "Andean",
+      "feature": "Lake Titicaca escarpment",
+      "cog_path": "Exemplars/COG/A05.tif",
+      "png16_path": "Exemplars/PNG16/A05.png",
+      "elevation_min_m": 1598.8388671875,
+      "elevation_max_m": 5038.1083984375,
+      "elevation_mean_m": 3618.377169214189,
+      "elevation_stddev_m": 709.8440826228396,
+      "bounds": {
+        "west": -69.60013888887427,
+        "south": -15.799861111121148,
+        "east": -68.80013888887416,
+        "north": -15.099861111121056
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "S16W069"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A06",
+      "name": "Andean - Nevado Sajama",
+      "region": "Andean",
+      "feature": "Nevado Sajama",
+      "cog_path": "Exemplars/COG/A06.tif",
+      "png16_path": "Exemplars/PNG16/A06.png",
+      "elevation_min_m": 3781.86474609375,
+      "elevation_max_m": 6535.11181640625,
+      "elevation_mean_m": 4092.685104370117,
+      "elevation_stddev_m": 298.61037850068,
+      "bounds": {
+        "west": -69.30013888887423,
+        "south": -18.59986111112152,
+        "east": -68.50013888887412,
+        "north": -17.899861111121428
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "S19W069"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A07",
+      "name": "Andean - Potos\u00ed cordillera",
+      "region": "Andean",
+      "feature": "Potos\u00ed cordillera",
+      "cog_path": "Exemplars/COG/A07.tif",
+      "png16_path": "Exemplars/PNG16/A07.png",
+      "elevation_min_m": 3066.7109375,
+      "elevation_max_m": 4993.72021484375,
+      "elevation_mean_m": 4000.7802597042173,
+      "elevation_stddev_m": 362.1797004766546,
+      "bounds": {
+        "west": -66.40013888887384,
+        "south": -19.999861111121714,
+        "east": -65.60013888887374,
+        "north": -19.299861111121622
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000001887
+      },
+      "source_tiles": [
+        "S20W066"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A08",
+      "name": "Andean - Atacama Domeyko",
+      "region": "Andean",
+      "feature": "Atacama Domeyko",
+      "cog_path": "Exemplars/COG/A08.tif",
+      "png16_path": "Exemplars/PNG16/A08.png",
+      "elevation_min_m": 2254.028076171875,
+      "elevation_max_m": 4260.84326171875,
+      "elevation_mean_m": 2566.5067232511938,
+      "elevation_stddev_m": 342.8339458919139,
+      "bounds": {
+        "west": -68.90013888887418,
+        "south": -23.6998611111222,
+        "east": -68.10013888887407,
+        "north": -22.999861111122108
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "S24W069"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A09",
+      "name": "Andean - Aconcagua",
+      "region": "Andean",
+      "feature": "Aconcagua",
+      "cog_path": "Exemplars/COG/A09.tif",
+      "png16_path": "Exemplars/PNG16/A09.png",
+      "elevation_min_m": 1796.3199462890625,
+      "elevation_max_m": 6507.49658203125,
+      "elevation_mean_m": 3707.0103957770716,
+      "elevation_stddev_m": 724.5157995631605,
+      "bounds": {
+        "west": -70.20013888887435,
+        "south": -33.099861111123445,
+        "east": -69.40013888887424,
+        "north": -32.39986111112336
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "S33W070"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A10",
+      "name": "Andean - Central Chilean Andes",
+      "region": "Andean",
+      "feature": "Central Chilean Andes",
+      "cog_path": "Exemplars/COG/A10.tif",
+      "png16_path": "Exemplars/PNG16/A10.png",
+      "elevation_min_m": 673.8622436523438,
+      "elevation_max_m": 5142.88623046875,
+      "elevation_mean_m": 2755.8614930879944,
+      "elevation_stddev_m": 851.5672167961894,
+      "bounds": {
+        "west": -70.60013888887441,
+        "south": -34.799861111123676,
+        "east": -69.8001388888743,
+        "north": -34.09986111112359
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "S35W071"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "A11",
+      "name": "Andean - Northern Patagonia icefield",
+      "region": "Andean",
+      "feature": "Northern Patagonia icefield",
+      "cog_path": "Exemplars/COG/A11.tif",
+      "png16_path": "Exemplars/PNG16/A11.png",
+      "elevation_min_m": 12.943379402160645,
+      "elevation_max_m": 3984.555908203125,
+      "elevation_mean_m": 1186.234872449295,
+      "elevation_stddev_m": 581.7749953425367,
+      "bounds": {
+        "west": -73.70013888887482,
+        "south": -47.09986111112529,
+        "east": -72.90013888887471,
+        "north": -46.399861111125205
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "S47W074"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "H01",
+      "name": "Himalayan - Everest-Lhotse massif",
+      "region": "Himalayan",
+      "feature": "Everest-Lhotse massif",
+      "cog_path": "Exemplars/COG/H01.tif",
+      "png16_path": "Exemplars/PNG16/H01.png",
+      "elevation_min_m": 2986.02392578125,
+      "elevation_max_m": 8722.4951171875,
+      "elevation_mean_m": 5140.224757987697,
+      "elevation_stddev_m": 680.8481045752166,
+      "bounds": {
+        "west": 86.3498611111464,
+        "south": 27.80013888888462,
+        "east": 86.94986111114648,
+        "north": 28.30013888888469
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0011718750000001554
+      },
+      "source_tiles": [
+        "N27E086"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "H02",
+      "name": "Himalayan - Annapurna sanctuary",
+      "region": "Himalayan",
+      "feature": "Annapurna sanctuary",
+      "cog_path": "Exemplars/COG/H02.tif",
+      "png16_path": "Exemplars/PNG16/H02.png",
+      "elevation_min_m": 392.9158935546875,
+      "elevation_max_m": 8108.5009765625,
+      "elevation_mean_m": 3825.1674491749536,
+      "elevation_stddev_m": 1442.498703746345,
+      "bounds": {
+        "west": 83.399861111146,
+        "south": 28.300138888884693,
+        "east": 84.0998611111461,
+        "north": 28.950138888884776
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0013671875000001998
+      },
+      "source_tiles": [
+        "N28E083"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "H03",
+      "name": "Himalayan - Kangchenjunga saddle",
+      "region": "Himalayan",
+      "feature": "Kangchenjunga saddle",
+      "cog_path": "Exemplars/COG/H03.tif",
+      "png16_path": "Exemplars/PNG16/H03.png",
+      "elevation_min_m": 501.2586975097656,
+      "elevation_max_m": 8344.9462890625,
+      "elevation_mean_m": 4094.979155265144,
+      "elevation_stddev_m": 1438.3420254802186,
+      "bounds": {
+        "west": 87.99986111114663,
+        "south": 27.350138888884562,
+        "east": 88.69986111114672,
+        "north": 27.95013888888464
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.001367187500000172
+      },
+      "source_tiles": [
+        "N27E088"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "H04",
+      "name": "Himalayan - Baltoro glacier / K2",
+      "region": "Himalayan",
+      "feature": "Baltoro glacier / K2",
+      "cog_path": "Exemplars/COG/H04.tif",
+      "png16_path": "Exemplars/PNG16/H04.png",
+      "elevation_min_m": 2423.95361328125,
+      "elevation_max_m": 8520.662109375,
+      "elevation_mean_m": 4944.180072628893,
+      "elevation_stddev_m": 862.3537252004685,
+      "bounds": {
+        "west": 76.09986111114505,
+        "south": 35.20013888888561,
+        "east": 76.89986111114516,
+        "north": 35.9001388888857
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0015625000000002165
+      },
+      "source_tiles": [
+        "N35E076"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "H05",
+      "name": "Himalayan - Nanga Parbat massif",
+      "region": "Himalayan",
+      "feature": "Nanga Parbat massif",
+      "cog_path": "Exemplars/COG/H05.tif",
+      "png16_path": "Exemplars/PNG16/H05.png",
+      "elevation_min_m": 1067.6182861328125,
+      "elevation_max_m": 8027.93701171875,
+      "elevation_mean_m": 3730.714046479513,
+      "elevation_stddev_m": 1022.7578014570562,
+      "bounds": {
+        "west": 74.3998611111448,
+        "south": 34.90013888888557,
+        "east": 75.0998611111449,
+        "north": 35.700138888885675
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.0013671875000001998
+      },
+      "source_tiles": [
+        "N35E074"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "H06",
+      "name": "Himalayan - Bhutan high ridge",
+      "region": "Himalayan",
+      "feature": "Bhutan high ridge",
+      "cog_path": "Exemplars/COG/H06.tif",
+      "png16_path": "Exemplars/PNG16/H06.png",
+      "elevation_min_m": 1721.4395751953125,
+      "elevation_max_m": 5888.158203125,
+      "elevation_mean_m": 4243.276337630588,
+      "elevation_stddev_m": 770.9853177354269,
+      "bounds": {
+        "west": 89.99986111114686,
+        "south": 27.600138888884597,
+        "east": 90.69986111114694,
+        "north": 28.200138888884677
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.001367187500000172
+      },
+      "source_tiles": [
+        "N27E090"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    },
+    {
+      "id": "H07",
+      "name": "Himalayan - Nyainq\u00eantanglha range",
+      "region": "Himalayan",
+      "feature": "Nyainq\u00eantanglha range",
+      "cog_path": "Exemplars/COG/H07.tif",
+      "png16_path": "Exemplars/PNG16/H07.png",
+      "elevation_min_m": 3917.3974609375,
+      "elevation_max_m": 5777.4052734375,
+      "elevation_mean_m": 4758.441099222266,
+      "elevation_stddev_m": 367.5249184109612,
+      "bounds": {
+        "west": 90.99986111114703,
+        "south": 29.9001388888849,
+        "east": 91.69986111114711,
+        "north": 30.600138888884995
+      },
+      "resolution": {
+        "width_px": 512,
+        "height_px": 512,
+        "pixel_size_deg": 0.001367187500000172
+      },
+      "source_tiles": [
+        "N30E091"
+      ],
+      "data_source": "SRTM GL1 (NASA/USGS)",
+      "attribution": "NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003. DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003"
+    }
+  ]
 }
-
-

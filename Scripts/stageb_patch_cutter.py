@@ -70,6 +70,9 @@ def parse_catalog(path: Path) -> List[ExemplarRecord]:
         if missing:
             raise ValueError(f"Catalog is missing required columns: {sorted(missing)}")
         for row in reader:
+            # Skip comment lines
+            if row["id"].strip().startswith("#"):
+                continue
             tiles_field = row["tiles"].strip()
             if not tiles_field:
                 raise ValueError(f"Catalog row {row['id']} does not define any tiles")
@@ -153,11 +156,22 @@ def resample_patch(
     size: int,
     resampling: Resampling,
 ) -> tuple[np.ndarray, rasterio.Affine]:
+    # Validate input array dimensions
+    if array.size == 0 or array.shape[0] == 0 or array.shape[1] == 0:
+        raise ValueError(f"Invalid array dimensions: {array.shape} (height={array.shape[0]}, width={array.shape[1]})")
+
     window_transform = rasterio.windows.transform(window, dataset.transform)
     bounds = rasterio.windows.bounds(window, dataset.transform)
-    pixel_width = (bounds.right - bounds.left) / size
-    pixel_height = (bounds.top - bounds.bottom) / size
-    dest_transform = rasterio.Affine(pixel_width, 0.0, bounds.left, 0.0, -pixel_height, bounds.top)
+    # bounds is a tuple: (left, bottom, right, top)
+    left, bottom, right, top = bounds
+
+    # Validate bounds
+    if top <= bottom or right <= left:
+        raise ValueError(f"Invalid bounds: left={left}, bottom={bottom}, right={right}, top={top}")
+
+    pixel_width = (right - left) / size
+    pixel_height = (top - bottom) / size
+    dest_transform = rasterio.Affine(pixel_width, 0.0, left, 0.0, -pixel_height, top)
     dest = np.empty((1, size, size), dtype=np.float32)
     rasterio.warp.reproject(
         source=array[np.newaxis, :, :],
@@ -180,12 +194,16 @@ def write_patch(
     out_path: Path,
     dtype: np.dtype | type = np.float32,
 ) -> None:
+    # Ensure data is 2D (height, width) for single-band output
+    if data.ndim == 3:
+        data = data[0]  # Take first band
+
     profile = dataset.profile.copy()
     profile.update(
         {
             "driver": "GTiff",
-            "height": data.shape[1],
-            "width": data.shape[2],
+            "height": data.shape[0],
+            "width": data.shape[1],
             "transform": transform,
             "count": 1,
             "dtype": dtype,
@@ -222,7 +240,12 @@ def process_record(
     resampling: Resampling,
 ) -> dict:
     with _open_tiles(record.tiles, tiles_dir) as dataset:  # type: ignore[attr-defined]
-        array, window = extract_window(dataset, record)
+        try:
+            array, window = extract_window(dataset, record)
+            print(f"[DEBUG] {record.id}: Extracted array shape={array.shape}, window={window}")
+        except Exception as e:
+            raise ValueError(f"Failed to extract window for {record.id}: {e}") from e
+
         if size is not None:
             resampled, transform = resample_patch(array, window, dataset, size=size, resampling=resampling)
             data = resampled[0]
@@ -232,6 +255,8 @@ def process_record(
         out_path = out_dir / f"{record.id}.tif"
         write_patch(data, transform, dataset, out_path, dtype=data.dtype)
         bounds = rasterio.windows.bounds(window, dataset.transform)
+        # bounds is a tuple: (left, bottom, right, top)
+        bounds_left, bounds_bottom, bounds_right, bounds_top = bounds
         stats = compute_statistics(data, dataset.nodata)
         result = {
             "id": record.id,
@@ -239,10 +264,10 @@ def process_record(
             "feature": record.feature,
             "tiles": record.tiles,
             "bounds": {
-                "left": bounds.left,
-                "bottom": bounds.bottom,
-                "right": bounds.right,
-                "top": bounds.top,
+                "left": bounds_left,
+                "bottom": bounds_bottom,
+                "right": bounds_right,
+                "top": bounds_top,
             },
             "pixel_size": {
                 "x_deg": transform.a,

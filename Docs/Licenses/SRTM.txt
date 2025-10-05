@@ -1,0 +1,42 @@
+NASA Shuttle Radar Topography Mission (SRTM) License
+=====================================================
+
+This project uses elevation data from the NASA Shuttle Radar Topography Mission (SRTM)
+Global 1 arc-second V003 dataset, distributed by OpenTopography.
+
+Data Source
+-----------
+NASA Shuttle Radar Topography Mission (SRTM) Global 1 arc-second V003
+DOI: 10.5067/MEaSUREs/SRTM/SRTMGL1.003
+Distributed by: OpenTopography (https://opentopography.org)
+
+Citation
+--------
+NASA JPL (2013). NASA Shuttle Radar Topography Mission Global 1 arc second.
+NASA EOSDIS Land Processes DAAC. doi:10.5067/MEaSUREs/SRTM/SRTMGL1.003
+
+License Terms
+-------------
+SRTM data is in the public domain and available for unrestricted use.
+No license is required, but attribution is appreciated:
+
+  "Elevation data courtesy of NASA Shuttle Radar Topography Mission (SRTM)"
+
+OpenTopography Terms
+--------------------
+Data accessed via OpenTopography API. Users must:
+- Acknowledge OpenTopography and the original data source in publications
+- Not redistribute raw data obtained through OpenTopography
+- Use data in accordance with the original data provider's terms
+
+This Project's Use
+------------------
+SRTM data is used in this project for Stage B continental terrain amplification:
+- 24 exemplar patches (512×512 pixels each) representing young, active, and ancient orogeny
+- Data preprocessed and stored in Content/PlanetaryCreation/Exemplars/
+- Used procedurally at runtime for terrain synthesis (not redistributed as raw data)
+
+For more information, see:
+- NASA SRTM: https://www.earthdata.nasa.gov/sensors/srtm
+- OpenTopography: https://opentopography.org/
+- Data processing workflow: Docs/DEM_Exemplar_Prep.md

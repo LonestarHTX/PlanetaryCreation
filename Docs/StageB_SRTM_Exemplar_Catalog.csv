@@ -17,9 +17,9 @@ A08,Andean,Atacama Domeyko,-23.00,-68.90,-23.70,-68.10,S24W069
 A09,Andean,Aconcagua,-32.40,-70.20,-33.10,-69.40,S33W070
 A10,Andean,Central Chilean Andes,-34.10,-70.60,-34.80,-69.80,S35W071
 A11,Andean,Northern Patagonia icefield,-46.40,-73.70,-47.10,-72.90,S47W074
-O01,Ancient,Great Smoky Mountains,35.90,-84.40,35.20,-83.60,N36W084
-O02,Ancient,Blue Ridge (Virginia),38.10,-79.80,37.40,-79.00,N38W080
-O03,Ancient,Scottish Cairngorms,57.30,-3.95,56.60,-3.10,N57W004
-O04,Ancient,Scandinavian Jotunheimen,61.15,8.40,60.45,9.20,N61E008
+O01,Ancient,Great Smoky Mountains,35.90,-84.40,35.20,-83.60,N35W084
+O02,Ancient,Blue Ridge (Virginia),38.10,-79.80,37.40,-79.00,N37W080
+O03,Ancient,Scottish Cairngorms,57.30,-3.95,56.60,-3.10,N56W004
+# O04,Ancient,Scandinavian Jotunheimen,61.15,8.40,60.45,9.20,N60E008  # TODO: OpenTopography 500 error - retry later
 O05,Ancient,Drakensberg high escarpment,-28.50,29.00,-29.20,29.80,S29E029
-O06,Ancient,Middle Urals,60.90,57.60,60.20,58.40,N61E058
+# O06,Ancient,Middle Urals,60.90,57.60,60.20,58.40,N60E058  # TODO: OpenTopography 500 error - retry later
