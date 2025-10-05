@@ -1,9 +1,9 @@
 ### DEM & Noise Prep – Exemplars (Himalayan/Andean)
 
-Status: Draft
+Status: ✅ Ready for Stage B usage (SRTM exemplar pipeline published)
 
 Objectives
-- Gather legally-usable DEM tiles for Himalayan and Andean exemplars
+- Gather legally-usable DEM tiles for Himalayan and Andean exemplars (see [SRTM Stage B download recipe](SRTM_StageB_Exemplar_Guide.md))
 - Reproject to EPSG:4326, crop to curated bounding boxes, resample to 512×512
 - Normalize elevation to meters, save Cloud-Optimized GeoTIFF (COG) and 16-bit PNG
 - Emit `ExemplarLibrary.json` for safe lookup by terrain amplification code
@@ -29,6 +29,8 @@ Output Layout
 - `Content/PlanetaryCreation/Exemplars/ExemplarLibrary.json`
 
 GDAL Workflow (conceptual)
+*(Shortcut: run `python Scripts/stageb_patch_cutter.py --catalog Docs/StageB_SRTM_Exemplar_Catalog.csv ...` to crop the Stage B
+SRTM exemplars automatically; see the Stage B guide for exact parameters.)*
 1) Reproject to EPSG:4326 if needed:
    gdalwarp -t_srs EPSG:4326 -r cubicspline -multi -overwrite input.tif reproj.tif
 2) Crop to bbox (projwin uses ULX ULY LRX LRY):
