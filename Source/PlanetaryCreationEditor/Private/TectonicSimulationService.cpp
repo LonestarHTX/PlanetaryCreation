@@ -262,27 +262,14 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
 {
-    const bool bHeightmapChanged = Parameters.bEnableHeightmapVisualization != NewParams.bEnableHeightmapVisualization;
-    const bool bAutomaticLODChanged = Parameters.bEnableAutomaticLOD != NewParams.bEnableAutomaticLOD;
-
-    if (bHeightmapChanged || bAutomaticLODChanged)
+    if (Parameters.bEnableHeightmapVisualization != NewParams.bEnableHeightmapVisualization)
     {
         FTectonicSimulationParameters ComparableParams = NewParams;
         ComparableParams.bEnableHeightmapVisualization = Parameters.bEnableHeightmapVisualization;
-        ComparableParams.bEnableAutomaticLOD = Parameters.bEnableAutomaticLOD;
 
         if (FMemory::Memcmp(&ComparableParams, &Parameters, sizeof(FTectonicSimulationParameters)) == 0)
         {
-            if (bHeightmapChanged)
-            {
-                SetHeightmapVisualizationEnabled(NewParams.bEnableHeightmapVisualization);
-            }
-
-            if (bAutomaticLODChanged)
-            {
-                SetAutomaticLODEnabled(NewParams.bEnableAutomaticLOD);
-            }
-
+            SetHeightmapVisualizationEnabled(NewParams.bEnableHeightmapVisualization);
             return;
         }
     }
@@ -317,18 +304,6 @@ void UTectonicSimulationService::SetHeightmapVisualizationEnabled(bool bEnabled)
 
     UE_LOG(LogTemp, Log, TEXT("[Visualization] Heightmap visualization %s (SurfaceVersion=%d)"),
         bEnabled ? TEXT("enabled") : TEXT("disabled"), SurfaceDataVersion);
-}
-
-void UTectonicSimulationService::SetAutomaticLODEnabled(bool bEnabled)
-{
-    if (Parameters.bEnableAutomaticLOD == bEnabled)
-    {
-        return;
-    }
-
-    Parameters.bEnableAutomaticLOD = bEnabled;
-
-    UE_LOG(LogTemp, Log, TEXT("[Visualization] Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
 }
 
 void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)

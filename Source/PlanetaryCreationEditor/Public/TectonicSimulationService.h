@@ -684,9 +684,6 @@ public:
      */
     void SetHeightmapVisualizationEnabled(bool bEnabled);
 
-    /** Toggle automatic LOD control without resetting the simulation. */
-    void SetAutomaticLODEnabled(bool bEnabled);
-
     /**
      * Milestone 4 Phase 4.1: Update render subdivision level without resetting simulation state.
      * This allows LOD changes during camera movement without destroying tectonic history.
