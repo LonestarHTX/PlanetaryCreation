@@ -20,8 +20,8 @@ def create_exemplar_entry(manifest_entry: Dict[str, Any], project_root: Path) ->
         "name": f"{manifest_entry['region']} - {manifest_entry['feature']}",
         "region": manifest_entry['region'],
         "feature": manifest_entry['feature'],
-        "cog_path": f"Exemplars/COG/{ex_id}.tif",
-        "png16_path": f"Exemplars/PNG16/{ex_id}.png",
+        "cog_path": f"PlanetaryCreation/Exemplars/COG/{ex_id}.tif",
+        "png16_path": f"PlanetaryCreation/Exemplars/PNG16/{ex_id}.png",
         "elevation_min_m": stats['min'],
         "elevation_max_m": stats['max'],
         "elevation_mean_m": stats['mean'],
@@ -85,7 +85,7 @@ def main():
             for i, existing in enumerate(library['exemplars']):
                 if existing['id'] == ex['id']:
                     library['exemplars'][i] = ex
-                    print(f"  ↻ Updated {ex['id']}: {ex['name']}")
+                    print(f"  * Updated {ex['id']}: {ex['name']}")
                     break
 
     # Sort by region then ID
