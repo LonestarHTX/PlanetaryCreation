@@ -198,9 +198,6 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
         CurrentTimeMy += StepDurationMy;
 
-        // Milestone 4 Phase 4.2: Increment surface data version per step (stress/elevation changed)
-        SurfaceDataVersion++;
-
         // Milestone 3 Task 2.3: Interpolate stress to render vertices (per step for accurate snapshots)
         InterpolateStressToVertices();
 
@@ -253,6 +250,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         }
 
         // Milestone 5 Task 1.3: Capture history snapshot after each individual step for undo/redo
+        // Increment surface version immediately beforehand so cached heightmap surfaces refresh on rebuild.
+        SurfaceDataVersion++;
         CaptureHistorySnapshot();
     }
 
@@ -263,6 +262,31 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
 {
+    const bool bHeightmapChanged = Parameters.bEnableHeightmapVisualization != NewParams.bEnableHeightmapVisualization;
+    const bool bAutomaticLODChanged = Parameters.bEnableAutomaticLOD != NewParams.bEnableAutomaticLOD;
+
+    if (bHeightmapChanged || bAutomaticLODChanged)
+    {
+        FTectonicSimulationParameters ComparableParams = NewParams;
+        ComparableParams.bEnableHeightmapVisualization = Parameters.bEnableHeightmapVisualization;
+        ComparableParams.bEnableAutomaticLOD = Parameters.bEnableAutomaticLOD;
+
+        if (FMemory::Memcmp(&ComparableParams, &Parameters, sizeof(FTectonicSimulationParameters)) == 0)
+        {
+            if (bHeightmapChanged)
+            {
+                SetHeightmapVisualizationEnabled(NewParams.bEnableHeightmapVisualization);
+            }
+
+            if (bAutomaticLODChanged)
+            {
+                SetAutomaticLODEnabled(NewParams.bEnableAutomaticLOD);
+            }
+
+            return;
+        }
+    }
+
     Parameters = NewParams;
 
     // M5 Phase 3: Validate and clamp PlanetRadius to prevent invalid simulations
@@ -277,6 +301,34 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
     }
 
     ResetSimulation();
+}
+
+void UTectonicSimulationService::SetHeightmapVisualizationEnabled(bool bEnabled)
+{
+    if (Parameters.bEnableHeightmapVisualization == bEnabled)
+    {
+        return;
+    }
+
+    Parameters.bEnableHeightmapVisualization = bEnabled;
+
+    // Increment surface data version so cached LODs rebuild with updated vertex colors.
+    SurfaceDataVersion++;
+
+    UE_LOG(LogTemp, Log, TEXT("[Visualization] Heightmap visualization %s (SurfaceVersion=%d)"),
+        bEnabled ? TEXT("enabled") : TEXT("disabled"), SurfaceDataVersion);
+}
+
+void UTectonicSimulationService::SetAutomaticLODEnabled(bool bEnabled)
+{
+    if (Parameters.bEnableAutomaticLOD == bEnabled)
+    {
+        return;
+    }
+
+    Parameters.bEnableAutomaticLOD = bEnabled;
+
+    UE_LOG(LogTemp, Log, TEXT("[Visualization] Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
 }
 
 void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
