@@ -18,19 +18,66 @@ FOrbitCameraController::~FOrbitCameraController()
     Shutdown();
 }
 
-void FOrbitCameraController::Initialize(AActor* InTargetActor)
+void FOrbitCameraController::Initialize(AActor* InTargetActor, double PlanetRadiusMeters)
 {
     TargetActor = InTargetActor;
+
+    // Convert planet radius from meters to UE centimeters (1 m = 100 cm)
+    PlanetRadiusUE = static_cast<float>(PlanetRadiusMeters * 100.0);
+
+    // Compute distance constraints from planet radius
+    RecomputeDistanceConstraints();
 
     // Initialize to default view
     CurrentYaw = DefaultYaw;
     CurrentPitch = DefaultPitch;
-    CurrentDistance = DefaultDistance;
     TargetYaw = DefaultYaw;
     TargetPitch = DefaultPitch;
-    TargetDistance = DefaultDistance;
 
-    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::Initialize() - Camera controller initialized"));
+    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::Initialize() - Camera initialized (Radius=%.0f cm, Default=%.0f cm, Min=%.0f cm, Max=%.0f cm)"),
+        PlanetRadiusUE, CurrentDistance, MinDistance, MaxDistance);
+}
+
+void FOrbitCameraController::SetPlanetRadius(double PlanetRadiusMeters)
+{
+    PlanetRadiusUE = static_cast<float>(PlanetRadiusMeters * 100.0);
+    RecomputeDistanceConstraints();
+
+    // Re-clamp current distances to new constraints
+    CurrentDistance = FMath::Clamp(CurrentDistance, MinDistance, MaxDistance);
+    TargetDistance = FMath::Clamp(TargetDistance, MinDistance, MaxDistance);
+
+    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::SetPlanetRadius() - Updated radius to %.0f cm (Min=%.0f, Max=%.0f)"),
+        PlanetRadiusUE, MinDistance, MaxDistance);
+}
+
+void FOrbitCameraController::RecomputeDistanceConstraints()
+{
+    // Conservative max elevation estimate: 10 km = 1,000,000 cm
+    // (Real max elevation from stress field ~5-8 km, but use margin for safety)
+    const float MaxElevationUE = 1000000.0f;
+
+    // Surface distance = planet radius
+    const float SurfaceDistance = PlanetRadiusUE;
+
+    // Safe surface distance = radius + max elevation
+    const float SafeSurfaceDistance = PlanetRadiusUE + MaxElevationUE;
+
+    // Default distance: comfortable orbital view at 2× planet radius
+    const float DefaultDistance = PlanetRadiusUE * 2.0f;
+
+    // Min distance: 5% above surface to prevent clipping (even with mountains)
+    MinDistance = SafeSurfaceDistance * 1.05f;
+
+    // Max distance: distant view at 6× planet radius
+    MaxDistance = PlanetRadiusUE * 6.0f;
+
+    // Set current/target to default on first compute
+    if (CurrentDistance == 0.0f)
+    {
+        CurrentDistance = DefaultDistance;
+        TargetDistance = DefaultDistance;
+    }
 }
 
 void FOrbitCameraController::Shutdown()
@@ -75,7 +122,12 @@ void FOrbitCameraController::Rotate(float DeltaYaw, float DeltaPitch)
 
 void FOrbitCameraController::Zoom(float DeltaDistance)
 {
-    TargetDistance += DeltaDistance;
+    // Scale delta relative to current distance for smooth zoom feel
+    // Limit delta to ±10% of current distance per input to prevent overshooting
+    const float MaxDelta = TargetDistance * 0.1f;
+    const float ClampedDelta = FMath::Clamp(DeltaDistance, -MaxDelta, MaxDelta);
+
+    TargetDistance += ClampedDelta;
     TargetDistance = FMath::Clamp(TargetDistance, MinDistance, MaxDistance);
 }
 
@@ -88,9 +140,11 @@ void FOrbitCameraController::ResetToDefault()
 {
     TargetYaw = DefaultYaw;
     TargetPitch = DefaultPitch;
-    TargetDistance = DefaultDistance;
 
-    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::ResetToDefault() - Camera reset to default view"));
+    // Default distance: 2× planet radius for comfortable orbital view
+    TargetDistance = PlanetRadiusUE * 2.0f;
+
+    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::ResetToDefault() - Camera reset to default view (Distance=%.0f cm)"), TargetDistance);
 }
 
 FVector FOrbitCameraController::CalculateDesiredPosition() const
@@ -146,6 +200,9 @@ void FOrbitCameraController::UpdateCameraTransform(float DeltaTime)
 
     CurrentPitch = FMath::FInterpTo(CurrentPitch, TargetPitch, DeltaTime, InterpolationSpeed * 10.0f);
     CurrentDistance = FMath::FInterpTo(CurrentDistance, TargetDistance, DeltaTime, InterpolationSpeed * 5.0f);
+
+    // Clamp pitch every frame to prevent drift past ±89° (slow updates can overshoot)
+    CurrentPitch = FMath::Clamp(CurrentPitch, -89.0f, 89.0f);
 
     // Calculate new camera position
     const FVector CameraPosition = CalculateDesiredPosition();

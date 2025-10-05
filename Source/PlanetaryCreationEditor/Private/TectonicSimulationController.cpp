@@ -68,7 +68,9 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexPlateAssignments = Service->GetVertexPlateAssignments();
         Snapshot.VertexVelocities = Service->GetVertexVelocities();
         Snapshot.VertexStressValues = Service->GetVertexStressValues();
+        Snapshot.VertexElevationValues = Service->GetVertexElevationValues(); // M5 Phase 3.7: Use actual elevations from erosion
         Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
+        Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
     }
 
     // Capture visualization state from controller
@@ -314,8 +316,10 @@ void FTectonicSimulationController::EnsurePreviewActor() const
 
     PreviewActor = Actor;
 
-    // Milestone 5 Task 1.2: Initialize orbital camera controller
-    CameraController.Initialize(Actor);
+    // Milestone 5 Task 1.2: Initialize orbital camera controller with planet radius
+    UTectonicSimulationService* Service = GetService();
+    const double PlanetRadiusMeters = Service ? Service->GetParameters().PlanetRadius : 127400.0;
+    CameraController.Initialize(Actor, PlanetRadiusMeters);
 
     if (URealtimeMeshComponent* Component = Actor->GetRealtimeMeshComponent())
     {
@@ -438,7 +442,8 @@ void FTectonicSimulationController::DrawBoundaryLines()
 
     UE_LOG(LogTemp, Verbose, TEXT("Drawing %d boundaries at time %.2f My"), Boundaries.Num(), CurrentTimeMy);
 
-    constexpr float RadiusUnits = 6370.0f; // Match mesh scale (1 unit = 1 km)
+    // M5 Phase 3: Convert planet radius from meters to UE centimeters
+    const float RadiusUE = MetersToUE(Service->GetParameters().PlanetRadius);
     constexpr float LineThickness = 20.0f; // Thick lines for visibility
     constexpr float LineDuration = 0.0f; // Persistent (cleared manually)
 
@@ -517,11 +522,12 @@ void FTectonicSimulationController::DrawBoundaryLines()
         }
 
         // Offset boundaries slightly above mesh surface to prevent z-fighting
-        // Use max elevation (10km) + small buffer to ensure visibility above displaced geometry
-        constexpr float BoundaryOffsetKm = 15.0f;
-        const FVector CentroidA = FVector(PlateA->Centroid * (RadiusUnits + BoundaryOffsetKm));
-        const FVector Midpoint = FVector(BoundaryMidpoint * (RadiusUnits + BoundaryOffsetKm));
-        const FVector CentroidB = FVector(PlateB->Centroid * (RadiusUnits + BoundaryOffsetKm));
+        // Use max elevation (10 km = 10000 m) + small buffer to ensure visibility above displaced geometry
+        constexpr float BoundaryOffsetMeters = 15000.0f; // 15 km in meters
+        const float BoundaryOffsetUE = MetersToUE(BoundaryOffsetMeters);
+        const FVector CentroidA = FVector(PlateA->Centroid * (RadiusUE + BoundaryOffsetUE));
+        const FVector Midpoint = FVector(BoundaryMidpoint * (RadiusUE + BoundaryOffsetUE));
+        const FVector CentroidB = FVector(PlateB->Centroid * (RadiusUE + BoundaryOffsetUE));
 
         const FColor LineColor = GetBoundaryColor(Boundary.BoundaryType);
 
@@ -555,14 +561,15 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
     Builder.EnableTexCoords();
     Builder.EnableColors();
 
-    constexpr float RadiusUnits = 6370.0f; // 1 Unreal unit == 1 km
+    // M5 Phase 3: Convert planet radius from meters to UE centimeters
+    const float RadiusUE = MetersToUE(Snapshot.PlanetRadius);
 
     // Helper to generate stable color from plate ID
     auto GetPlateColor = [](int32 PlateID) -> FColor
     {
         constexpr float GoldenRatio = 0.618033988749895f;
         const float Hue = FMath::Fmod(PlateID * GoldenRatio, 1.0f);
-        FLinearColor HSV(Hue * 360.0f, 0.7f, 0.9f);
+        FLinearColor HSV(Hue * 360.0f, 1.0f, 1.0f); // Full saturation and brightness for vivid colors
         FLinearColor RGB = HSV.HSVToLinearRGB();
         return RGB.ToFColor(false);
     };
@@ -599,9 +606,14 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
     TArray<FVector3f> DisplacedPositions;
     DisplacedPositions.SetNumUninitialized(RenderVertices.Num());
 
-    // Milestone 3 Task 2.4: Compression modulus for stress-to-elevation conversion
-    constexpr double CompressionModulus = 1.0; // 1 MPa = 1 km elevation (simplified)
-    constexpr double MaxElevationKm = 10.0; // ±10km clamp
+    /**
+     * M5 Phase 3: Stress-to-elevation conversion (simplified cosmetic visualization).
+     * NOTE: CompressionModulus = 100.0 means "1 MPa stress → 100 m elevation" (legacy visualization scale).
+     * This is NOT physically accurate - actual mountain building depends on lithosphere rheology.
+     * The scale factor provides visually useful displacement for stress heatmaps.
+     */
+    constexpr double CompressionModulus = 100.0; // 1 MPa = 100 m elevation (cosmetic visualization)
+    constexpr double MaxElevationMeters = 10000.0; // ±10 km clamp
 
     for (int32 i = 0; i < RenderVertices.Num(); ++i)
     {
@@ -624,16 +636,20 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
             VertexColor = GetPlateColor(PlateID); // Default plate colors
         }
 
-        // Base position on sphere
-        FVector3f Position = FVector3f(Vertex * RadiusUnits);
+        // Base position on sphere (convert meters → UE centimeters)
+        FVector3f Position = FVector3f(Vertex * RadiusUE);
 
-        // Milestone 3 Task 2.4: Elevation displacement (only in Displaced mode)
+        // M5 Phase 3.7: Elevation displacement using actual elevation values from erosion system
         if (Snapshot.ElevationMode == EElevationMode::Displaced)
         {
             const FVector3f Normal = Position.GetSafeNormal();
-            const double ElevationKm = (StressMPa / CompressionModulus) * Snapshot.ElevationScale;
-            const double ClampedElevation = FMath::Clamp(ElevationKm, -MaxElevationKm, MaxElevationKm);
-            Position += Normal * static_cast<float>(ClampedElevation);
+            // Use actual elevation from erosion system (already in meters)
+            const double ElevationMeters = Snapshot.VertexElevationValues.IsValidIndex(i)
+                ? Snapshot.VertexElevationValues[i]
+                : 0.0;
+            const double ClampedElevationMeters = FMath::Clamp(ElevationMeters, -MaxElevationMeters, MaxElevationMeters);
+            const float DisplacementUE = MetersToUE(ClampedElevationMeters);
+            Position += Normal * DisplacementUE;
         }
 
         DisplacedPositions[i] = Position;

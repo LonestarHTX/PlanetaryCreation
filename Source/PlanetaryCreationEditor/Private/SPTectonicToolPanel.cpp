@@ -277,7 +277,7 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 [
                     SNew(SButton)
                     .Text(NSLOCTEXT("PlanetaryCreation", "ZoomInButton", "+ Zoom In"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomInTooltip", "Zoom in 2000 units"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomInTooltip", "Zoom in 1.5M km"))
                     .OnClicked(this, &SPTectonicToolPanel::HandleZoomInClicked)
                 ]
                 + SHorizontalBox::Slot()
@@ -286,7 +286,7 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 [
                     SNew(SButton)
                     .Text(NSLOCTEXT("PlanetaryCreation", "ZoomOutButton", "- Zoom Out"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomOutTooltip", "Zoom out 2000 units"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomOutTooltip", "Zoom out 1.5M km"))
                     .OnClicked(this, &SPTectonicToolPanel::HandleZoomOutClicked)
                 ]
             ]
@@ -903,7 +903,7 @@ FReply SPTectonicToolPanel::HandleRotateLeftClicked()
 {
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
-        Controller->RotateCamera(-15.0f, 0.0f); // Rotate 15 degrees left
+        Controller->RotateCamera(15.0f, 0.0f); // Rotate 15 degrees left (positive = counter-clockwise)
     }
     return FReply::Handled();
 }
@@ -912,7 +912,7 @@ FReply SPTectonicToolPanel::HandleRotateRightClicked()
 {
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
-        Controller->RotateCamera(15.0f, 0.0f); // Rotate 15 degrees right
+        Controller->RotateCamera(-15.0f, 0.0f); // Rotate 15 degrees right (negative = clockwise)
     }
     return FReply::Handled();
 }
@@ -939,7 +939,8 @@ FReply SPTectonicToolPanel::HandleZoomInClicked()
 {
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
-        Controller->ZoomCamera(-2000.0f); // Zoom in by 2000 units
+        // M5 Phase 3.7: Scale zoom for meter-based coordinates (1.5M km step)
+        Controller->ZoomCamera(-150000000.0f); // Zoom in by 1.5M km
     }
     return FReply::Handled();
 }
@@ -948,7 +949,8 @@ FReply SPTectonicToolPanel::HandleZoomOutClicked()
 {
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
-        Controller->ZoomCamera(2000.0f); // Zoom out by 2000 units
+        // M5 Phase 3.7: Scale zoom for meter-based coordinates (1.5M km step)
+        Controller->ZoomCamera(150000000.0f); // Zoom out by 1.5M km
     }
     return FReply::Handled();
 }

@@ -189,6 +189,54 @@ struct FMantleHotspot
     FVector3d DriftVelocity = FVector3d::ZeroVector;
 };
 
+/** Milestone 6 Task 1.1: Terrane lifecycle states (paper Section 6). */
+UENUM()
+enum class ETerraneState : uint8
+{
+    Attached,       // Part of continental plate (normal)
+    Extracted,      // Surgically removed, awaiting carrier assignment
+    Transporting,   // Riding oceanic carrier plate toward collision
+    Colliding       // At convergent boundary, ready for reattachment
+};
+
+/** Milestone 6 Task 1.1: Continental terrane (accreted microcontinent fragment). */
+USTRUCT()
+struct FContinentalTerrane
+{
+    GENERATED_BODY()
+
+    /** Unique terrane identifier (deterministic from seed for replay/determinism). */
+    int32 TerraneID = INDEX_NONE;
+
+    /** Current lifecycle state (Attached/Extracted/Transporting/Colliding). */
+    UPROPERTY()
+    ETerraneState State = ETerraneState::Attached;
+
+    /** Render vertex indices comprising this terrane (subset of RenderVertices). */
+    TArray<int32> VertexIndices;
+
+    /** Source plate ID (where terrane was extracted from, INDEX_NONE if not yet extracted). */
+    int32 SourcePlateID = INDEX_NONE;
+
+    /** Carrier plate ID (oceanic plate transporting terrane, INDEX_NONE if attached/extracted). */
+    int32 CarrierPlateID = INDEX_NONE;
+
+    /** Target plate ID for reattachment (continental plate at collision, INDEX_NONE if not colliding). */
+    int32 TargetPlateID = INDEX_NONE;
+
+    /** Centroid position on unit sphere (for tracking/visualization). */
+    FVector3d Centroid = FVector3d::ZeroVector;
+
+    /** Area in km² (for validation, prevents single-vertex terranes). */
+    double AreaKm2 = 0.0;
+
+    /** Extraction timestamp (My) for tracking terrane age/transport duration. */
+    double ExtractionTimeMy = 0.0;
+
+    /** Reattachment timestamp (My) for suturing/collision tracking. */
+    double ReattachmentTimeMy = 0.0;
+};
+
 /** Simulation parameters (Phase 3 - UI integration). */
 USTRUCT()
 struct FTectonicSimulationParameters
@@ -221,6 +269,21 @@ struct FTectonicSimulationParameters
      */
     UPROPERTY()
     double ElevationScale = 1.0;
+
+    /**
+     * Milestone 5 Phase 3: Planet radius in meters.
+     * Controls the physical size of the simulated planet for realistic geodesic calculations.
+     *
+     * Default 127,400 m (1/50 Earth scale):
+     * - Full Earth: 6,370,000 m (too large for initial testing/profiling)
+     * - 1/50 scale: 127,400 m (realistic tectonic features, manageable render distances)
+     *
+     * IMPORTANT: This value is embedded in history snapshots and CSV exports.
+     * Changing it mid-simulation invalidates deterministic fingerprints.
+     * Valid range: 10,000 m to 10,000,000 m (smaller than Jupiter, larger than asteroids).
+     */
+    UPROPERTY()
+    double PlanetRadius = 127400.0;
 
     /**
      * Milestone 3 Task 3.1: Lloyd relaxation iterations.
@@ -389,7 +452,98 @@ struct FTectonicSimulationParameters
      */
     UPROPERTY()
     bool bEnableRiftPropagation = false;
+
+    /**
+     * Milestone 5 Task 2.1: Continental erosion constant (m/My).
+     * Base erosion rate for continental crust above sea level.
+     * Formula: ErosionRate = k × Slope × (Elevation - SeaLevel)⁺
+     * Default 0.001 m/My (paper Section 4.5, realistic geological erosion rate).
+     */
+    UPROPERTY()
+    double ErosionConstant = 0.001;
+
+    /**
+     * Milestone 5 Task 2.1: Sea level reference elevation (meters).
+     * Erosion only applies to terrain above this threshold.
+     * Default 0.0 m (mean sea level).
+     */
+    UPROPERTY()
+    double SeaLevel = 0.0;
+
+    /**
+     * Milestone 5 Task 2.1: Enable continental erosion model.
+     * Default false for backward compatibility. Set true to activate erosion.
+     */
+    UPROPERTY()
+    bool bEnableContinentalErosion = false;
+
+    /**
+     * Milestone 5 Task 2.2: Sediment diffusion rate (dimensionless, 0-1).
+     * Controls how quickly eroded material redistributes to neighbors.
+     * Default 0.1 (10% of excess sediment diffuses per step).
+     */
+    UPROPERTY()
+    double SedimentDiffusionRate = 0.1;
+
+    /**
+     * Milestone 5 Task 2.2: Enable sediment transport (Stage 0 diffusion).
+     * Default false for backward compatibility. Set true to activate sediment redistribution.
+     */
+    UPROPERTY()
+    bool bEnableSedimentTransport = false;
+
+    /**
+     * Milestone 5 Task 2.3: Oceanic dampening constant (m/My).
+     * Smoothing rate for seafloor elevation (slower than erosion).
+     * Default 0.0005 m/My (paper Section 4.5, oceanic crust subsidence).
+     */
+    UPROPERTY()
+    double OceanicDampeningConstant = 0.0005;
+
+    /**
+     * Milestone 5 Task 2.3: Oceanic age-subsidence coefficient (m/sqrt(My)).
+     * Controls depth increase with crust age: depth = BaseDepth + Coeff × sqrt(age).
+     * Default 350.0 m/sqrt(My) (empirical formula from paper).
+     */
+    UPROPERTY()
+    double OceanicAgeSubsidenceCoeff = 350.0;
+
+    /**
+     * Milestone 5 Task 2.3: Enable oceanic dampening model.
+     * Default false for backward compatibility. Set true to activate seafloor smoothing.
+     */
+    UPROPERTY()
+    bool bEnableOceanicDampening = false;
+
+    /**
+     * Milestone 6 Task 2.1: Enable Stage B oceanic amplification (transform faults, fine detail).
+     * Default false for backward compatibility. Set true to activate oceanic amplification.
+     */
+    UPROPERTY()
+    bool bEnableOceanicAmplification = false;
+
+    /**
+     * Milestone 6 Task 2.1: Minimum render subdivision level for amplification.
+     * Amplification only applies at LOD levels >= this value (prevents wasted computation at low LOD).
+     * Default 5 (10,242 vertices, high-detail preview per plan).
+     */
+    UPROPERTY()
+    int32 MinAmplificationLOD = 5;
 };
+
+/**
+ * Milestone 5 Phase 3: Unit conversion helper - meters to Unreal Engine centimeters.
+ *
+ * UE uses centimeters as base unit. All simulation logic operates in meters for geological accuracy.
+ * This helper enforces the conversion at render boundaries to prevent magnitude errors.
+ *
+ * @param Meters Distance or dimension in meters
+ * @return Distance in Unreal Engine centimeters (1 m = 100 cm)
+ */
+FORCEINLINE float MetersToUE(double Meters)
+{
+    return static_cast<float>(Meters * 100.0); // 1 meter = 100 centimeters
+}
 
 /**
  * Editor-only subsystem that holds the canonical tectonic simulation state.
@@ -446,6 +600,24 @@ public:
     /** Milestone 4 Task 2.3: Accessor for per-vertex temperature values (K). */
     const TArray<double>& GetVertexTemperatureValues() const { return VertexTemperatureValues; }
 
+    /** Milestone 5 Task 2.1: Accessor for per-vertex elevation values (meters). */
+    const TArray<double>& GetVertexElevationValues() const { return VertexElevationValues; }
+
+    /** Milestone 5 Task 2.1: Accessor for per-vertex erosion rates (m/My). */
+    const TArray<double>& GetVertexErosionRates() const { return VertexErosionRates; }
+
+    /** Milestone 5 Task 2.2: Accessor for per-vertex sediment thickness (meters). */
+    const TArray<double>& GetVertexSedimentThickness() const { return VertexSedimentThickness; }
+
+    /** Milestone 5 Task 2.3: Accessor for per-vertex crust age (My). */
+    const TArray<double>& GetVertexCrustAge() const { return VertexCrustAge; }
+
+    /** Milestone 6 Task 2.1: Accessor for per-vertex amplified elevation (Stage B, meters). */
+    const TArray<double>& GetVertexAmplifiedElevation() const { return VertexAmplifiedElevation; }
+
+    /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
+    const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
+
     /** Accessor for boundary adjacency map (Milestone 2). */
     const TMap<TPair<int32, int32>, FPlateBoundary>& GetBoundaries() const { return Boundaries; }
 
@@ -482,6 +654,12 @@ public:
         TArray<int32> VertexPlateAssignments;
         TMap<TPair<int32, int32>, FPlateBoundary> Boundaries;
         double TimestampMy;
+
+        /** Milestone 5: Erosion state (for rollback after failed retessellation). */
+        TArray<double> VertexElevationValues;
+        TArray<double> VertexErosionRates;
+        TArray<double> VertexSedimentThickness;
+        TArray<double> VertexCrustAge;
 
         FRetessellationSnapshot() : TimestampMy(0.0) {}
     };
@@ -525,7 +703,17 @@ public:
         int32 TopologyVersion;
         int32 SurfaceDataVersion;
 
-        FSimulationHistorySnapshot() : CurrentTimeMy(0.0), TopologyVersion(0), SurfaceDataVersion(0) {}
+        /** Milestone 5: Erosion state (for undo/redo). */
+        TArray<double> VertexElevationValues;
+        TArray<double> VertexErosionRates;
+        TArray<double> VertexSedimentThickness;
+        TArray<double> VertexCrustAge;
+
+        /** Milestone 6 Task 1.1: Terrane state (for undo/redo). */
+        TArray<FContinentalTerrane> Terranes;
+        int32 NextTerraneID;
+
+        FSimulationHistorySnapshot() : CurrentTimeMy(0.0), TopologyVersion(0), SurfaceDataVersion(0), NextTerraneID(0) {}
     };
 
     /** Milestone 5 Task 1.3: Capture current state as history snapshot. */
@@ -557,6 +745,78 @@ public:
 
     /** Milestone 5 Task 1.3: Jump to specific history index (for timeline scrubbing). */
     bool JumpToHistoryIndex(int32 Index);
+
+    /**
+     * Milestone 6 Task 1.1: Extract terrane from continental plate.
+     * Performs mesh surgery to remove specified vertices from plate.
+     *
+     * @param SourcePlateID Plate to extract terrane from (must be continental)
+     * @param TerraneVertexIndices Render vertex indices to extract (must be contiguous region)
+     * @param OutTerraneID Unique ID assigned to newly extracted terrane
+     * @return True if extraction succeeded, false if validation failed
+     */
+    bool ExtractTerrane(int32 SourcePlateID, const TArray<int32>& TerraneVertexIndices, int32& OutTerraneID);
+
+    /**
+     * Milestone 6 Task 1.1: Reattach terrane to target plate at collision.
+     * Performs mesh surgery to merge terrane vertices into target plate.
+     *
+     * @param TerraneID Terrane to reattach (must be in Colliding state)
+     * @param TargetPlateID Plate to attach to (must be continental at convergent boundary)
+     * @return True if reattachment succeeded, false if validation failed
+     */
+    bool ReattachTerrane(int32 TerraneID, int32 TargetPlateID);
+
+    /**
+     * Milestone 6 Task 1.1: Validate mesh topology after terrane operation.
+     * Checks Euler characteristic, manifold edges, and orphaned vertices.
+     *
+     * @param OutErrorMessage Detailed error description if validation fails
+     * @return True if topology is valid, false otherwise
+     */
+    bool ValidateTopology(FString& OutErrorMessage) const;
+
+    /**
+     * Milestone 6 Task 1.1: Compute area of terrane region (km²).
+     * Uses spherical triangle formula on render mesh.
+     *
+     * @param VertexIndices Render vertices comprising terrane
+     * @return Area in km² (0 if invalid region)
+     */
+    double ComputeTerraneArea(const TArray<int32>& VertexIndices) const;
+
+    /** Milestone 6 Task 1.1: Accessor for active terranes. */
+    const TArray<FContinentalTerrane>& GetTerranes() const { return Terranes; }
+
+    /** Milestone 6 Task 1.1: Get terrane by ID (nullptr if not found). */
+    const FContinentalTerrane* GetTerraneByID(int32 TerraneID) const;
+
+    /**
+     * Milestone 6 Task 1.2: Assign extracted terrane to nearest oceanic carrier plate.
+     * Called automatically after extraction to initiate transport phase.
+     *
+     * @param TerraneID Terrane to assign carrier to
+     * @return True if carrier assigned successfully
+     */
+    bool AssignTerraneCarrier(int32 TerraneID);
+
+    /**
+     * Milestone 6 Task 1.2: Update terrane positions based on carrier plate motion.
+     * Called each step to migrate terranes with their carrier plates.
+     */
+    void UpdateTerranePositions(double DeltaTimeMy);
+
+    /**
+     * Milestone 6 Task 1.2: Detect terranes approaching continental convergent boundaries.
+     * Marks terranes as Colliding when within 500 km of collision.
+     */
+    void DetectTerraneCollisions();
+
+    /**
+     * Milestone 6 Task 1.3: Automatically reattach colliding terranes to target continental plates.
+     * Called each step after collision detection to complete terrane lifecycle.
+     */
+    void ProcessTerraneReattachments();
 
 private:
     void GenerateDefaultSphereSamples();
@@ -639,6 +899,24 @@ private:
     /** Milestone 4 Task 2.3: Compute thermal field from hotspots and subduction zones. */
     void ComputeThermalField();
 
+    /** Milestone 5 Task 2.1: Apply continental erosion to vertices above sea level. */
+    void ApplyContinentalErosion(double DeltaTimeMy);
+
+    /** Milestone 5 Task 2.2: Redistribute sediment via diffusion (Stage 0, mass-conserving). */
+    void ApplySedimentTransport(double DeltaTimeMy);
+
+    /** Milestone 5 Task 2.3: Apply oceanic dampening and age-subsidence to seafloor. */
+    void ApplyOceanicDampening(double DeltaTimeMy);
+
+    /** Milestone 5: Helper to compute surface slope at vertex (for erosion rate). */
+    double ComputeVertexSlope(int32 VertexIdx) const;
+
+    /** Milestone 6 Task 2.1: Compute ridge directions for all oceanic vertices. */
+    void ComputeRidgeDirections();
+
+    /** Milestone 6 Task 2.1: Apply Stage B oceanic amplification (transform faults, fine detail). */
+    void ApplyOceanicAmplification();
+
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
     TArray<FVector3d> BaseSphereSamples;
@@ -659,6 +937,24 @@ private:
     TArray<double> VertexStressValues; // Interpolated stress (MPa) for each RenderVertex (Task 2.3, cosmetic)
     TArray<double> VertexTemperatureValues; // Milestone 4 Task 2.3: Thermal field (K) from hotspots + subduction
 
+    /** Milestone 5 Task 2.1: Per-vertex elevation (meters) relative to sphere surface. */
+    TArray<double> VertexElevationValues;
+
+    /** Milestone 5 Task 2.1: Per-vertex erosion rate (m/My) for visualization/CSV export. */
+    TArray<double> VertexErosionRates;
+
+    /** Milestone 5 Task 2.2: Per-vertex sediment thickness (meters) from erosion redistribution. */
+    TArray<double> VertexSedimentThickness;
+
+    /** Milestone 5 Task 2.3: Per-vertex oceanic crust age (My) for age-subsidence calculations. */
+    TArray<double> VertexCrustAge;
+
+    /** Milestone 6 Task 2.1: Per-vertex ridge direction (for transform fault orientation). */
+    TArray<FVector3d> VertexRidgeDirections;
+
+    /** Milestone 6 Task 2.1: Per-vertex amplified elevation (Stage B, meters). */
+    TArray<double> VertexAmplifiedElevation;
+
     /** Milestone 3 Task 3.3: Initial plate centroid positions (captured after Lloyd relaxation). */
     TArray<FVector3d> InitialPlateCentroids;
 
@@ -667,6 +963,12 @@ private:
 
     /** Milestone 4 Task 2.1: Active mantle hotspots/plumes. */
     TArray<FMantleHotspot> Hotspots;
+
+    /** Milestone 6 Task 1.1: Active continental terranes (extracted/transporting/colliding). */
+    TArray<FContinentalTerrane> Terranes;
+
+    /** Milestone 6 Task 1.1: Next terrane ID for deterministic generation. */
+    int32 NextTerraneID = 0;
 
     /** Milestone 4 Phase 4.2: Topology version (increments on re-tessellation/split/merge). */
     int32 TopologyVersion = 0;

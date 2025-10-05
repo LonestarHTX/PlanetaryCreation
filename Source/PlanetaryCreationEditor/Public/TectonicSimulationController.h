@@ -21,9 +21,13 @@ struct FMeshBuildSnapshot
     TArray<int32> VertexPlateAssignments;
     TArray<FVector3d> VertexVelocities;
     TArray<double> VertexStressValues;
+    TArray<double> VertexElevationValues; // M5 Phase 3.7: Actual elevations from erosion system
     double ElevationScale;
     bool bShowVelocityField;
     EElevationMode ElevationMode;
+
+    /** Milestone 5 Phase 3: Planet radius in meters (for unit conversion to UE centimeters). */
+    double PlanetRadius = 127400.0;
 };
 
 /** Milestone 4 Phase 4.2: Cached LOD mesh snapshot (snapshot of simulation state, not StreamSet). */

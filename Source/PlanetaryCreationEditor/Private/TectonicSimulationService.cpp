@@ -29,10 +29,24 @@ void UTectonicSimulationService::ResetSimulation()
 {
     CurrentTimeMy = 0.0;
 
+    // Milestone 5: Clear all per-vertex arrays for deterministic resets
+    VertexElevationValues.Empty();
+    VertexErosionRates.Empty();
+    VertexSedimentThickness.Empty();
+    VertexCrustAge.Empty();
+
+    // Milestone 6: Clear amplification arrays
+    VertexRidgeDirections.Empty();
+    VertexAmplifiedElevation.Empty();
+
     // Milestone 4 Phase 5: Reset version counters for test isolation
     TopologyVersion = 0;
     SurfaceDataVersion = 0;
     RetessellationCount = 0;
+
+    // Milestone 6 Task 1.3: Clear terranes on reset
+    Terranes.Empty();
+    NextTerraneID = 0;
 
     GenerateDefaultSphereSamples();
 
@@ -71,6 +85,48 @@ void UTectonicSimulationService::ResetSimulation()
     // Milestone 4 Task 1.2: Clear topology event log
     TopologyEvents.Empty();
 
+    // Milestone 5: Initialize per-vertex arrays to match render vertex count
+    // This ensures arrays are properly sized even when feature flags are disabled
+    const int32 VertexCount = RenderVertices.Num();
+    VertexElevationValues.SetNumZeroed(VertexCount);
+    VertexErosionRates.SetNumZeroed(VertexCount);
+    VertexSedimentThickness.SetNumZeroed(VertexCount);
+    VertexCrustAge.SetNumZeroed(VertexCount);
+
+    // Milestone 6 Task 2.1: Initialize amplification arrays
+    VertexRidgeDirections.SetNum(VertexCount);
+    for (int32 i = 0; i < VertexCount; ++i)
+    {
+        VertexRidgeDirections[i] = FVector3d::ZAxisVector; // Default fallback direction
+    }
+    VertexAmplifiedElevation.SetNumZeroed(VertexCount);
+
+    // M5 Phase 3 fix: Seed elevation baselines from plate crust type for order independence
+    // This ensures oceanic dampening/erosion work regardless of execution order
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 PlateIdx = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        if (PlateIdx != INDEX_NONE && Plates.IsValidIndex(PlateIdx))
+        {
+            const bool bIsOceanic = (Plates[PlateIdx].CrustType == ECrustType::Oceanic);
+            if (bIsOceanic)
+            {
+                /**
+                 * M5 Phase 3: Oceanic baseline must stay below SeaLevel.
+                 * Default: -3500m (mean oceanic depth), BUT if tests raise SeaLevel (e.g., to 1000m),
+                 * we clamp to SeaLevel - 1000m to ensure seafloor stays below sea level.
+                 * This prevents false positives in "vertices below sea level" assertions when SeaLevel varies.
+                 */
+                VertexElevationValues[VertexIdx] = FMath::Min(-3500.0, Parameters.SeaLevel - 1000.0);
+            }
+            else
+            {
+                // Continental baseline: +250m (mean continental platform above sea level)
+                VertexElevationValues[VertexIdx] = 250.0;
+            }
+        }
+    }
+
     // Milestone 5 Task 1.3: Initialize history stack with initial state
     HistoryStack.Empty();
     CurrentHistoryIndex = -1;
@@ -95,8 +151,17 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Phase 2 Task 4: Migrate plate centroids via Euler pole rotation
         MigratePlateCentroids(StepDurationMy);
 
+        // Milestone 6 Task 1.2: Update terrane positions (migrate with carrier plates)
+        UpdateTerranePositions(StepDurationMy);
+
         // Phase 2 Task 5: Update boundary classifications based on relative velocities
         UpdateBoundaryClassifications();
+
+        // Milestone 6 Task 1.2: Detect terrane collisions (after boundary updates)
+        DetectTerraneCollisions();
+
+        // Milestone 6 Task 1.3: Automatically reattach colliding terranes (after collision detection)
+        ProcessTerraneReattachments();
 
         // Milestone 3 Task 2.3: Update stress at boundaries (cosmetic visualization)
         UpdateBoundaryStress(StepDurationMy);
@@ -123,6 +188,24 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
         // Milestone 4 Task 2.1: Apply hotspot thermal contribution to stress field
         ApplyHotspotThermalContribution();
+
+        // Milestone 5 Task 2.1: Apply continental erosion
+        ApplyContinentalErosion(StepDurationMy);
+
+        // Milestone 5 Task 2.2: Redistribute eroded sediment
+        ApplySedimentTransport(StepDurationMy);
+
+        // Milestone 5 Task 2.3: Apply oceanic dampening
+        ApplyOceanicDampening(StepDurationMy);
+
+        // Milestone 6 Task 2.1: Apply Stage B oceanic amplification
+        // Must run after erosion/dampening to use base elevations as input
+        // Must run before topology changes to ensure valid vertex indices
+        if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
+        {
+            ComputeRidgeDirections();
+            ApplyOceanicAmplification();
+        }
 
         // Milestone 4 Task 1.2: Detect and execute plate splits/merges
         if (Parameters.bEnablePlateTopologyChanges)
@@ -154,6 +237,18 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
 {
     Parameters = NewParams;
+
+    // M5 Phase 3: Validate and clamp PlanetRadius to prevent invalid simulations
+    const double MinRadius = 10000.0;   // 10 km (minimum for asteroid-like bodies)
+    const double MaxRadius = 10000000.0; // 10,000 km (smaller than Jupiter)
+
+    if (Parameters.PlanetRadius < MinRadius || Parameters.PlanetRadius > MaxRadius)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("PlanetRadius %.0f m outside valid range [%.0f, %.0f]. Clamping to valid range."),
+            Parameters.PlanetRadius, MinRadius, MaxRadius);
+        Parameters.PlanetRadius = FMath::Clamp(Parameters.PlanetRadius, MinRadius, MaxRadius);
+    }
+
     ResetSimulation();
 }
 
@@ -232,6 +327,24 @@ void UTectonicSimulationService::GenerateIcospherePlates()
     FRandomStream RNG(Parameters.Seed);
     const int32 NumPlates = Plates.Num();
 
+    // Deterministic 70/30 oceanic/continental split (M5 Phase 3 fix)
+    // Pre-compute desired oceanic count to guarantee mix even with unlucky seeds
+    const int32 DesiredOceanic = FMath::RoundToInt(NumPlates * 0.7);
+
+    // Create shuffled index array for randomness
+    TArray<int32> PlateIndices;
+    for (int32 i = 0; i < NumPlates; ++i)
+    {
+        PlateIndices.Add(i);
+    }
+
+    // Shuffle with seeded RNG for deterministic but varied assignments
+    for (int32 i = NumPlates - 1; i > 0; --i)
+    {
+        const int32 j = RNG.RandRange(0, i);
+        PlateIndices.Swap(i, j);
+    }
+
     for (int32 i = 0; i < NumPlates; ++i)
     {
         FTectonicPlate& Plate = Plates[i];
@@ -245,8 +358,9 @@ void UTectonicSimulationService::GenerateIcospherePlates()
         }
         Plate.Centroid = (CentroidSum / static_cast<double>(Plate.VertexIndices.Num())).GetSafeNormal();
 
-        // Assign crust type: 70% oceanic, 30% continental (from paper)
-        const bool bIsOceanic = RNG.FRand() < 0.7;
+        // Assign crust type: 70% oceanic, 30% continental (deterministic)
+        // First DesiredOceanic plates in shuffled order become oceanic
+        const bool bIsOceanic = PlateIndices[i] < DesiredOceanic;
         Plate.CrustType = bIsOceanic ? ECrustType::Oceanic : ECrustType::Continental;
         Plate.CrustThickness = bIsOceanic ? 7.0 : 35.0; // Oceanic ~7km, Continental ~35km
     }
@@ -805,10 +919,14 @@ void UTectonicSimulationService::ExportMetricsToCSV()
 
     // Milestone 3: Export vertex-level data (stress, velocity, elevation, Task 2.3: temperature)
     CSVLines.Add(TEXT("")); // Empty line
-    CSVLines.Add(TEXT("VertexIndex,PositionX,PositionY,PositionZ,PlateID,VelocityX,VelocityY,VelocityZ,VelocityMagnitude,StressMPa,ElevationKm,TemperatureK"));
+    CSVLines.Add(TEXT("VertexIndex,PositionX,PositionY,PositionZ,PlateID,VelocityX,VelocityY,VelocityZ,VelocityMagnitude,StressMPa,ElevationMeters,TemperatureK"));
 
-    // Milestone 3 Task 2.4: Compression modulus for stress-to-elevation conversion
-    constexpr double CompressionModulus = 1.0; // 1 MPa = 1 km elevation (simplified)
+    /**
+     * M5 Phase 3: Stress-to-elevation conversion (cosmetic visualization, not physically accurate).
+     * CompressionModulus = 100.0 means "1 MPa stress → 100 m elevation" (legacy visualization scale).
+     * This matches TectonicSimulationController.cpp rendering logic.
+     */
+    constexpr double CompressionModulus = 100.0; // 1 MPa = 100 m elevation (cosmetic)
 
     const int32 MaxVerticesToExport = FMath::Min(RenderVertices.Num(), 1000); // Limit to first 1000 vertices for CSV size
     for (int32 i = 0; i < MaxVerticesToExport; ++i)
@@ -818,7 +936,7 @@ void UTectonicSimulationService::ExportMetricsToCSV()
         const FVector3d& Velocity = VertexVelocities.IsValidIndex(i) ? VertexVelocities[i] : FVector3d::ZeroVector;
         const double VelocityMag = Velocity.Length();
         const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
-        const double ElevationKm = (StressMPa / CompressionModulus) * Parameters.ElevationScale;
+        const double ElevationMeters = (StressMPa / CompressionModulus) * Parameters.ElevationScale;
         const double TemperatureK = VertexTemperatureValues.IsValidIndex(i) ? VertexTemperatureValues[i] : 0.0; // Milestone 4 Task 2.3
 
         CSVLines.Add(FString::Printf(TEXT("%d,%.8f,%.8f,%.8f,%d,%.8f,%.8f,%.8f,%.8f,%.2f,%.2f,%.1f"),
@@ -828,7 +946,7 @@ void UTectonicSimulationService::ExportMetricsToCSV()
             Velocity.X, Velocity.Y, Velocity.Z,
             VelocityMag,
             StressMPa,
-            ElevationKm,
+            ElevationMeters,
             TemperatureK
         ));
     }
@@ -1361,6 +1479,16 @@ void UTectonicSimulationService::CaptureHistorySnapshot()
     Snapshot.TopologyVersion = TopologyVersion;
     Snapshot.SurfaceDataVersion = SurfaceDataVersion;
 
+    // Milestone 5: Capture erosion state
+    Snapshot.VertexElevationValues = VertexElevationValues;
+    Snapshot.VertexErosionRates = VertexErosionRates;
+    Snapshot.VertexSedimentThickness = VertexSedimentThickness;
+    Snapshot.VertexCrustAge = VertexCrustAge;
+
+    // Milestone 6: Capture terrane state
+    Snapshot.Terranes = Terranes;
+    Snapshot.NextTerraneID = NextTerraneID;
+
     // Add to stack
     HistoryStack.Add(Snapshot);
     CurrentHistoryIndex = HistoryStack.Num() - 1;
@@ -1405,6 +1533,16 @@ bool UTectonicSimulationService::Undo()
     TopologyVersion = Snapshot.TopologyVersion;
     SurfaceDataVersion = Snapshot.SurfaceDataVersion;
 
+    // Milestone 5: Restore erosion state
+    VertexElevationValues = Snapshot.VertexElevationValues;
+    VertexErosionRates = Snapshot.VertexErosionRates;
+    VertexSedimentThickness = Snapshot.VertexSedimentThickness;
+    VertexCrustAge = Snapshot.VertexCrustAge;
+
+    // Milestone 6: Restore terrane state
+    Terranes = Snapshot.Terranes;
+    NextTerraneID = Snapshot.NextTerraneID;
+
     UE_LOG(LogTemp, Log, TEXT("Undo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
     return true;
@@ -1437,6 +1575,16 @@ bool UTectonicSimulationService::Redo()
     InitialPlateCentroids = Snapshot.InitialPlateCentroids;
     TopologyVersion = Snapshot.TopologyVersion;
     SurfaceDataVersion = Snapshot.SurfaceDataVersion;
+
+    // Milestone 5: Restore erosion state
+    VertexElevationValues = Snapshot.VertexElevationValues;
+    VertexErosionRates = Snapshot.VertexErosionRates;
+    VertexSedimentThickness = Snapshot.VertexSedimentThickness;
+    VertexCrustAge = Snapshot.VertexCrustAge;
+
+    // Milestone 6: Restore terrane state
+    Terranes = Snapshot.Terranes;
+    NextTerraneID = Snapshot.NextTerraneID;
 
     UE_LOG(LogTemp, Log, TEXT("Redo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
@@ -1472,7 +1620,808 @@ bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
     TopologyVersion = Snapshot.TopologyVersion;
     SurfaceDataVersion = Snapshot.SurfaceDataVersion;
 
+    // Milestone 5: Restore erosion state
+    VertexElevationValues = Snapshot.VertexElevationValues;
+    VertexErosionRates = Snapshot.VertexErosionRates;
+    VertexSedimentThickness = Snapshot.VertexSedimentThickness;
+    VertexCrustAge = Snapshot.VertexCrustAge;
+
+    // Milestone 6: Restore terrane state
+    Terranes = Snapshot.Terranes;
+    NextTerraneID = Snapshot.NextTerraneID;
+
     UE_LOG(LogTemp, Log, TEXT("JumpToHistoryIndex: Jumped to snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
     return true;
+}
+
+// ========================================
+// Milestone 6 Task 1.1: Terrane Mechanics
+// ========================================
+
+bool UTectonicSimulationService::ValidateTopology(FString& OutErrorMessage) const
+{
+    const int32 V = RenderVertices.Num();
+    const int32 F = RenderTriangles.Num() / 3;
+
+    if (V == 0 || F == 0)
+    {
+        OutErrorMessage = TEXT("Empty mesh: no vertices or faces");
+        return false;
+    }
+
+    // Compute unique edges
+    TSet<TPair<int32, int32>> UniqueEdges;
+    TMap<TPair<int32, int32>, int32> EdgeCounts;
+
+    for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
+    {
+        int32 V0 = RenderTriangles[i];
+        int32 V1 = RenderTriangles[i + 1];
+        int32 V2 = RenderTriangles[i + 2];
+
+        // Validate triangle indices
+        if (V0 < 0 || V0 >= V || V1 < 0 || V1 >= V || V2 < 0 || V2 >= V)
+        {
+            OutErrorMessage = FString::Printf(TEXT("Invalid triangle indices: (%d, %d, %d), vertex count: %d"),
+                V0, V1, V2, V);
+            return false;
+        }
+
+        // Check for degenerate triangles
+        if (V0 == V1 || V1 == V2 || V2 == V0)
+        {
+            OutErrorMessage = FString::Printf(TEXT("Degenerate triangle at face %d: (%d, %d, %d)"),
+                i / 3, V0, V1, V2);
+            return false;
+        }
+
+        // Add edges (canonical order: min vertex first)
+        auto Edge01 = MakeTuple(FMath::Min(V0, V1), FMath::Max(V0, V1));
+        auto Edge12 = MakeTuple(FMath::Min(V1, V2), FMath::Max(V1, V2));
+        auto Edge20 = MakeTuple(FMath::Min(V2, V0), FMath::Max(V2, V0));
+
+        UniqueEdges.Add(Edge01);
+        UniqueEdges.Add(Edge12);
+        UniqueEdges.Add(Edge20);
+
+        EdgeCounts.FindOrAdd(Edge01)++;
+        EdgeCounts.FindOrAdd(Edge12)++;
+        EdgeCounts.FindOrAdd(Edge20)++;
+    }
+
+    const int32 E = UniqueEdges.Num();
+    const int32 EulerChar = V - E + F;
+
+    // Validation 1: Euler characteristic (must be 2 for closed sphere)
+    if (EulerChar != 2)
+    {
+        OutErrorMessage = FString::Printf(TEXT("Invalid Euler characteristic: V=%d, E=%d, F=%d, V-E+F=%d (expected 2)"),
+            V, E, F, EulerChar);
+        return false;
+    }
+
+    // Validation 2: Manifold edges (each edge touches exactly 2 triangles)
+    int32 NonManifoldEdges = 0;
+    for (const auto& Pair : EdgeCounts)
+    {
+        if (Pair.Value != 2)
+        {
+            NonManifoldEdges++;
+            if (NonManifoldEdges <= 3) // Log first 3 only
+            {
+                OutErrorMessage += FString::Printf(TEXT("Non-manifold edge: (%d, %d) appears %d times (expected 2); "),
+                    Pair.Key.Key, Pair.Key.Value, Pair.Value);
+            }
+        }
+    }
+
+    if (NonManifoldEdges > 0)
+    {
+        OutErrorMessage = FString::Printf(TEXT("%d non-manifold edges found. "), NonManifoldEdges) + OutErrorMessage;
+        return false;
+    }
+
+    // Validation 3: No orphaned vertices
+    TSet<int32> ReferencedVertices;
+    for (int32 Idx : RenderTriangles)
+    {
+        ReferencedVertices.Add(Idx);
+    }
+
+    const int32 OrphanedVertices = V - ReferencedVertices.Num();
+    if (OrphanedVertices > 0)
+    {
+        OutErrorMessage = FString::Printf(TEXT("%d orphaned vertices found (not referenced by any triangle)"),
+            OrphanedVertices);
+        return false;
+    }
+
+    // All validations passed
+    return true;
+}
+
+double UTectonicSimulationService::ComputeTerraneArea(const TArray<int32>& VertexIndices) const
+{
+    if (VertexIndices.Num() < 3)
+    {
+        return 0.0; // Too few vertices for area
+    }
+
+    // Find triangles that are entirely within the terrane region
+    TSet<int32> TerraneVertexSet(VertexIndices);
+    double TotalArea = 0.0;
+    const double RadiusKm = Parameters.PlanetRadius / 1000.0; // Convert meters to km
+
+    for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
+    {
+        int32 V0 = RenderTriangles[i];
+        int32 V1 = RenderTriangles[i + 1];
+        int32 V2 = RenderTriangles[i + 2];
+
+        // Check if all 3 vertices belong to terrane
+        if (TerraneVertexSet.Contains(V0) && TerraneVertexSet.Contains(V1) && TerraneVertexSet.Contains(V2))
+        {
+            // Spherical triangle area using L'Huilier's theorem
+            const FVector3d& A = RenderVertices[V0];
+            const FVector3d& B = RenderVertices[V1];
+            const FVector3d& C = RenderVertices[V2];
+
+            // Edge lengths (angles in radians on unit sphere)
+            double a = FMath::Acos(FMath::Clamp(B | C, -1.0, 1.0)); // Angle BC
+            double b = FMath::Acos(FMath::Clamp(C | A, -1.0, 1.0)); // Angle CA
+            double c = FMath::Acos(FMath::Clamp(A | B, -1.0, 1.0)); // Angle AB
+
+            // Semi-perimeter
+            double s = (a + b + c) * 0.5;
+
+            // L'Huilier's formula: tan(E/4) = sqrt(tan(s/2) * tan((s-a)/2) * tan((s-b)/2) * tan((s-c)/2))
+            // where E is the spherical excess (area on unit sphere)
+            double tan_s2 = FMath::Tan(s * 0.5);
+            double tan_sa2 = FMath::Tan((s - a) * 0.5);
+            double tan_sb2 = FMath::Tan((s - b) * 0.5);
+            double tan_sc2 = FMath::Tan((s - c) * 0.5);
+
+            double tan_E4 = FMath::Sqrt(FMath::Max(0.0, tan_s2 * tan_sa2 * tan_sb2 * tan_sc2));
+            double E = 4.0 * FMath::Atan(tan_E4); // Spherical excess (area on unit sphere)
+
+            // Scale by radius²
+            double TriangleAreaKm2 = E * RadiusKm * RadiusKm;
+            TotalArea += TriangleAreaKm2;
+        }
+    }
+
+    return TotalArea;
+}
+
+const FContinentalTerrane* UTectonicSimulationService::GetTerraneByID(int32 TerraneID) const
+{
+    for (const FContinentalTerrane& Terrane : Terranes)
+    {
+        if (Terrane.TerraneID == TerraneID)
+        {
+            return &Terrane;
+        }
+    }
+    return nullptr;
+}
+
+bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArray<int32>& TerraneVertexIndices, int32& OutTerraneID)
+{
+    UE_LOG(LogTemp, Log, TEXT("ExtractTerrane: Attempting to extract %d vertices from plate %d"),
+        TerraneVertexIndices.Num(), SourcePlateID);
+
+    // Find source plate
+    FTectonicPlate* SourcePlate = nullptr;
+    for (FTectonicPlate& Plate : Plates)
+    {
+        if (Plate.PlateID == SourcePlateID)
+        {
+            SourcePlate = &Plate;
+            break;
+        }
+    }
+
+    if (!SourcePlate)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Source plate %d not found"), SourcePlateID);
+        return false;
+    }
+
+    // Validation: Source must be continental
+    if (SourcePlate->CrustType != ECrustType::Continental)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Source plate %d is not continental"), SourcePlateID);
+        return false;
+    }
+
+    // Validation: Vertices must be valid
+    for (int32 VertexIdx : TerraneVertexIndices)
+    {
+        if (VertexIdx < 0 || VertexIdx >= RenderVertices.Num())
+        {
+            UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Invalid vertex index %d (range: 0-%d)"),
+                VertexIdx, RenderVertices.Num() - 1);
+            return false;
+        }
+
+        // Check vertex belongs to source plate
+        if (VertexPlateAssignments[VertexIdx] != SourcePlateID)
+        {
+            UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Vertex %d does not belong to plate %d (assigned to %d)"),
+                VertexIdx, SourcePlateID, VertexPlateAssignments[VertexIdx]);
+            return false;
+        }
+    }
+
+    // Edge case 1: Single-vertex terrane (min area: 100 km²)
+    const double TerraneArea = ComputeTerraneArea(TerraneVertexIndices);
+    if (TerraneArea < 100.0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ExtractTerrane: Terrane area %.2f km² below minimum 100 km², rejecting extraction"),
+            TerraneArea);
+        return false;
+    }
+
+    // Edge case 3: Single-terrane plate (all vertices extracted)
+    int32 PlateVertexCount = 0;
+    for (int32 Assignment : VertexPlateAssignments)
+    {
+        if (Assignment == SourcePlateID)
+        {
+            PlateVertexCount++;
+        }
+    }
+
+    if (TerraneVertexIndices.Num() == PlateVertexCount)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ExtractTerrane: Extracting all %d vertices from plate %d (treat as plate split)"),
+            PlateVertexCount, SourcePlateID);
+        // TODO: Convert to plate split instead of terrane extraction (deferred to edge case implementation)
+        return false;
+    }
+
+    // Capture pre-extraction snapshot for rollback
+    FString ValidationError;
+    if (!ValidateTopology(ValidationError))
+    {
+        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Pre-extraction topology invalid: %s"), *ValidationError);
+        return false;
+    }
+
+    // Assign terrane vertices to a temporary "detached" plate ID (-1 by convention)
+    for (int32 VertexIdx : TerraneVertexIndices)
+    {
+        VertexPlateAssignments[VertexIdx] = INDEX_NONE; // Mark as unassigned
+    }
+
+    // Compute terrane centroid
+    FVector3d TerraneCentroid = FVector3d::ZeroVector;
+    for (int32 VertexIdx : TerraneVertexIndices)
+    {
+        TerraneCentroid += RenderVertices[VertexIdx];
+    }
+    TerraneCentroid /= static_cast<double>(TerraneVertexIndices.Num());
+    TerraneCentroid.Normalize();
+
+    // Create terrane record
+    FContinentalTerrane NewTerrane;
+    NewTerrane.TerraneID = NextTerraneID++;
+    NewTerrane.State = ETerraneState::Extracted;
+    NewTerrane.VertexIndices = TerraneVertexIndices;
+    NewTerrane.SourcePlateID = SourcePlateID;
+    NewTerrane.CarrierPlateID = INDEX_NONE;
+    NewTerrane.TargetPlateID = INDEX_NONE;
+    NewTerrane.Centroid = TerraneCentroid;
+    NewTerrane.AreaKm2 = TerraneArea;
+    NewTerrane.ExtractionTimeMy = CurrentTimeMy;
+    NewTerrane.ReattachmentTimeMy = 0.0;
+
+    Terranes.Add(NewTerrane);
+    OutTerraneID = NewTerrane.TerraneID;
+
+    // Validate post-extraction topology
+    if (!ValidateTopology(ValidationError))
+    {
+        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Post-extraction topology invalid: %s"), *ValidationError);
+
+        // Rollback: Reassign vertices back to source plate
+        for (int32 VertexIdx : TerraneVertexIndices)
+        {
+            VertexPlateAssignments[VertexIdx] = SourcePlateID;
+        }
+        Terranes.Pop(); // Remove failed terrane
+        NextTerraneID--; // Restore ID counter
+
+        return false;
+    }
+
+    // Increment topology version (mesh structure unchanged, but plate assignments changed)
+    TopologyVersion++;
+
+    UE_LOG(LogTemp, Log, TEXT("ExtractTerrane: Successfully extracted terrane %d (%.2f km²) from plate %d"),
+        OutTerraneID, TerraneArea, SourcePlateID);
+
+    // Milestone 6 Task 1.2: Automatically assign carrier plate to initiate transport
+    AssignTerraneCarrier(OutTerraneID);
+
+    return true;
+}
+
+bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPlateID)
+{
+    UE_LOG(LogTemp, Log, TEXT("ReattachTerrane: Attempting to reattach terrane %d to plate %d"),
+        TerraneID, TargetPlateID);
+
+    // Find terrane
+    FContinentalTerrane* Terrane = nullptr;
+    int32 TerraneIndex = INDEX_NONE;
+    for (int32 i = 0; i < Terranes.Num(); ++i)
+    {
+        if (Terranes[i].TerraneID == TerraneID)
+        {
+            Terrane = &Terranes[i];
+            TerraneIndex = i;
+            break;
+        }
+    }
+
+    if (!Terrane)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Terrane %d not found"), TerraneID);
+        return false;
+    }
+
+    // Validation: Terrane must be detached (Extracted, Transporting, or Colliding)
+    if (Terrane->State != ETerraneState::Extracted &&
+        Terrane->State != ETerraneState::Transporting &&
+        Terrane->State != ETerraneState::Colliding)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Terrane %d not in detached state (current: %d, expected: 1=Extracted, 2=Transporting, 3=Colliding)"),
+            TerraneID, static_cast<int32>(Terrane->State));
+        return false;
+    }
+
+    // Find target plate
+    FTectonicPlate* TargetPlate = nullptr;
+    for (FTectonicPlate& Plate : Plates)
+    {
+        if (Plate.PlateID == TargetPlateID)
+        {
+            TargetPlate = &Plate;
+            break;
+        }
+    }
+
+    if (!TargetPlate)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Target plate %d not found"), TargetPlateID);
+        return false;
+    }
+
+    // Validation: Target must be continental
+    if (TargetPlate->CrustType != ECrustType::Continental)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Target plate %d is not continental"), TargetPlateID);
+        return false;
+    }
+
+    // Capture pre-reattachment snapshot for rollback
+    FString ValidationError;
+    if (!ValidateTopology(ValidationError))
+    {
+        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Pre-reattachment topology invalid: %s"), *ValidationError);
+        return false;
+    }
+
+    // Assign terrane vertices to target plate
+    for (int32 VertexIdx : Terrane->VertexIndices)
+    {
+        if (VertexIdx < 0 || VertexIdx >= VertexPlateAssignments.Num())
+        {
+            UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Invalid vertex index %d in terrane %d"),
+                VertexIdx, TerraneID);
+            return false;
+        }
+
+        VertexPlateAssignments[VertexIdx] = TargetPlateID;
+    }
+
+    // Update terrane record
+    Terrane->State = ETerraneState::Attached;
+    Terrane->TargetPlateID = TargetPlateID;
+    Terrane->CarrierPlateID = INDEX_NONE;
+    Terrane->ReattachmentTimeMy = CurrentTimeMy;
+
+    // Validate post-reattachment topology
+    if (!ValidateTopology(ValidationError))
+    {
+        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Post-reattachment topology invalid: %s"), *ValidationError);
+
+        // Rollback: Unassign vertices
+        for (int32 VertexIdx : Terrane->VertexIndices)
+        {
+            VertexPlateAssignments[VertexIdx] = INDEX_NONE;
+        }
+
+        // Restore terrane state
+        Terrane->State = ETerraneState::Extracted;
+        Terrane->TargetPlateID = INDEX_NONE;
+        Terrane->ReattachmentTimeMy = 0.0;
+
+        return false;
+    }
+
+    // Remove terrane from active list (now fully integrated into target plate)
+    Terranes.RemoveAt(TerraneIndex);
+
+    // Increment topology version
+    TopologyVersion++;
+
+    UE_LOG(LogTemp, Log, TEXT("ReattachTerrane: Successfully reattached terrane %d to plate %d (%.2f My transport duration)"),
+        TerraneID, TargetPlateID, CurrentTimeMy - Terrane->ExtractionTimeMy);
+
+    return true;
+}
+
+bool UTectonicSimulationService::AssignTerraneCarrier(int32 TerraneID)
+{
+    // Find terrane
+    FContinentalTerrane* Terrane = nullptr;
+    for (FContinentalTerrane& T : Terranes)
+    {
+        if (T.TerraneID == TerraneID)
+        {
+            Terrane = &T;
+            break;
+        }
+    }
+
+    if (!Terrane)
+    {
+        UE_LOG(LogTemp, Error, TEXT("AssignTerraneCarrier: Terrane %d not found"), TerraneID);
+        return false;
+    }
+
+    // Validation: Terrane must be in Extracted state
+    if (Terrane->State != ETerraneState::Extracted)
+    {
+        UE_LOG(LogTemp, Error, TEXT("AssignTerraneCarrier: Terrane %d not in Extracted state (current: %d)"),
+            TerraneID, static_cast<int32>(Terrane->State));
+        return false;
+    }
+
+    // Find nearest oceanic plate to terrane centroid
+    double MinDistance = TNumericLimits<double>::Max();
+    int32 NearestOceanicPlateID = INDEX_NONE;
+
+    for (const FTectonicPlate& Plate : Plates)
+    {
+        if (Plate.CrustType == ECrustType::Oceanic)
+        {
+            // Geodesic distance between terrane centroid and plate centroid
+            const double Distance = FMath::Acos(FMath::Clamp(Terrane->Centroid | Plate.Centroid, -1.0, 1.0));
+
+            if (Distance < MinDistance)
+            {
+                MinDistance = Distance;
+                NearestOceanicPlateID = Plate.PlateID;
+            }
+        }
+    }
+
+    if (NearestOceanicPlateID == INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AssignTerraneCarrier: No oceanic plates found, terrane %d remains in Extracted state"), TerraneID);
+        return false;
+    }
+
+    // Assign carrier and transition to Transporting state
+    Terrane->CarrierPlateID = NearestOceanicPlateID;
+    Terrane->State = ETerraneState::Transporting;
+
+    const double DistanceKm = MinDistance * (Parameters.PlanetRadius / 1000.0);
+    UE_LOG(LogTemp, Log, TEXT("AssignTerraneCarrier: Terrane %d assigned to oceanic carrier %d (distance: %.1f km)"),
+        TerraneID, NearestOceanicPlateID, DistanceKm);
+
+    return true;
+}
+
+void UTectonicSimulationService::UpdateTerranePositions(double DeltaTimeMy)
+{
+    for (FContinentalTerrane& Terrane : Terranes)
+    {
+        // Only update terranes that are being transported by carrier plates
+        if (Terrane.State != ETerraneState::Transporting)
+        {
+            continue;
+        }
+
+        // Find carrier plate
+        const FTectonicPlate* CarrierPlate = nullptr;
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.PlateID == Terrane.CarrierPlateID)
+            {
+                CarrierPlate = &Plate;
+                break;
+            }
+        }
+
+        if (!CarrierPlate)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("UpdateTerranePositions: Carrier plate %d not found for terrane %d"),
+                Terrane.CarrierPlateID, Terrane.TerraneID);
+            continue;
+        }
+
+        // Rotate terrane vertices around carrier plate's Euler pole
+        const FVector3d& RotationAxis = CarrierPlate->EulerPoleAxis;
+        const double RotationAngle = CarrierPlate->AngularVelocity * DeltaTimeMy;
+
+        // Rodrigues' rotation formula: v' = v*cos(θ) + (k×v)*sin(θ) + k*(k·v)*(1-cos(θ))
+        const double CosTheta = FMath::Cos(RotationAngle);
+        const double SinTheta = FMath::Sin(RotationAngle);
+        const double OneMinusCosTheta = 1.0 - CosTheta;
+
+        for (int32 VertexIdx : Terrane.VertexIndices)
+        {
+            if (VertexIdx < 0 || VertexIdx >= RenderVertices.Num())
+            {
+                continue;
+            }
+
+            const FVector3d& V = RenderVertices[VertexIdx];
+            const FVector3d KCrossV = RotationAxis ^ V;
+            const double KDotV = RotationAxis | V;
+
+            RenderVertices[VertexIdx] = V * CosTheta + KCrossV * SinTheta + RotationAxis * KDotV * OneMinusCosTheta;
+            RenderVertices[VertexIdx].Normalize(); // Maintain unit sphere
+        }
+
+        // Update terrane centroid
+        FVector3d NewCentroid = FVector3d::ZeroVector;
+        for (int32 VertexIdx : Terrane.VertexIndices)
+        {
+            if (VertexIdx >= 0 && VertexIdx < RenderVertices.Num())
+            {
+                NewCentroid += RenderVertices[VertexIdx];
+            }
+        }
+        NewCentroid /= static_cast<double>(Terrane.VertexIndices.Num());
+        Terrane.Centroid = NewCentroid.GetSafeNormal();
+    }
+}
+
+void UTectonicSimulationService::DetectTerraneCollisions()
+{
+    const double CollisionThreshold_km = 500.0; // Paper Section 6: proximity threshold for collision detection
+    const double CollisionThreshold_rad = CollisionThreshold_km / (Parameters.PlanetRadius / 1000.0);
+
+    for (FContinentalTerrane& Terrane : Terranes)
+    {
+        // Only check terranes that are currently being transported
+        if (Terrane.State != ETerraneState::Transporting)
+        {
+            continue;
+        }
+
+        // Check distance to all continental plates
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.CrustType != ECrustType::Continental)
+            {
+                continue; // Skip oceanic plates
+            }
+
+            // Skip source plate (terrane came from here)
+            if (Plate.PlateID == Terrane.SourcePlateID)
+            {
+                continue;
+            }
+
+            // Check if terrane is approaching this continental plate
+            // Find closest boundary point between carrier and target plate
+            const TPair<int32, int32> BoundaryKey = Terrane.CarrierPlateID < Plate.PlateID
+                ? MakeTuple(Terrane.CarrierPlateID, Plate.PlateID)
+                : MakeTuple(Plate.PlateID, Terrane.CarrierPlateID);
+
+            const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey);
+            if (!Boundary)
+            {
+                continue; // No boundary between carrier and this continental plate
+            }
+
+            // Check if boundary is convergent (collision zone)
+            if (Boundary->BoundaryType != EBoundaryType::Convergent)
+            {
+                continue; // Only convergent boundaries trigger collisions
+            }
+
+            // Compute distance from terrane centroid to boundary
+            double MinDistanceToBoundary = TNumericLimits<double>::Max();
+            for (int32 SharedVertexIdx : Boundary->SharedEdgeVertices)
+            {
+                if (SharedVertexIdx < 0 || SharedVertexIdx >= SharedVertices.Num())
+                {
+                    continue;
+                }
+
+                const FVector3d& BoundaryPoint = SharedVertices[SharedVertexIdx];
+                const double Distance = FMath::Acos(FMath::Clamp(Terrane.Centroid | BoundaryPoint, -1.0, 1.0));
+
+                if (Distance < MinDistanceToBoundary)
+                {
+                    MinDistanceToBoundary = Distance;
+                }
+            }
+
+            // Check if terrane is within collision threshold
+            if (MinDistanceToBoundary < CollisionThreshold_rad)
+            {
+                // Mark terrane as colliding and set target plate
+                Terrane.State = ETerraneState::Colliding;
+                Terrane.TargetPlateID = Plate.PlateID;
+
+                const double DistanceKm = MinDistanceToBoundary * (Parameters.PlanetRadius / 1000.0);
+                UE_LOG(LogTemp, Log, TEXT("DetectTerraneCollisions: Terrane %d approaching plate %d (distance: %.1f km, threshold: %.1f km)"),
+                    Terrane.TerraneID, Plate.PlateID, DistanceKm, CollisionThreshold_km);
+
+                break; // Stop checking other plates for this terrane
+            }
+        }
+    }
+}
+
+void UTectonicSimulationService::ProcessTerraneReattachments()
+{
+    // Milestone 6 Task 1.3: Automatically reattach colliding terranes
+    // Note: Iterate backwards since ReattachTerrane removes terranes from array
+    for (int32 i = Terranes.Num() - 1; i >= 0; --i)
+    {
+        FContinentalTerrane& Terrane = Terranes[i];
+
+        if (Terrane.State == ETerraneState::Colliding)
+        {
+            if (Terrane.TargetPlateID == INDEX_NONE)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ProcessTerraneReattachments: Terrane %d in Colliding state but no target plate assigned, skipping"),
+                    Terrane.TerraneID);
+                continue;
+            }
+
+            const double TransportDuration = CurrentTimeMy - Terrane.ExtractionTimeMy;
+            UE_LOG(LogTemp, Log, TEXT("ProcessTerraneReattachments: Auto-reattaching terrane %d to plate %d after %.2f My transport"),
+                Terrane.TerraneID, Terrane.TargetPlateID, TransportDuration);
+
+            // Attempt reattachment (will validate topology and rollback on failure)
+            const bool bSuccess = ReattachTerrane(Terrane.TerraneID, Terrane.TargetPlateID);
+
+            if (!bSuccess)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ProcessTerraneReattachments: Failed to reattach terrane %d, will retry next step"),
+                    Terrane.TerraneID);
+                // Keep terrane in Colliding state for retry next step
+            }
+            // Note: If successful, terrane was removed from Terranes array by ReattachTerrane
+        }
+    }
+}
+
+// ============================================================================
+// Milestone 6 Task 2.1: Oceanic Amplification (Stage B)
+// ============================================================================
+
+// Forward declarations from OceanicAmplification.cpp
+double ComputeGaborNoiseApproximation(const FVector3d& Position, const FVector3d& FaultDirection, double Frequency);
+double ComputeOceanicAmplification(const FVector3d& Position, int32 PlateID, double CrustAge_My, double BaseElevation_m,
+    const FVector3d& RidgeDirection, const TArray<FTectonicPlate>& Plates, const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries);
+
+void UTectonicSimulationService::ComputeRidgeDirections()
+{
+    // Paper Section 5: "using the recorded parameters r_c, i.e. the local direction parallel to the ridge"
+    // For each vertex, find nearest divergent boundary and compute tangent direction
+
+    const int32 VertexCount = RenderVertices.Num();
+    checkf(VertexRidgeDirections.Num() == VertexCount, TEXT("VertexRidgeDirections not initialized"));
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const FVector3d& VertexPosition = RenderVertices[VertexIdx];
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+
+        if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
+        {
+            VertexRidgeDirections[VertexIdx] = FVector3d::ZAxisVector; // Fallback
+            continue;
+        }
+
+        const FTectonicPlate& Plate = Plates[PlateID];
+
+        // Only compute ridge direction for oceanic crust
+        if (Plate.CrustType != ECrustType::Oceanic)
+        {
+            VertexRidgeDirections[VertexIdx] = FVector3d::ZAxisVector; // Continental vertices ignored
+            continue;
+        }
+
+        // Find nearest divergent boundary involving this plate
+        FVector3d NearestBoundaryTangent = FVector3d::ZAxisVector; // Default fallback
+        double MinDistance = TNumericLimits<double>::Max();
+
+        for (const auto& BoundaryPair : Boundaries)
+        {
+            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+            const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+            // Only consider divergent boundaries involving this plate
+            if (Boundary.BoundaryType != EBoundaryType::Divergent)
+                continue;
+
+            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+                continue;
+
+            // Boundary is defined by shared edge vertices
+            if (Boundary.SharedEdgeVertices.Num() < 2)
+                continue;
+
+            // Compute distance from vertex to boundary (simplified: distance to first edge vertex)
+            const int32 EdgeVertexIdx = Boundary.SharedEdgeVertices[0];
+            if (!SharedVertices.IsValidIndex(EdgeVertexIdx))
+                continue;
+
+            const FVector3d& EdgeVertex = SharedVertices[EdgeVertexIdx];
+            const double Distance = FVector3d::Distance(VertexPosition, EdgeVertex);
+
+            if (Distance < MinDistance)
+            {
+                MinDistance = Distance;
+
+                // Ridge direction = tangent to boundary on sphere surface
+                // Tangent is perpendicular to both radius and edge-to-vertex direction
+                const FVector3d RadialDir = VertexPosition.GetSafeNormal();
+                const FVector3d ToEdge = (EdgeVertex - VertexPosition).GetSafeNormal();
+                NearestBoundaryTangent = FVector3d::CrossProduct(RadialDir, ToEdge).GetSafeNormal();
+            }
+        }
+
+        VertexRidgeDirections[VertexIdx] = NearestBoundaryTangent;
+    }
+}
+
+void UTectonicSimulationService::ApplyOceanicAmplification()
+{
+    // Paper Section 5: Apply procedural amplification to oceanic crust
+    // Transform faults + high-frequency detail
+
+    const int32 VertexCount = RenderVertices.Num();
+    checkf(VertexAmplifiedElevation.Num() == VertexCount, TEXT("VertexAmplifiedElevation not initialized"));
+    checkf(VertexElevationValues.Num() == VertexCount, TEXT("VertexElevationValues not initialized (must run erosion first)"));
+    checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized (must run oceanic dampening first)"));
+    checkf(VertexRidgeDirections.Num() == VertexCount, TEXT("VertexRidgeDirections not initialized (must run ComputeRidgeDirections first)"));
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const FVector3d& VertexPosition = RenderVertices[VertexIdx];
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        const double BaseElevation_m = VertexElevationValues[VertexIdx];
+        const double CrustAge_My = VertexCrustAge[VertexIdx];
+        const FVector3d& RidgeDirection = VertexRidgeDirections[VertexIdx];
+
+        // Call amplification function from OceanicAmplification.cpp
+        const double AmplifiedElevation = ComputeOceanicAmplification(
+            VertexPosition,
+            PlateID,
+            CrustAge_My,
+            BaseElevation_m,
+            RidgeDirection,
+            Plates,
+            Boundaries
+        );
+
+        VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;
+    }
+
+    // Milestone 4 Phase 4.2: Increment surface data version (elevation changed)
+    SurfaceDataVersion++;
 }

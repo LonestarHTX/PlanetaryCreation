@@ -40,16 +40,21 @@ bool FOrbitCameraTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    // Create camera controller
+    // Create camera controller with 1/50 Earth scale (127,400 m = 12,740,000 cm)
+    const double PlanetRadiusMeters = 127400.0;
+    const float PlanetRadiusUE = static_cast<float>(PlanetRadiusMeters * 100.0); // 12,740,000 cm
     FOrbitCameraController CameraController;
-    CameraController.Initialize(TargetActor);
+    CameraController.Initialize(TargetActor, PlanetRadiusMeters);
 
     // === Test 1: Initial state ===
     UE_LOG(LogTemp, Log, TEXT("Test 1: Initial state..."));
     const FVector2D InitialAngles = CameraController.GetOrbitAngles();
     TestEqual(TEXT("Initial yaw should be 0"), InitialAngles.X, 0.0);
     TestEqual(TEXT("Initial pitch should be -30"), InitialAngles.Y, -30.0);
-    TestEqual(TEXT("Initial distance should be 15000"), CameraController.GetCurrentDistance(), 15000.0f);
+
+    // Default distance should be 2× planet radius
+    const float ExpectedDefaultDistance = PlanetRadiusUE * 2.0f;
+    TestEqual(TEXT("Initial distance should be 2× planet radius"), CameraController.GetCurrentDistance(), ExpectedDefaultDistance);
 
     // === Test 2: Rotation (yaw) ===
     UE_LOG(LogTemp, Log, TEXT("Test 2: Yaw rotation..."));
@@ -102,27 +107,39 @@ bool FOrbitCameraTest::RunTest(const FString& Parameters)
 
     // === Test 7: Zoom distance clamping (min) ===
     UE_LOG(LogTemp, Log, TEXT("Test 7: Zoom min clamping..."));
-    CameraController.SetTargetDistance(5000.0f); // Below min (7000)
+    const float MinDistance = CameraController.GetMinDistance();
+    CameraController.SetTargetDistance(MinDistance - 1000000.0f); // Try to go below min
     CameraController.Tick(10.0f); // Tick to fully interpolate
-    TestEqual(TEXT("Distance should clamp to min 7000"), CameraController.GetCurrentDistance(), 7000.0f);
+    TestEqual(TEXT("Distance should clamp to computed min"), CameraController.GetCurrentDistance(), MinDistance);
 
     // === Test 8: Zoom distance clamping (max) ===
     UE_LOG(LogTemp, Log, TEXT("Test 8: Zoom max clamping..."));
-    CameraController.SetTargetDistance(60000.0f); // Above max (50000)
+    const float MaxDistance = CameraController.GetMaxDistance();
+    CameraController.SetTargetDistance(MaxDistance + 1000000.0f); // Try to go above max
     CameraController.Tick(10.0f); // Tick to fully interpolate
-    TestEqual(TEXT("Distance should clamp to max 50000"), CameraController.GetCurrentDistance(), 50000.0f);
+    TestEqual(TEXT("Distance should clamp to computed max"), CameraController.GetCurrentDistance(), MaxDistance);
 
-    // === Test 9: Reset to default ===
-    UE_LOG(LogTemp, Log, TEXT("Test 9: Reset to default..."));
+    // === Test 9: Distance constraints derived from radius ===
+    UE_LOG(LogTemp, Log, TEXT("Test 9: Distance constraints from planet radius..."));
+    // Min = (Radius + 1M cm elevation) * 1.05
+    const float ExpectedMin = (PlanetRadiusUE + 1000000.0f) * 1.05f;
+    TestEqual(TEXT("Min distance should be (Radius + MaxElevation) * 1.05"), MinDistance, ExpectedMin);
+
+    // Max = Radius * 6.0
+    const float ExpectedMax = PlanetRadiusUE * 6.0f;
+    TestEqual(TEXT("Max distance should be Radius * 6.0"), MaxDistance, ExpectedMax);
+
+    // === Test 10: Reset to default ===
+    UE_LOG(LogTemp, Log, TEXT("Test 10: Reset to default..."));
     CameraController.ResetToDefault();
     CameraController.Tick(10.0f); // Tick to fully interpolate
     const FVector2D AnglesAfterReset = CameraController.GetOrbitAngles();
     TestEqual(TEXT("Yaw should reset to 0"), AnglesAfterReset.X, 0.0);
     TestEqual(TEXT("Pitch should reset to -30"), AnglesAfterReset.Y, -30.0);
-    TestEqual(TEXT("Distance should reset to 15000"), CameraController.GetCurrentDistance(), 15000.0f);
+    TestEqual(TEXT("Distance should reset to 2× radius"), CameraController.GetCurrentDistance(), ExpectedDefaultDistance);
 
-    // === Test 10: Interpolation speed control ===
-    UE_LOG(LogTemp, Log, TEXT("Test 10: Interpolation speed..."));
+    // === Test 11: Interpolation speed control ===
+    UE_LOG(LogTemp, Log, TEXT("Test 11: Interpolation speed..."));
     CameraController.SetInterpolationSpeed(0.5f);
     TestEqual(TEXT("Interpolation speed should be 0.5"), CameraController.GetInterpolationSpeed(), 0.5f);
 
@@ -132,12 +149,35 @@ bool FOrbitCameraTest::RunTest(const FString& Parameters)
     CameraController.SetInterpolationSpeed(0.005f); // Below min
     TestEqual(TEXT("Interpolation speed should clamp to 0.01"), CameraController.GetInterpolationSpeed(), 0.01f);
 
-    // === Test 11: Tick returns false when no movement needed ===
-    UE_LOG(LogTemp, Log, TEXT("Test 11: Tick return value..."));
+    // === Test 12: Zoom delta scaling (prevents overshooting) ===
+    UE_LOG(LogTemp, Log, TEXT("Test 12: Zoom delta scaling..."));
     CameraController.ResetToDefault();
+    CameraController.Tick(10.0f); // Fully reset
+    const float DistanceBeforeZoom = CameraController.GetCurrentDistance();
+    const float HugeZoomDelta = DistanceBeforeZoom * 5.0f; // Try to zoom 5× distance
+    CameraController.Zoom(HugeZoomDelta);
+    // Delta should be clamped to 10% of current distance
+    const float ExpectedDelta = DistanceBeforeZoom * 0.1f;
     CameraController.Tick(10.0f); // Fully interpolate
-    const bool bNeedsUpdate = CameraController.Tick(0.016f); // Check if still needs update
-    TestFalse(TEXT("Tick should return false when camera is at target"), bNeedsUpdate);
+    const float DistanceAfterZoom = CameraController.GetCurrentDistance();
+    const float ActualDelta = DistanceAfterZoom - DistanceBeforeZoom;
+    TestTrue(TEXT("Zoom delta should be clamped to ±10% of current distance"), FMath::Abs(ActualDelta) <= ExpectedDelta * 1.01f);
+
+    // === Test 13: Pitch clamping every frame (prevents drift) ===
+    UE_LOG(LogTemp, Log, TEXT("Test 13: Pitch clamping every frame..."));
+    CameraController.ResetToDefault(); // Start from -30 pitch
+    CameraController.Tick(10.0f); // Fully reset
+    CameraController.Rotate(0.0f, 120.0f); // Pitch to +89 limit (from -30, so +120 → +90, clamped to +89)
+    CameraController.Tick(10.0f); // Fully interpolate
+    const float PitchAfterClamp = CameraController.GetOrbitAngles().Y;
+    TestEqual(TEXT("Pitch should clamp to +89"), PitchAfterClamp, 89.0f);
+    // Simulate slow interpolation that would overshoot without per-frame clamping
+    CameraController.Rotate(0.0f, 5.0f); // Try to go beyond
+    for (int32 i = 0; i < 100; ++i)
+    {
+        CameraController.Tick(0.001f); // Many small ticks
+    }
+    TestTrue(TEXT("Pitch should never exceed ±89 even with slow updates"), FMath::Abs(CameraController.GetOrbitAngles().Y) <= 89.0f);
 
     // Cleanup
     CameraController.Shutdown();

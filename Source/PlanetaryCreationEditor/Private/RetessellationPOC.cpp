@@ -15,6 +15,13 @@ UTectonicSimulationService::FRetessellationSnapshot UTectonicSimulationService::
     Snapshot.VertexPlateAssignments = VertexPlateAssignments;
     Snapshot.Boundaries = Boundaries;
     Snapshot.TimestampMy = CurrentTimeMy;
+
+    // Milestone 5: Capture erosion state for rollback
+    Snapshot.VertexElevationValues = VertexElevationValues;
+    Snapshot.VertexErosionRates = VertexErosionRates;
+    Snapshot.VertexSedimentThickness = VertexSedimentThickness;
+    Snapshot.VertexCrustAge = VertexCrustAge;
+
     return Snapshot;
 }
 
@@ -25,6 +32,12 @@ void UTectonicSimulationService::RestoreRetessellationSnapshot(const FRetessella
     RenderTriangles = Snapshot.RenderTriangles;
     VertexPlateAssignments = Snapshot.VertexPlateAssignments;
     Boundaries = Snapshot.Boundaries;
+
+    // Milestone 5: Restore erosion state on rollback
+    VertexElevationValues = Snapshot.VertexElevationValues;
+    VertexErosionRates = Snapshot.VertexErosionRates;
+    VertexSedimentThickness = Snapshot.VertexSedimentThickness;
+    VertexCrustAge = Snapshot.VertexCrustAge;
 
     UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Rolled back to timestamp %.2f My"), Snapshot.TimestampMy);
 }
