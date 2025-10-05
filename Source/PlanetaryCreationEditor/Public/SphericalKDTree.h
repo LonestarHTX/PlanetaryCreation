@@ -43,7 +43,7 @@ private:
 	TUniquePtr<FKDNode> RootNode;
 
 	/** Recursive tree build. */
-	TUniquePtr<FKDNode> BuildRecursive(TArray<TPair<FVector3d, int32>>& Points, int32 Depth);
+	TUniquePtr<FKDNode> BuildRecursive(TArray<TPair<FVector3d, int32>>& Points, int32 Start, int32 End, int32 Depth);
 
         /** Recursive nearest neighbor search. */
         void FindNearestRecursive(const FKDNode* Node, const FVector3d& Query, int32& BestID, double& BestDistSq) const;

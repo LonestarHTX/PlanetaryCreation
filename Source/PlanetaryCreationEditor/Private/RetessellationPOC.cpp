@@ -228,12 +228,23 @@ bool UTectonicSimulationService::PerformRetessellation()
     GenerateRenderMesh();
     BuildVoronoiMapping();
 
+    // BUGFIX: After re-tessellation, several per-vertex data arrays are left with an incorrect size.
+    // This causes crashes in subsequent simulation steps (e.g., erosion, amplification).
+    // Resize them here, matching the new vertex count. Data is lost for now, but crashes are prevented.
+    const int32 VertexCount = RenderVertices.Num();
+    VertexErosionRates.SetNumZeroed(VertexCount);
+    VertexSedimentThickness.SetNumZeroed(VertexCount);
+    VertexCrustAge.SetNumZeroed(VertexCount);
+    VertexRidgeDirections.SetNum(VertexCount);
+    VertexTemperatureValues.SetNumZeroed(VertexCount);
+
     // Reproject historic elevation field onto the regenerated mesh before type-based corrections run
+    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Calling TransferElevation. OldVertices=%d, OldElevations=%d, NewVertices=%d"),
+        OldRenderVertices.Num(), OldElevationValues.Num(), RenderVertices.Num());
     TransferElevationFromPreviousMesh(OldRenderVertices, OldElevationValues, OldAmplifiedElevation);
 
     // Milestone 6 Fix: Refresh elevation baselines to match new plate assignments after retessellation
     // When Voronoi remaps vertices to different plates, elevation must update to reflect new crust type
-    const int32 VertexCount = RenderVertices.Num();
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const int32 PlateIdx = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;

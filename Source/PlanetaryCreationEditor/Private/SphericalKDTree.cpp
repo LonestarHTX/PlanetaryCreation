@@ -1,4 +1,5 @@
 #include "SphericalKDTree.h"
+#include "Algo/Sort.h"
 
 void FSphericalKDTree::Build(const TArray<FVector3d>& Points, const TArray<int32>& PointIDs)
 {
@@ -17,7 +18,7 @@ void FSphericalKDTree::Build(const TArray<FVector3d>& Points, const TArray<int32
 		PointPairs.Add(TPair<FVector3d, int32>(Points[i], PointIDs[i]));
 	}
 
-	RootNode = BuildRecursive(PointPairs, 0);
+	RootNode = BuildRecursive(PointPairs, 0, PointPairs.Num(), 0);
 }
 
 int32 FSphericalKDTree::FindNearest(const FVector3d& Query, double& OutDistanceSq) const
@@ -75,9 +76,10 @@ void FSphericalKDTree::Clear()
 	RootNode.Reset();
 }
 
-TUniquePtr<FSphericalKDTree::FKDNode> FSphericalKDTree::BuildRecursive(TArray<TPair<FVector3d, int32>>& Points, int32 Depth)
+TUniquePtr<FSphericalKDTree::FKDNode> FSphericalKDTree::BuildRecursive(TArray<TPair<FVector3d, int32>>& Points, int32 Start, int32 End, int32 Depth)
 {
-	if (Points.Num() == 0)
+	const int32 Count = End - Start;
+	if (Count <= 0)
 	{
 		return nullptr;
 	}
@@ -85,26 +87,23 @@ TUniquePtr<FSphericalKDTree::FKDNode> FSphericalKDTree::BuildRecursive(TArray<TP
 	// Choose split axis (cycle through X, Y, Z)
 	const int32 Axis = Depth % 3;
 
-	// Sort points along the split axis
-	Points.Sort([Axis](const TPair<FVector3d, int32>& A, const TPair<FVector3d, int32>& B)
+	// Sort the sub-range of points along the split axis
+	Algo::Sort(TArrayView<TPair<FVector3d, int32>>(Points.GetData() + Start, Count), [Axis](const TPair<FVector3d, int32>& A, const TPair<FVector3d, int32>& B)
 	{
 		return A.Key[Axis] < B.Key[Axis];
 	});
 
 	// Choose median as split point
-	const int32 MedianIndex = Points.Num() / 2;
+	const int32 MedianIndex = Start + Count / 2;
 
 	TUniquePtr<FKDNode> Node = MakeUnique<FKDNode>();
 	Node->Point = Points[MedianIndex].Key;
 	Node->PointID = Points[MedianIndex].Value;
 	Node->SplitAxis = Axis;
 
-	// Recursively build left and right subtrees
-	TArray<TPair<FVector3d, int32>> LeftPoints(Points.GetData(), MedianIndex);
-	TArray<TPair<FVector3d, int32>> RightPoints(Points.GetData() + MedianIndex + 1, Points.Num() - MedianIndex - 1);
-
-	Node->Left = BuildRecursive(LeftPoints, Depth + 1);
-	Node->Right = BuildRecursive(RightPoints, Depth + 1);
+	// Recursively build left and right subtrees using indices
+	Node->Left = BuildRecursive(Points, Start, MedianIndex, Depth + 1);
+	Node->Right = BuildRecursive(Points, MedianIndex + 1, End, Depth + 1);
 
 	return Node;
 }
