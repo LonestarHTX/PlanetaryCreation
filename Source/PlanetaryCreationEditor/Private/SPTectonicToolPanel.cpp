@@ -470,6 +470,22 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 ]
             ]
 
+            // Heightmap visualization toggle (Milestone 6 Task 2.3)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetHeightmapVisualizationState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnHeightmapVisualizationChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationLabel", "Heightmap Visualization"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationTooltip", "Color vertices by elevation: blue (deep ocean -6km) → cyan → green (sea level) → yellow → red (mountains +2km)"))
+                ]
+            ]
+
             + SVerticalBox::Slot()
             .AutoHeight()
             [
@@ -689,6 +705,35 @@ void SPTectonicToolPanel::OnAutomaticLODChanged(ECheckBoxState NewState)
             Params.bEnableAutomaticLOD = (NewState == ECheckBoxState::Checked);
             Service->SetParameters(Params);
             UE_LOG(LogTemp, Log, TEXT("Automatic LOD %s"), Params.bEnableAutomaticLOD ? TEXT("enabled") : TEXT("disabled"));
+        }
+    }
+}
+
+ECheckBoxState SPTectonicToolPanel::GetHeightmapVisualizationState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableHeightmapVisualization ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked; // Default to unchecked
+}
+
+void SPTectonicToolPanel::OnHeightmapVisualizationChanged(ECheckBoxState NewState)
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            FTectonicSimulationParameters Params = Service->GetParameters();
+            Params.bEnableHeightmapVisualization = (NewState == ECheckBoxState::Checked);
+            Service->SetParameters(Params);
+            UE_LOG(LogTemp, Log, TEXT("Heightmap visualization %s"), Params.bEnableHeightmapVisualization ? TEXT("enabled") : TEXT("disabled"));
+
+            // Trigger mesh refresh to apply new coloring immediately
+            Controller->RebuildPreview();
         }
     }
 }

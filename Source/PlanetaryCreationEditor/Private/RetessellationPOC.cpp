@@ -233,11 +233,16 @@ bool UTectonicSimulationService::PerformRetessellation()
         {
             const bool bIsOceanic = (Plates[PlateIdx].CrustType == ECrustType::Oceanic);
             // Only reset elevation if it's inconsistent with current plate type
-            // Oceanic should be negative, continental should be positive
-            const bool bElevationMatchesType = bIsOceanic ? (VertexElevationValues[VertexIdx] < 0.0) : (VertexElevationValues[VertexIdx] > 0.0);
+            // Oceanic should be deeply negative (abyssal plains), continental should be near sea level
+            const bool bElevationMatchesType = bIsOceanic ?
+                (VertexElevationValues[VertexIdx] < PaperElevationConstants::SeaLevel_m) :
+                (VertexElevationValues[VertexIdx] >= PaperElevationConstants::SeaLevel_m - 500.0); // Allow some erosion below sea level
             if (!bElevationMatchesType)
             {
-                VertexElevationValues[VertexIdx] = bIsOceanic ? -3500.0 : 250.0;
+                // Use paper-compliant baselines
+                VertexElevationValues[VertexIdx] = bIsOceanic ?
+                    PaperElevationConstants::AbyssalPlainDepth_m :
+                    PaperElevationConstants::ContinentalBaseline_m;
                 // Also reset amplified elevation to match base (Stage B will recompute on next step)
                 if (VertexAmplifiedElevation.IsValidIndex(VertexIdx))
                 {
