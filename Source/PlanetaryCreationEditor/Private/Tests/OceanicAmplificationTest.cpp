@@ -38,6 +38,8 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     const TArray<FVector3d>& RidgeDirections = Service->GetVertexRidgeDirections();
     const TArray<double>& AmplifiedElevation = Service->GetVertexAmplifiedElevation();
     const TArray<FTectonicPlate>& Plates = Service->GetPlates();
+    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries = Service->GetBoundaries();
+    const TArray<FVector3d>& SharedVertices = Service->GetSharedVertices();
 
     TestEqual(TEXT("Ridge directions array sized correctly"), RidgeDirections.Num(), RenderVertices.Num());
     TestEqual(TEXT("Amplified elevation array sized correctly"), AmplifiedElevation.Num(), RenderVertices.Num());
@@ -45,6 +47,98 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     // Count oceanic vertices and check ridge direction validity
     int32 OceanicVertexCount = 0;
     int32 ValidRidgeDirectionCount = 0;
+
+    auto FindNearestBoundaryTangent = [&](const FVector3d& Position, int32 PlateID) -> FVector3d
+    {
+        if (PlateID == INDEX_NONE)
+        {
+            return FVector3d::ZAxisVector;
+        }
+
+        const FVector3d VertexNormal = Position.GetSafeNormal();
+        double MinDistance = TNumericLimits<double>::Max();
+        FVector3d BestTangent = FVector3d::ZAxisVector;
+
+        const auto ComputeSegmentTangent = [](const FVector3d& PlaneNormal, const FVector3d& PointOnGreatCircle)
+        {
+            const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, PointOnGreatCircle).GetSafeNormal();
+            return Tangent.IsNearlyZero() ? FVector3d::ZAxisVector : Tangent;
+        };
+
+        for (const auto& BoundaryPair : Boundaries)
+        {
+            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+            const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+            if (Boundary.BoundaryType != EBoundaryType::Divergent)
+            {
+                continue;
+            }
+
+            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+            {
+                continue;
+            }
+
+            if (Boundary.SharedEdgeVertices.Num() < 2)
+            {
+                continue;
+            }
+
+            for (int32 EdgeIdx = 0; EdgeIdx < Boundary.SharedEdgeVertices.Num() - 1; ++EdgeIdx)
+            {
+                const int32 EdgeV0Idx = Boundary.SharedEdgeVertices[EdgeIdx];
+                const int32 EdgeV1Idx = Boundary.SharedEdgeVertices[EdgeIdx + 1];
+                if (!SharedVertices.IsValidIndex(EdgeV0Idx) || !SharedVertices.IsValidIndex(EdgeV1Idx))
+                {
+                    continue;
+                }
+
+                const FVector3d EdgeV0 = SharedVertices[EdgeV0Idx].GetSafeNormal();
+                const FVector3d EdgeV1 = SharedVertices[EdgeV1Idx].GetSafeNormal();
+                const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
+                if (PlaneNormal.IsNearlyZero())
+                {
+                    continue;
+                }
+
+                const double Projection = FVector3d::DotProduct(VertexNormal, PlaneNormal);
+                const FVector3d Projected = VertexNormal - Projection * PlaneNormal;
+                if (Projected.IsNearlyZero())
+                {
+                    continue;
+                }
+
+                const FVector3d GreatCirclePoint = Projected.GetSafeNormal();
+                const double ArcAB = FMath::Acos(FMath::Clamp(EdgeV0 | EdgeV1, -1.0, 1.0));
+                const double ArcAC = FMath::Acos(FMath::Clamp(EdgeV0 | GreatCirclePoint, -1.0, 1.0));
+                const double ArcCB = FMath::Acos(FMath::Clamp(GreatCirclePoint | EdgeV1, -1.0, 1.0));
+                const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + 1e-3);
+
+                auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
+                {
+                    const double Distance = FMath::Acos(FMath::Clamp(VertexNormal | PointOnCircle, -1.0, 1.0));
+                    if (Distance < MinDistance)
+                    {
+                        MinDistance = Distance;
+                        BestTangent = ComputeSegmentTangent(PlaneNormal, PointOnCircle);
+                    }
+                };
+
+                if (bWithinSegment)
+                {
+                    ConsiderPoint(GreatCirclePoint);
+                }
+                else
+                {
+                    ConsiderPoint(EdgeV0);
+                    ConsiderPoint(EdgeV1);
+                }
+            }
+        }
+
+        return BestTangent;
+    };
 
     for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
     {
@@ -66,8 +160,16 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
                 ValidRidgeDirectionCount++;
             }
 
-            // Transform fault direction should be perpendicular to ridge (cross product with position)
             const FVector3d& Position = RenderVertices[VertexIdx];
+            const FVector3d ExpectedTangent = FindNearestBoundaryTangent(Position, PlateID);
+            if (!ExpectedTangent.IsNearlyZero())
+            {
+                const double Alignment = FMath::Abs(ExpectedTangent | RidgeDir);
+                TestTrue(FString::Printf(TEXT("Vertex %d ridge direction aligns with divergent edge (dot = %.3f)"), VertexIdx, Alignment),
+                    Alignment > 0.95);
+            }
+
+            // Transform fault direction should be perpendicular to ridge (cross product with position)
             const FVector3d TransformFaultDir = FVector3d::CrossProduct(RidgeDir, Position.GetSafeNormal()).GetSafeNormal();
 
             // Verify transform fault is perpendicular to ridge (dot product ≈ 0)
