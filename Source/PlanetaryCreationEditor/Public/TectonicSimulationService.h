@@ -4,6 +4,26 @@
 #include "Subsystems/UnrealEditorSubsystem.h"
 #include "TectonicSimulationService.generated.h"
 
+/**
+ * Paper-compliant elevation constants (Appendix A).
+ * Reference: "Procedural Tectonic Planets" paper, Table in Appendix A.
+ * Sea level is 0m (reference elevation).
+ */
+namespace PaperElevationConstants
+{
+    /** Oceanic ridge elevation at divergent boundaries (zᵀ in paper). */
+    constexpr double OceanicRidgeDepth_m = -1000.0;
+
+    /** Abyssal plains elevation for mature oceanic crust (zᵇ in paper). */
+    constexpr double AbyssalPlainDepth_m = -6000.0;
+
+    /** Continental baseline elevation (implied by paper, starts at sea level). */
+    constexpr double ContinentalBaseline_m = 0.0;
+
+    /** Sea level reference (explicitly stated in Appendix A). */
+    constexpr double SeaLevel_m = 0.0;
+}
+
 /** Crust type for a tectonic plate (from paper). */
 UENUM()
 enum class ECrustType : uint8
@@ -833,6 +853,15 @@ public:
      * Called each step after collision detection to complete terrane lifecycle.
      */
     void ProcessTerraneReattachments();
+
+    /**
+     * Export heightmap visualization as color-coded PNG with elevation gradient.
+     * @param ImageWidth Width of output image in pixels (default 2048)
+     * @param ImageHeight Height of output image in pixels (default 1024)
+     * @return Path to exported PNG file, or empty string on failure
+     */
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    FString ExportHeightmapVisualization(int32 ImageWidth = 2048, int32 ImageHeight = 1024);
 
 private:
     void GenerateDefaultSphereSamples();

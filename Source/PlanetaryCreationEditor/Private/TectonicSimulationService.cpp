@@ -112,17 +112,22 @@ void UTectonicSimulationService::ResetSimulation()
             if (bIsOceanic)
             {
                 /**
-                 * M5 Phase 3: Oceanic baseline must stay below SeaLevel.
-                 * Default: -3500m (mean oceanic depth), BUT if tests raise SeaLevel (e.g., to 1000m),
-                 * we clamp to SeaLevel - 1000m to ensure seafloor stays below sea level.
-                 * This prevents false positives in "vertices below sea level" assertions when SeaLevel varies.
+                 * Paper-compliant oceanic baseline (Appendix A):
+                 * - Abyssal plains: -6000m (zᵇ)
+                 * - Ridges: -1000m (zᵀ)
+                 * Initialize to abyssal depth; ridges will form at divergent boundaries via oceanic crust generation.
+                 * Age-subsidence formula will deepen crust from ridge depth toward abyssal depth over time.
                  */
-                VertexElevationValues[VertexIdx] = FMath::Min(-3500.0, Parameters.SeaLevel - 1000.0);
+                VertexElevationValues[VertexIdx] = PaperElevationConstants::AbyssalPlainDepth_m;
             }
             else
             {
-                // Continental baseline: +250m (mean continental platform above sea level)
-                VertexElevationValues[VertexIdx] = 250.0;
+                /**
+                 * Paper-compliant continental baseline (Appendix A):
+                 * Continents start at sea level (0m) and rise via subduction uplift, collision, and erosion.
+                 * The +250m offset used previously compressed the achievable relief range.
+                 */
+                VertexElevationValues[VertexIdx] = PaperElevationConstants::ContinentalBaseline_m;
             }
         }
     }
