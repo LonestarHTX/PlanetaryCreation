@@ -306,6 +306,18 @@ void UTectonicSimulationService::SetHeightmapVisualizationEnabled(bool bEnabled)
         bEnabled ? TEXT("enabled") : TEXT("disabled"), SurfaceDataVersion);
 }
 
+void UTectonicSimulationService::SetAutomaticLODEnabled(bool bEnabled)
+{
+    if (Parameters.bEnableAutomaticLOD == bEnabled)
+    {
+        return;
+    }
+
+    Parameters.bEnableAutomaticLOD = bEnabled;
+
+    UE_LOG(LogTemp, Log, TEXT("[LOD] Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+}
+
 void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
 {
     // Milestone 4 Phase 4.1: Update only the render subdivision level without resetting simulation

@@ -685,6 +685,12 @@ public:
     void SetHeightmapVisualizationEnabled(bool bEnabled);
 
     /**
+     * Milestone 4 Phase 4.1: Toggle automatic LOD selection without resetting simulation state.
+     * Allows the editor UI to switch between camera-driven LOD and manual control.
+     */
+    void SetAutomaticLODEnabled(bool bEnabled);
+
+    /**
      * Milestone 4 Phase 4.1: Update render subdivision level without resetting simulation state.
      * This allows LOD changes during camera movement without destroying tectonic history.
      * Only regenerates render mesh and Voronoi mapping; preserves plates, stress, rifts, etc.
