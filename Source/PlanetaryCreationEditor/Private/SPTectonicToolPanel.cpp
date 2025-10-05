@@ -701,10 +701,9 @@ void SPTectonicToolPanel::OnAutomaticLODChanged(ECheckBoxState NewState)
     {
         if (UTectonicSimulationService* Service = Controller->GetSimulationService())
         {
-            FTectonicSimulationParameters Params = Service->GetParameters();
-            Params.bEnableAutomaticLOD = (NewState == ECheckBoxState::Checked);
-            Service->SetParameters(Params);
-            UE_LOG(LogTemp, Log, TEXT("Automatic LOD %s"), Params.bEnableAutomaticLOD ? TEXT("enabled") : TEXT("disabled"));
+            const bool bEnabled = (NewState == ECheckBoxState::Checked);
+            Service->SetAutomaticLODEnabled(bEnabled);
+            UE_LOG(LogTemp, Log, TEXT("Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
         }
     }
 }

@@ -198,9 +198,6 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
         CurrentTimeMy += StepDurationMy;
 
-        // Milestone 4 Phase 4.2: Increment surface data version per step (stress/elevation changed)
-        SurfaceDataVersion++;
-
         // Milestone 3 Task 2.3: Interpolate stress to render vertices (per step for accurate snapshots)
         InterpolateStressToVertices();
 
@@ -253,6 +250,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         }
 
         // Milestone 5 Task 1.3: Capture history snapshot after each individual step for undo/redo
+        // Increment surface version immediately beforehand so cached heightmap surfaces refresh on rebuild.
+        SurfaceDataVersion++;
         CaptureHistorySnapshot();
     }
 
