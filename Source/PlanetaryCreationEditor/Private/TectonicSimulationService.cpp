@@ -326,6 +326,19 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
     // Regenerate only the render mesh at new subdivision level
     GenerateRenderMesh();
 
+    // BUG FIX: Resize all per-vertex arrays to match the new render mesh size.
+    const int32 VertexCount = RenderVertices.Num();
+    VertexPlateAssignments.SetNum(VertexCount);
+    VertexVelocities.SetNum(VertexCount);
+    VertexStressValues.SetNumZeroed(VertexCount);
+    VertexElevationValues.SetNumZeroed(VertexCount);
+    VertexErosionRates.SetNumZeroed(VertexCount);
+    VertexSedimentThickness.SetNumZeroed(VertexCount);
+    VertexCrustAge.SetNumZeroed(VertexCount);
+    VertexRidgeDirections.SetNum(VertexCount);
+    VertexAmplifiedElevation.SetNumZeroed(VertexCount);
+    VertexTemperatureValues.SetNumZeroed(VertexCount);
+
     // Rebuild Voronoi mapping (render vertices changed, but plate centroids unchanged)
     BuildVoronoiMapping();
 
