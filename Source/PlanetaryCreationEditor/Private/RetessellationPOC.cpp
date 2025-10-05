@@ -178,6 +178,11 @@ bool UTectonicSimulationService::PerformRetessellation()
     // Step 1: Create snapshot for rollback
     const FRetessellationSnapshot Snapshot = CaptureRetessellationSnapshot();
 
+    // Preserve previous render mesh positions and elevation data for transfer to the rebuilt mesh
+    const TArray<FVector3d> OldRenderVertices = RenderVertices;
+    const TArray<double> OldElevationValues = VertexElevationValues;
+    const TArray<double> OldAmplifiedElevation = VertexAmplifiedElevation;
+
     // Step 2: Detect drifted plates using real drift calculation
     TArray<int32> DriftedPlateIDs;
 
@@ -222,6 +227,9 @@ bool UTectonicSimulationService::PerformRetessellation()
     // Trigger full mesh regeneration
     GenerateRenderMesh();
     BuildVoronoiMapping();
+
+    // Reproject historic elevation field onto the regenerated mesh before type-based corrections run
+    TransferElevationFromPreviousMesh(OldRenderVertices, OldElevationValues, OldAmplifiedElevation);
 
     // Milestone 6 Fix: Refresh elevation baselines to match new plate assignments after retessellation
     // When Voronoi remaps vertices to different plates, elevation must update to reflect new crust type
