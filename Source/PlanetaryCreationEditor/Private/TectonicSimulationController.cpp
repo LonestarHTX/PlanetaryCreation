@@ -73,11 +73,29 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexAmplifiedElevation = Service->GetVertexAmplifiedElevation(); // M6 Task 2.1: Stage B amplified elevation
         Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
         Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
+
+        // DEBUG: Log elevation array state
+        if (Snapshot.VertexElevationValues.Num() > 0)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Snapshot has %d elevations, first 3: [%.2f, %.2f, %.2f]"),
+                Snapshot.VertexElevationValues.Num(),
+                Snapshot.VertexElevationValues[0],
+                Snapshot.VertexElevationValues.Num() > 1 ? Snapshot.VertexElevationValues[1] : 0.0,
+                Snapshot.VertexElevationValues.Num() > 2 ? Snapshot.VertexElevationValues[2] : 0.0);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("[DEBUG] Snapshot VertexElevationValues is EMPTY!"));
+        }
         // M6 Task 2.3: Enable amplified elevation if EITHER oceanic OR continental amplification is active
         Snapshot.bUseAmplifiedElevation = (Service->GetParameters().bEnableOceanicAmplification ||
                                            Service->GetParameters().bEnableContinentalAmplification) &&
                                           Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
         Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
+
+        // DEBUG: Log heightmap visualization state
+        UE_LOG(LogTemp, Warning, TEXT("[DEBUG] CreateMeshBuildSnapshot: bEnableHeightmapVisualization = %s"),
+            Snapshot.Parameters.bEnableHeightmapVisualization ? TEXT("TRUE") : TEXT("FALSE"));
     }
 
     // Capture visualization state from controller
@@ -693,6 +711,13 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
             {
                 ElevationMeters = Snapshot.VertexElevationValues[i];
             }
+
+            // DEBUG: Log first vertex color calculation
+            if (i == 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Heightmap mode active: Vertex 0 elevation = %.2f m"), ElevationMeters);
+            }
+
             VertexColor = GetElevationColor(ElevationMeters);
         }
         else if (Snapshot.bShowVelocityField && VertexVelocities.IsValidIndex(i))

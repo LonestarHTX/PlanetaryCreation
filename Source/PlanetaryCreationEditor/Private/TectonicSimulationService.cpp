@@ -103,6 +103,7 @@ void UTectonicSimulationService::ResetSimulation()
 
     // M5 Phase 3 fix: Seed elevation baselines from plate crust type for order independence
     // This ensures oceanic dampening/erosion work regardless of execution order
+    int32 OceanicCount = 0, ContinentalCount = 0;
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const int32 PlateIdx = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
@@ -119,6 +120,7 @@ void UTectonicSimulationService::ResetSimulation()
                  * Age-subsidence formula will deepen crust from ridge depth toward abyssal depth over time.
                  */
                 VertexElevationValues[VertexIdx] = PaperElevationConstants::AbyssalPlainDepth_m;
+                OceanicCount++;
             }
             else
             {
@@ -128,8 +130,22 @@ void UTectonicSimulationService::ResetSimulation()
                  * The +250m offset used previously compressed the achievable relief range.
                  */
                 VertexElevationValues[VertexIdx] = PaperElevationConstants::ContinentalBaseline_m;
+                ContinentalCount++;
             }
         }
+    }
+    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] ResetSimulation: Initialized %d vertices (%d oceanic @ -6000m, %d continental @ 0m)"),
+        VertexCount, OceanicCount, ContinentalCount);
+
+    // DEBUG: Check vertex 0 specifically
+    if (VertexCount > 0 && VertexPlateAssignments.Num() > 0)
+    {
+        const int32 Plate0 = VertexPlateAssignments[0];
+        const double Elev0 = VertexElevationValues[0];
+        const bool bOceanic0 = (Plate0 != INDEX_NONE && Plates.IsValidIndex(Plate0)) ?
+            (Plates[Plate0].CrustType == ECrustType::Oceanic) : false;
+        UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Vertex 0: Plate=%d, Oceanic=%s, Elevation=%.2f m"),
+            Plate0, bOceanic0 ? TEXT("YES") : TEXT("NO"), Elev0);
     }
 
     // Milestone 5 Task 1.3: Initialize history stack with initial state
