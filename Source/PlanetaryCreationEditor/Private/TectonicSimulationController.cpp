@@ -69,8 +69,11 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexVelocities = Service->GetVertexVelocities();
         Snapshot.VertexStressValues = Service->GetVertexStressValues();
         Snapshot.VertexElevationValues = Service->GetVertexElevationValues(); // M5 Phase 3.7: Use actual elevations from erosion
+        Snapshot.VertexAmplifiedElevation = Service->GetVertexAmplifiedElevation(); // M6 Task 2.1: Stage B amplified elevation
         Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
         Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
+        Snapshot.bUseAmplifiedElevation = Service->GetParameters().bEnableOceanicAmplification &&
+                                          Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
     }
 
     // Capture visualization state from controller
@@ -639,14 +642,23 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
         // Base position on sphere (convert meters → UE centimeters)
         FVector3f Position = FVector3f(Vertex * RadiusUE);
 
-        // M5 Phase 3.7: Elevation displacement using actual elevation values from erosion system
+        // M5 Phase 3.7 / M6 Task 2.1: Elevation displacement using erosion or amplified elevation
         if (Snapshot.ElevationMode == EElevationMode::Displaced)
         {
             const FVector3f Normal = Position.GetSafeNormal();
-            // Use actual elevation from erosion system (already in meters)
-            const double ElevationMeters = Snapshot.VertexElevationValues.IsValidIndex(i)
-                ? Snapshot.VertexElevationValues[i]
-                : 0.0;
+
+            // M6 Task 2.1: Use Stage B amplified elevation if available (includes transform faults)
+            // Otherwise fall back to base elevation from erosion system
+            double ElevationMeters = 0.0;
+            if (Snapshot.bUseAmplifiedElevation && Snapshot.VertexAmplifiedElevation.IsValidIndex(i))
+            {
+                ElevationMeters = Snapshot.VertexAmplifiedElevation[i];
+            }
+            else if (Snapshot.VertexElevationValues.IsValidIndex(i))
+            {
+                ElevationMeters = Snapshot.VertexElevationValues[i];
+            }
+
             const double ClampedElevationMeters = FMath::Clamp(ElevationMeters, -MaxElevationMeters, MaxElevationMeters);
             const float DisplacementUE = MetersToUE(ClampedElevationMeters);
             Position += Normal * DisplacementUE;
@@ -687,6 +699,13 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
 // Milestone 4 Phase 4.1: Global LOD selection based on camera distance
 void FTectonicSimulationController::UpdateLOD()
 {
+    // Check if automatic LOD is enabled
+    UTectonicSimulationService* Service = GetService();
+    if (Service && !Service->GetParameters().bEnableAutomaticLOD)
+    {
+        return; // Manual LOD mode - respect user-set render subdivision level
+    }
+
     // Get editor viewport camera
     if (!GEditor)
     {
@@ -765,18 +784,14 @@ void FTectonicSimulationController::UpdateLOD()
                 TargetLODLevel, dOverR, CameraDistance);
 
             // Trigger mesh rebuild at new LOD if different from current
-            if (TargetLODLevel != CurrentLODLevel)
+            if (TargetLODLevel != CurrentLODLevel && Service)
             {
-                UTectonicSimulationService* Service = GetService();
-                if (Service)
-                {
-                    // Milestone 4 Phase 4.1: Use non-destructive LOD update (preserves simulation state)
-                    Service->SetRenderSubdivisionLevel(TargetLODLevel);
+                // Milestone 4 Phase 4.1: Use non-destructive LOD update (preserves simulation state)
+                Service->SetRenderSubdivisionLevel(TargetLODLevel);
 
-                    // Trigger rebuild
-                    CurrentLODLevel = TargetLODLevel;
-                    BuildAndUpdateMesh();
-                }
+                // Trigger rebuild
+                CurrentLODLevel = TargetLODLevel;
+                BuildAndUpdateMesh();
             }
         }
     }

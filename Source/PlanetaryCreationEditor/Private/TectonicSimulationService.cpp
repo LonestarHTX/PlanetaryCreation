@@ -1000,7 +1000,7 @@ void UTectonicSimulationService::GenerateRenderMesh()
     };
 
     // Subdivide based on RenderSubdivisionLevel
-    const int32 SubdivLevel = FMath::Clamp(Parameters.RenderSubdivisionLevel, 0, 6);
+    const int32 SubdivLevel = FMath::Clamp(Parameters.RenderSubdivisionLevel, 0, 8);
 
     for (int32 Level = 0; Level < SubdivLevel; ++Level)
     {
@@ -2400,6 +2400,7 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
     checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized (must run oceanic dampening first)"));
     checkf(VertexRidgeDirections.Num() == VertexCount, TEXT("VertexRidgeDirections not initialized (must run ComputeRidgeDirections first)"));
 
+    int32 DebugMismatchCount = 0;
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
@@ -2407,6 +2408,23 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
         const double BaseElevation_m = VertexElevationValues[VertexIdx];
         const double CrustAge_My = VertexCrustAge[VertexIdx];
         const FVector3d& RidgeDirection = VertexRidgeDirections[VertexIdx];
+
+        // Debug Step 1: Verify vertex→plate mapping sanity
+        if (PlateID != INDEX_NONE && Plates.IsValidIndex(PlateID))
+        {
+            const FTectonicPlate& Plate = Plates[PlateID];
+
+            // Flag vertices with oceanic depths (-3500m) but continental plate assignment
+            if (Plate.CrustType != ECrustType::Oceanic &&
+                BaseElevation_m < Parameters.SeaLevel - 10.0 &&
+                DebugMismatchCount < 3)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("StageB: vertex %d depth %.1f m but plate %d marked %s"),
+                    VertexIdx, BaseElevation_m, PlateID,
+                    Plate.CrustType == ECrustType::Continental ? TEXT("continental") : TEXT("other"));
+                DebugMismatchCount++;
+            }
+        }
 
         // Call amplification function from OceanicAmplification.cpp
         const double AmplifiedElevation = ComputeOceanicAmplification(

@@ -22,9 +22,11 @@ struct FMeshBuildSnapshot
     TArray<FVector3d> VertexVelocities;
     TArray<double> VertexStressValues;
     TArray<double> VertexElevationValues; // M5 Phase 3.7: Actual elevations from erosion system
+    TArray<double> VertexAmplifiedElevation; // M6 Task 2.1: Stage B amplified elevation (with transform faults)
     double ElevationScale;
     bool bShowVelocityField;
     EElevationMode ElevationMode;
+    bool bUseAmplifiedElevation; // M6 Task 2.1: Use Stage B amplification for visualization
 
     /** Milestone 5 Phase 3: Planet radius in meters (for unit conversion to UE centimeters). */
     double PlanetRadius = 127400.0;

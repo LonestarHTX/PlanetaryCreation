@@ -210,6 +210,7 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
 
     int32 ContinentalUnchangedCount = 0;
     int32 ContinentalTotalCount = 0;
+    int32 DebugLoggedContinental = 0;
 
     for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
     {
@@ -224,9 +225,18 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
 
             // Continental vertices should have amplified elevation equal to base
             // (Task 2.2 will handle continental amplification separately)
+            const double ElevDiff = FMath::Abs(AmplifiedElevation[VertexIdx] - BaseElevation[VertexIdx]);
             if (FMath::IsNearlyEqual(AmplifiedElevation[VertexIdx], BaseElevation[VertexIdx], 0.01))
             {
                 ContinentalUnchangedCount++;
+            }
+            else if (DebugLoggedContinental < 3)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Continental vertex %d (PlateID=%d, CrustType=%s) modified: Base=%.3f m, Amplified=%.3f m, Diff=%.3f m"),
+                    VertexIdx, PlateID,
+                    Plate.CrustType == ECrustType::Continental ? TEXT("Continental") : TEXT("Oceanic"),
+                    BaseElevation[VertexIdx], AmplifiedElevation[VertexIdx], ElevDiff);
+                DebugLoggedContinental++;
             }
         }
     }

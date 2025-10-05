@@ -309,6 +309,15 @@ struct FTectonicSimulationParameters
     UPROPERTY()
     bool bEnableDynamicRetessellation = true;
 
+    /**
+     * Milestone 4 Phase 4.1: Enable automatic LOD based on camera distance.
+     * When true, render subdivision level automatically adjusts based on viewport camera distance.
+     * When false, manual render subdivision level setting is respected.
+     * Default true for normal usage, false to force specific LOD for debugging/screenshots.
+     */
+    UPROPERTY()
+    bool bEnableAutomaticLOD = true;
+
     /** Mantle viscosity coefficient (placeholder - used in Milestone 3). */
     UPROPERTY()
     double MantleViscosity = 1.0;

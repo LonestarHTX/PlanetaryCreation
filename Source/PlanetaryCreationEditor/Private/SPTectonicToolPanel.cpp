@@ -118,8 +118,8 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                     .OnValueChanged(this, &SPTectonicToolPanel::OnSubdivisionValueChanged)
                     .OnValueCommitted(this, &SPTectonicToolPanel::OnSubdivisionValueCommitted)
                     .MinValue(0)
-                    .MaxValue(6)
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SubdivisionTooltip", "Render mesh density (0=20, 1=80, 2=320, 3=1280, 4=5120, 5=20480, 6=81920 faces)"))
+                    .MaxValue(8)
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SubdivisionTooltip", "Render mesh density (0=20, 1=80, 2=320, 3=1280, 4=5120, 5=20480, 6=81920, 7=327680, 8=1.3M faces)"))
                 ]
             ]
 
@@ -454,6 +454,22 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 ]
             ]
 
+            // Automatic LOD toggle (Milestone 4 Phase 4.1)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetAutomaticLODState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnAutomaticLODChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "AutomaticLODLabel", "Automatic LOD"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "AutomaticLODTooltip", "Automatically adjust render detail based on camera distance. Disable to manually control LOD."))
+                ]
+            ]
+
             + SVerticalBox::Slot()
             .AutoHeight()
             [
@@ -648,6 +664,32 @@ void SPTectonicToolPanel::OnBoundaryOverlayChanged(ECheckBoxState NewState)
         const bool bVisible = (NewState == ECheckBoxState::Checked);
         Controller->SetBoundariesVisible(bVisible);
         UE_LOG(LogTemp, Log, TEXT("Boundary overlay %s"), bVisible ? TEXT("visible") : TEXT("hidden"));
+    }
+}
+
+ECheckBoxState SPTectonicToolPanel::GetAutomaticLODState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableAutomaticLOD ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Checked; // Default to checked
+}
+
+void SPTectonicToolPanel::OnAutomaticLODChanged(ECheckBoxState NewState)
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            FTectonicSimulationParameters Params = Service->GetParameters();
+            Params.bEnableAutomaticLOD = (NewState == ECheckBoxState::Checked);
+            Service->SetParameters(Params);
+            UE_LOG(LogTemp, Log, TEXT("Automatic LOD %s"), Params.bEnableAutomaticLOD ? TEXT("enabled") : TEXT("disabled"));
+        }
     }
 }
 

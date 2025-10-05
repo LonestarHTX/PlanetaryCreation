@@ -139,9 +139,18 @@ double ComputeOceanicAmplification(
     bool bIsOceanic = false;
     for (const FTectonicPlate& Plate : Plates)
     {
-        if (Plate.PlateID == PlateID && Plate.CrustType == ECrustType::Oceanic)
+        if (Plate.PlateID == PlateID)
         {
-            bIsOceanic = true;
+            bIsOceanic = (Plate.CrustType == ECrustType::Oceanic);
+
+            // Debug: Log first few continental vertices to diagnose issue
+            static int32 DebugContinentalLog = 0;
+            if (DebugContinentalLog < 3 && !bIsOceanic)
+            {
+                UE_LOG(LogTemp, Log, TEXT("Debug: Continental vertex with PlateID=%d, returning BaseElevation=%.3f m"),
+                    PlateID, BaseElevation_m);
+                DebugContinentalLog++;
+            }
             break;
         }
     }
@@ -162,7 +171,13 @@ double ComputeOceanicAmplification(
     const FVector3d TransformFaultDir = FVector3d::CrossProduct(RidgeDirection, Position.GetSafeNormal()).GetSafeNormal();
 
     // 3D Gabor noise approximation oriented along transform faults
-    const double GaborNoise = ComputeGaborNoiseApproximation(Position, TransformFaultDir, 0.01);
+    // Use higher frequency for more detail
+    const double RawGaborNoise = ComputeGaborNoiseApproximation(Position, TransformFaultDir, 0.05);
+
+    // Scale up to ensure full [-1, 1] range (Perlin typically gives smaller values)
+    // This ensures fault amplitudes reach the target 150m for young crust
+    const double GaborNoise = FMath::Clamp(RawGaborNoise * 3.0, -1.0, 1.0);
+
     const double FaultDetail_m = FaultAmplitude_m * GaborNoise;
 
     AmplifiedElevation += FaultDetail_m;

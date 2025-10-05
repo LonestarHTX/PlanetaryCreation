@@ -66,6 +66,10 @@ private:
     ECheckBoxState GetBoundaryOverlayState() const;
     void OnBoundaryOverlayChanged(ECheckBoxState NewState);
 
+    // Automatic LOD toggle (Milestone 4 Phase 4.1)
+    ECheckBoxState GetAutomaticLODState() const;
+    void OnAutomaticLODChanged(ECheckBoxState NewState);
+
     // Milestone 5 Task 1.3: Undo/Redo controls
     FReply HandleUndoClicked();
     FReply HandleRedoClicked();

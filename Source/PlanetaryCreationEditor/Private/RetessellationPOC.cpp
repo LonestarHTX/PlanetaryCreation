@@ -223,6 +223,30 @@ bool UTectonicSimulationService::PerformRetessellation()
     GenerateRenderMesh();
     BuildVoronoiMapping();
 
+    // Milestone 6 Fix: Refresh elevation baselines to match new plate assignments after retessellation
+    // When Voronoi remaps vertices to different plates, elevation must update to reflect new crust type
+    const int32 VertexCount = RenderVertices.Num();
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 PlateIdx = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        if (PlateIdx != INDEX_NONE && Plates.IsValidIndex(PlateIdx))
+        {
+            const bool bIsOceanic = (Plates[PlateIdx].CrustType == ECrustType::Oceanic);
+            // Only reset elevation if it's inconsistent with current plate type
+            // Oceanic should be negative, continental should be positive
+            const bool bElevationMatchesType = bIsOceanic ? (VertexElevationValues[VertexIdx] < 0.0) : (VertexElevationValues[VertexIdx] > 0.0);
+            if (!bElevationMatchesType)
+            {
+                VertexElevationValues[VertexIdx] = bIsOceanic ? -3500.0 : 250.0;
+                // Also reset amplified elevation to match base (Stage B will recompute on next step)
+                if (VertexAmplifiedElevation.IsValidIndex(VertexIdx))
+                {
+                    VertexAmplifiedElevation[VertexIdx] = VertexElevationValues[VertexIdx];
+                }
+            }
+        }
+    }
+
     // Refresh derived fields (velocity, stress) after Voronoi rebuild
     ComputeVelocityField();
     InterpolateStressToVertices();
