@@ -73,12 +73,11 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexAmplifiedElevation = Service->GetVertexAmplifiedElevation(); // M6 Task 2.1: Stage B amplified elevation
         Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
         Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
-        const FTectonicSimulationParameters& Parameters = Service->GetParameters();
-        const bool bAmplificationEnabled = (Parameters.bEnableOceanicAmplification ||
-            Parameters.bEnableContinentalAmplification);
-
-        Snapshot.bUseAmplifiedElevation = bAmplificationEnabled &&
-                                          Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
+        // M6 Task 2.3: Enable amplified elevation if EITHER oceanic OR continental amplification is active
+        Snapshot.bUseAmplifiedElevation = (Service->GetParameters().bEnableOceanicAmplification ||
+                                           Service->GetParameters().bEnableContinentalAmplification) &&
+                                          Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
+        Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
     }
 
     // Capture visualization state from controller
@@ -606,46 +605,46 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
         return RGB.ToFColor(false);
     };
 
-    // Determine if we should display the heightmap debug gradient (Stage B amplification preview).
-    bool bUseHeightmapDebugColors = Snapshot.bUseAmplifiedElevation &&
-        Snapshot.VertexAmplifiedElevation.Num() == RenderVertices.Num() &&
-        Snapshot.ElevationMode == EElevationMode::Displaced &&
-        !Snapshot.bShowVelocityField;
-
-    double HeightmapMinElevation = TNumericLimits<double>::Max();
-    double HeightmapMaxElevation = TNumericLimits<double>::Lowest();
-
-    if (bUseHeightmapDebugColors)
+    // Helper to map elevation to color (M6 Task 2.3: Heightmap visualization mode)
+    // Uses paper-compliant elevation range: -6000m (abyssal plains) to ~1000m+ (mountains)
+    auto GetElevationColor = [](double ElevationMeters) -> FColor
     {
-        for (const double ElevationMeters : Snapshot.VertexAmplifiedElevation)
+        // Normalize elevation from paper range: -6000m (blue) to +2000m (red)
+        const double NormalizedHeight = FMath::Clamp(
+            (ElevationMeters - PaperElevationConstants::AbyssalPlainDepth_m) /
+            (2000.0 - PaperElevationConstants::AbyssalPlainDepth_m),
+            0.0, 1.0
+        );
+
+        // Multi-stop gradient: Blue → Cyan → Green → Yellow → Red
+        if (NormalizedHeight < 0.25)
         {
-            if (!FMath::IsFinite(ElevationMeters))
-            {
-                bUseHeightmapDebugColors = false;
-                break;
-            }
-
-            HeightmapMinElevation = FMath::Min(HeightmapMinElevation, ElevationMeters);
-            HeightmapMaxElevation = FMath::Max(HeightmapMaxElevation, ElevationMeters);
+            // Blue (240°) → Cyan (180°)
+            const float Hue = FMath::Lerp(240.0f, 180.0f, static_cast<float>(NormalizedHeight / 0.25));
+            FLinearColor HSV(Hue, 1.0f, 1.0f);
+            return HSV.HSVToLinearRGB().ToFColor(false);
         }
-
-        if (!bUseHeightmapDebugColors || HeightmapMaxElevation <= HeightmapMinElevation + KINDA_SMALL_NUMBER)
+        else if (NormalizedHeight < 0.5)
         {
-            bUseHeightmapDebugColors = false;
+            // Cyan (180°) → Green (120°)
+            const float Hue = FMath::Lerp(180.0f, 120.0f, static_cast<float>((NormalizedHeight - 0.25) / 0.25));
+            FLinearColor HSV(Hue, 1.0f, 1.0f);
+            return HSV.HSVToLinearRGB().ToFColor(false);
         }
-    }
-
-    auto GetHeightmapColor = [&](int32 VertexIdx) -> FColor
-    {
-        if (!Snapshot.VertexAmplifiedElevation.IsValidIndex(VertexIdx))
+        else if (NormalizedHeight < 0.75)
         {
-            return FColor::White;
+            // Green (120°) → Yellow (60°)
+            const float Hue = FMath::Lerp(120.0f, 60.0f, static_cast<float>((NormalizedHeight - 0.5) / 0.25));
+            FLinearColor HSV(Hue, 1.0f, 1.0f);
+            return HSV.HSVToLinearRGB().ToFColor(false);
         }
-
-        const double ElevationMeters = Snapshot.VertexAmplifiedElevation[VertexIdx];
-        const double NormalizedHeight = (ElevationMeters - HeightmapMinElevation) /
-            (HeightmapMaxElevation - HeightmapMinElevation);
-        return PlanetaryCreation::Heightmap::MakeElevationColor(NormalizedHeight);
+        else
+        {
+            // Yellow (60°) → Red (0°)
+            const float Hue = FMath::Lerp(60.0f, 0.0f, static_cast<float>((NormalizedHeight - 0.75) / 0.25));
+            FLinearColor HSV(Hue, 1.0f, 1.0f);
+            return HSV.HSVToLinearRGB().ToFColor(false);
+        }
     };
 
     // Build vertices with elevation displacement and visualization
@@ -681,9 +680,20 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
 
         // Choose color based on visualization mode
         FColor VertexColor;
-        if (bUseHeightmapDebugColors)
+        if (Snapshot.Parameters.bEnableHeightmapVisualization)
         {
-            VertexColor = GetHeightmapColor(i);
+            // M6 Task 2.3: Heightmap visualization mode (elevation-based coloring)
+            // Use amplified elevation if available, otherwise base elevation
+            double ElevationMeters = 0.0;
+            if (Snapshot.bUseAmplifiedElevation && Snapshot.VertexAmplifiedElevation.IsValidIndex(i))
+            {
+                ElevationMeters = Snapshot.VertexAmplifiedElevation[i];
+            }
+            else if (Snapshot.VertexElevationValues.IsValidIndex(i))
+            {
+                ElevationMeters = Snapshot.VertexElevationValues[i];
+            }
+            VertexColor = GetElevationColor(ElevationMeters);
         }
         else if (Snapshot.bShowVelocityField && VertexVelocities.IsValidIndex(i))
         {

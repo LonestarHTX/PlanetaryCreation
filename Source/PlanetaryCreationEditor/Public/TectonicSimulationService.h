@@ -507,6 +507,14 @@ struct FTectonicSimulationParameters
     bool bEnableContinentalErosion = false;
 
     /**
+     * Milestone 6 Task 2.3: Enable heightmap visualization mode.
+     * When true, mesh vertex colors encode elevation (blue=low, red=high).
+     * Default false (normal plate boundary visualization).
+     */
+    UPROPERTY()
+    bool bEnableHeightmapVisualization = false;
+
+    /**
      * Milestone 5 Task 2.2: Sediment diffusion rate (dimensionless, 0-1).
      * Controls how quickly eroded material redistributes to neighbors.
      * Default 0.1 (10% of excess sediment diffuses per step).

@@ -70,6 +70,10 @@ private:
     ECheckBoxState GetAutomaticLODState() const;
     void OnAutomaticLODChanged(ECheckBoxState NewState);
 
+    // Heightmap visualization toggle (Milestone 6 Task 2.3)
+    ECheckBoxState GetHeightmapVisualizationState() const;
+    void OnHeightmapVisualizationChanged(ECheckBoxState NewState);
+
     // Milestone 5 Task 1.3: Undo/Redo controls
     FReply HandleUndoClicked();
     FReply HandleRedoClicked();

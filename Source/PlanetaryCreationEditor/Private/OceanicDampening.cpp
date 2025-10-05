@@ -86,12 +86,21 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
         // Increment crust age for oceanic crust
         VertexCrustAge[VertexIdx] += DeltaTimeMy;
 
-        // Age-subsidence formula: depth = BaseDepth + Coeff × sqrt(age)
-        // Paper: h_ocean = -2500 - 350 × sqrt(age_My)
-        // All values in METERS
-        const double BaseDepth_m = -2500.0; // Mean oceanic depth (meters)
+        /**
+         * Age-subsidence formula (paper-compliant):
+         * New oceanic crust forms at ridges (~-1000m depth, zᵀ from Appendix A).
+         * As crust ages and moves away from ridge, it cools, densifies, and subsides toward abyssal depth.
+         * Target asymptote: -6000m (zᵇ from Appendix A).
+         *
+         * Formula: depth(t) = RidgeDepth - SubsidenceCoeff × sqrt(age)
+         * Clamped to never exceed abyssal depth.
+         */
+        const double RidgeDepth_m = PaperElevationConstants::OceanicRidgeDepth_m; // -1000m (zᵀ)
         const double AgeSubsidence_m = Parameters.OceanicAgeSubsidenceCoeff * FMath::Sqrt(VertexCrustAge[VertexIdx]); // meters
-        const double TargetDepth_m = BaseDepth_m - AgeSubsidence_m;
+        const double TargetDepth_m = FMath::Max(
+            RidgeDepth_m - AgeSubsidence_m,
+            PaperElevationConstants::AbyssalPlainDepth_m  // Never deeper than -6000m
+        );
 
         // Gaussian smoothing: average with neighbors (dampens roughness)
         const TArray<int32>* Neighbors = VertexNeighbors.Find(VertexIdx);
