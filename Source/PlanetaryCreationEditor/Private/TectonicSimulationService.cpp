@@ -2469,6 +2469,16 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     checkf(VertexElevationValues.Num() == VertexCount, TEXT("VertexElevationValues not initialized (must run erosion first)"));
     checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized"));
 
+    // Initialize VertexAmplifiedElevation from base if oceanic amplification didn't run
+    // (VertexAmplifiedElevation is SetNumZeroed during render mesh generation)
+    if (!Parameters.bEnableOceanicAmplification)
+    {
+        for (int32 i = 0; i < VertexCount; ++i)
+        {
+            VertexAmplifiedElevation[i] = VertexElevationValues[i];
+        }
+    }
+
     // Get project content directory for loading exemplar data
     const FString ProjectContentDir = FPaths::ProjectContentDir();
 
