@@ -102,6 +102,9 @@ public:
     FVector2D GetCameraAngles() const;
     float GetCameraDistance() const;
 
+    /** Milestone 3 Task 4.3: Create snapshot for async mesh build (public for testing). */
+    FMeshBuildSnapshot CreateMeshBuildSnapshot() const;
+
 private:
     UTectonicSimulationService* GetService() const;
     void EnsurePreviewActor() const;
@@ -114,9 +117,6 @@ private:
 
     /** Milestone 4 Task 3.2: Draw velocity vector field at plate centroids. */
     void DrawVelocityVectorField();
-
-    /** Milestone 3 Task 4.3: Create snapshot for async mesh build. */
-    FMeshBuildSnapshot CreateMeshBuildSnapshot() const;
 
     /** Milestone 3 Task 4.3: Build mesh StreamSet from snapshot (thread-safe). */
     static void BuildMeshFromSnapshot(const FMeshBuildSnapshot& Snapshot, RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);

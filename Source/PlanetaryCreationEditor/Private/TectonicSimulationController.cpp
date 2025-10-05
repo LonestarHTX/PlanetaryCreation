@@ -72,7 +72,9 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexAmplifiedElevation = Service->GetVertexAmplifiedElevation(); // M6 Task 2.1: Stage B amplified elevation
         Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
         Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
-        Snapshot.bUseAmplifiedElevation = Service->GetParameters().bEnableOceanicAmplification &&
+        // M6 Task 2.3: Enable amplified elevation if EITHER oceanic OR continental amplification is active
+        Snapshot.bUseAmplifiedElevation = (Service->GetParameters().bEnableOceanicAmplification ||
+                                           Service->GetParameters().bEnableContinentalAmplification) &&
                                           Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
         Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
     }
