@@ -263,6 +263,18 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
 {
+    if (Parameters.bEnableHeightmapVisualization != NewParams.bEnableHeightmapVisualization)
+    {
+        FTectonicSimulationParameters ComparableParams = NewParams;
+        ComparableParams.bEnableHeightmapVisualization = Parameters.bEnableHeightmapVisualization;
+
+        if (FMemory::Memcmp(&ComparableParams, &Parameters, sizeof(FTectonicSimulationParameters)) == 0)
+        {
+            SetHeightmapVisualizationEnabled(NewParams.bEnableHeightmapVisualization);
+            return;
+        }
+    }
+
     Parameters = NewParams;
 
     // M5 Phase 3: Validate and clamp PlanetRadius to prevent invalid simulations
@@ -277,6 +289,22 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
     }
 
     ResetSimulation();
+}
+
+void UTectonicSimulationService::SetHeightmapVisualizationEnabled(bool bEnabled)
+{
+    if (Parameters.bEnableHeightmapVisualization == bEnabled)
+    {
+        return;
+    }
+
+    Parameters.bEnableHeightmapVisualization = bEnabled;
+
+    // Increment surface data version so cached LODs rebuild with updated vertex colors.
+    SurfaceDataVersion++;
+
+    UE_LOG(LogTemp, Log, TEXT("[Visualization] Heightmap visualization %s (SurfaceVersion=%d)"),
+        bEnabled ? TEXT("enabled") : TEXT("disabled"), SurfaceDataVersion);
 }
 
 void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
