@@ -26,20 +26,22 @@
 double ComputeGaborNoiseApproximation(const FVector3d& Position, const FVector3d& FaultDirection, double Frequency)
 {
     // Sample Perlin noise along fault direction (creates anisotropy)
-    // We sample at multiple points along the fault to create directional patterns
+    // We sample at offset points along the fault to create linear patterns
     const FVector3d SamplePoint1 = Position * Frequency;
-    const FVector3d SamplePoint2 = (Position + FaultDirection * 0.5) * Frequency;
+    const FVector3d SamplePoint2 = (Position + FaultDirection * 2.0) * Frequency;
 
     // Convert to FVector for Unreal's Perlin function
     const float Noise1 = FMath::PerlinNoise3D(FVector(SamplePoint1));
     const float Noise2 = FMath::PerlinNoise3D(FVector(SamplePoint2));
 
-    // Blend samples to create directional coherence
-    const double NoiseValue = (Noise1 + Noise2) * 0.5;
+    // Take maximum absolute value to create strong linear features
+    // (averaging reduces amplitude too much)
+    const double NoiseValue = FMath::Abs(Noise1) > FMath::Abs(Noise2) ? Noise1 : Noise2;
 
-    // Sharpen to create fault-like linear features
+    // Amplify and sharpen to create fault-like linear features
     // Paper mentions "transform faults" which are sharp discontinuities
-    const double SharpNoise = FMath::Sign(NoiseValue) * FMath::Pow(FMath::Abs(NoiseValue), 0.7);
+    // Power < 1.0 enhances contrast (makes peaks sharper, valleys deeper)
+    const double SharpNoise = FMath::Sign(NoiseValue) * FMath::Pow(FMath::Abs(NoiseValue), 0.6);
 
     return SharpNoise; // Range approximately [-1, 1]
 }
@@ -189,6 +191,15 @@ double ComputeOceanicAmplification(
 
     const double FineDetail_m = 20.0 * GradientNoise; // ±20m variation
     AmplifiedElevation += FineDetail_m;
+
+    // Debug: Log amplification breakdown for first few young crust vertices
+    static int32 DebugLogCount = 0;
+    if (DebugLogCount < 5 && CrustAge_My < 10.0)
+    {
+        UE_LOG(LogTemp, Log, TEXT("Debug OceanicAmp [%d]: Age=%.2f My, Base=%.1f m, Fault=%.1f m (GaborNoise=%.3f), Fine=%.1f m, Total=%.1f m, Diff=%.1f m"),
+            DebugLogCount, CrustAge_My, BaseElevation_m, FaultDetail_m, GaborNoise, FineDetail_m, AmplifiedElevation, AmplifiedElevation - BaseElevation_m);
+        DebugLogCount++;
+    }
 
     return AmplifiedElevation;
 }
