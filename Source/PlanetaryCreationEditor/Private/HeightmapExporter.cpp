@@ -9,57 +9,7 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
 
-/**
- * Apply color gradient based on normalized height [0, 1]
- * Uses blue (low) -> green -> yellow -> red (high) gradient
- */
-static FColor GetElevationColor(double NormalizedHeight)
-{
-	// Clamp to [0, 1]
-	NormalizedHeight = FMath::Clamp(NormalizedHeight, 0.0, 1.0);
-
-	// Multi-stop gradient: Blue -> Cyan -> Green -> Yellow -> Red
-	if (NormalizedHeight < 0.25)
-	{
-		// Blue (0,0,255) -> Cyan (0,255,255)
-		const double t = NormalizedHeight / 0.25;
-		return FColor(
-			0,
-			static_cast<uint8>(FMath::Lerp(0.0, 255.0, t)),
-			255
-		);
-	}
-	else if (NormalizedHeight < 0.5)
-	{
-		// Cyan (0,255,255) -> Green (0,255,0)
-		const double t = (NormalizedHeight - 0.25) / 0.25;
-		return FColor(
-			0,
-			255,
-			static_cast<uint8>(FMath::Lerp(255.0, 0.0, t))
-		);
-	}
-	else if (NormalizedHeight < 0.75)
-	{
-		// Green (0,255,0) -> Yellow (255,255,0)
-		const double t = (NormalizedHeight - 0.5) / 0.25;
-		return FColor(
-			static_cast<uint8>(FMath::Lerp(0.0, 255.0, t)),
-			255,
-			0
-		);
-	}
-	else
-	{
-		// Yellow (255,255,0) -> Red (255,0,0)
-		const double t = (NormalizedHeight - 0.75) / 0.25;
-		return FColor(
-			255,
-			static_cast<uint8>(FMath::Lerp(255.0, 0.0, t)),
-			0
-		);
-	}
-}
+#include "HeightmapColorPalette.h"
 
 /**
  * Project sphere vertex to equirectangular UV coordinates
@@ -121,7 +71,7 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 		const int32 PixelIdx = Y * ImageWidth + X;
 
 		// Write color
-		const FColor ElevColor = GetElevationColor(NormalizedHeight);
+                const FColor ElevColor = PlanetaryCreation::Heightmap::MakeElevationColor(NormalizedHeight);
 		ImageData[PixelIdx] = ElevColor;
 
 		// Debug: Log first few samples
