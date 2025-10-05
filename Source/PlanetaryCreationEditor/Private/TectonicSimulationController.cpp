@@ -22,6 +22,7 @@
 #include "Editor/UnrealEdEngine.h"
 #include "EditorViewportClient.h"
 #include "HAL/PlatformTime.h"
+#include "HeightmapColorPalette.h"
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
 FTectonicSimulationController::~FTectonicSimulationController() = default;
