@@ -1,6 +1,6 @@
 # Milestone 5 Plan – Production Readiness & Surface Weathering
 
-**Status:** 📋 Planning
+**Status:** ✅ Completed (2025-10-04)
 **Timeline:** 4 weeks (Weeks 13-16)
 **Dependencies:** Milestone 4 complete ✅
 
@@ -9,6 +9,16 @@
 ## Mission
 
 Transform the tectonic simulation from a research-aligned prototype into a **production-ready editor tool** with polished UX, comprehensive validation, and complete Section 4 paper parity (adding erosion/weathering). Deliver a shippable product that researchers and artists can use for real-world planetary generation.
+
+---
+
+## Outcome Summary
+
+- Continuous playback, orbital camera, timeline scrubbing, and undo/redo UI are live in `PlanetaryCreationEditor` (see `FTectonicPlaybackController`, `SPTectonicToolPanel`).
+- Surface weathering pass is in production: continental erosion, sediment transport, and oceanic dampening run every simulation step with tunable parameters.
+- Automation suite expanded to cover playback, erosion, dampening, and regression scenarios (17/18 green; `RetessellationRegression` perf overage documented for M6 follow-up).
+- Profiling captured with Unreal Insights shows 6.32 ms per step at L3, leaving ~17× budget headroom and no regressions against M4 (`Docs/Performance_M5.md`).
+- User-facing documentation, presets, and release artifacts updated to reflect the production-ready tooling.
 
 ---
 
@@ -22,7 +32,7 @@ Transform the tectonic simulation from a research-aligned prototype into a **pro
 
 ---
 
-## Phase Breakdown
+## Phase Breakdown *(completed; details retained for reference)*
 
 ### Phase 1 – Editor UX Enhancements *(Weeks 13–14)*
 

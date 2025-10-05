@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -28,7 +29,7 @@ bool FVoronoiWarpingTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("=== Voronoi Warping Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Voronoi Warping Test ==="));
 
     // Test 1: Warping disabled vs enabled produces different assignments
     FTectonicSimulationParameters Params = Service->GetParameters();
@@ -44,7 +45,7 @@ bool FVoronoiWarpingTest::RunTest(const FString& Parameters)
     const TArray<int32> UnwarpedAssignments = Service->GetVertexPlateAssignments();
     const int32 VertexCount = Service->GetRenderVertices().Num();
 
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Unwarped Voronoi - %d vertices assigned"), VertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Unwarped Voronoi - %d vertices assigned"), VertexCount);
 
     // Enable warping
     Params.bEnableVoronoiWarping = true;
@@ -66,7 +67,7 @@ bool FVoronoiWarpingTest::RunTest(const FString& Parameters)
     }
 
     const double DifferencePercentage = (static_cast<double>(DifferentCount) / VertexCount) * 100.0;
-    UE_LOG(LogTemp, Log, TEXT("Test 1 Result: %d/%d vertices (%.1f%%) changed assignment with warping"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1 Result: %d/%d vertices (%.1f%%) changed assignment with warping"),
         DifferentCount, VertexCount, DifferencePercentage);
 
     TestTrue(TEXT("Warping changes vertex assignments (>1% different)"), DifferencePercentage > 1.0);
@@ -87,7 +88,7 @@ bool FVoronoiWarpingTest::RunTest(const FString& Parameters)
     }
 
     const double HighWarpPercentage = (static_cast<double>(HighWarpDifferentCount) / VertexCount) * 100.0;
-    UE_LOG(LogTemp, Log, TEXT("Test 2: High amplitude (1.0) - %d/%d vertices (%.1f%%) different"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: High amplitude (1.0) - %d/%d vertices (%.1f%%) different"),
         HighWarpDifferentCount, VertexCount, HighWarpPercentage);
 
     TestTrue(TEXT("Higher amplitude increases boundary irregularity"), HighWarpPercentage > DifferencePercentage);
@@ -106,7 +107,7 @@ bool FVoronoiWarpingTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Determinism - %s"), bDeterministic ? TEXT("PASS") : TEXT("FAIL"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Determinism - %s"), bDeterministic ? TEXT("PASS") : TEXT("FAIL"));
     TestTrue(TEXT("Warping is deterministic (same seed = same assignments)"), bDeterministic);
 
     // Test 4: Different seed produces different warping (without Lloyd to avoid convergence)
@@ -126,7 +127,7 @@ bool FVoronoiWarpingTest::RunTest(const FString& Parameters)
     }
 
     const double SeedDifferencePercentage = (static_cast<double>(SeedDifferenceCount) / VertexCount) * 100.0;
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Different seed (no Lloyd) - %d/%d vertices (%.1f%%) different"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Different seed (no Lloyd) - %d/%d vertices (%.1f%%) different"),
         SeedDifferenceCount, VertexCount, SeedDifferencePercentage);
 
     TestTrue(TEXT("Different seeds produce different warping patterns"), SeedDifferencePercentage > 5.0);
@@ -148,16 +149,16 @@ bool FVoronoiWarpingTest::RunTest(const FString& Parameters)
     }
 
     const double FreqDifferencePercentage = (static_cast<double>(FreqDifferenceCount) / VertexCount) * 100.0;
-    UE_LOG(LogTemp, Log, TEXT("Test 5: High frequency (4.0) vs baseline (2.0) - %.1f%% different"), FreqDifferencePercentage);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: High frequency (4.0) vs baseline (2.0) - %.1f%% different"), FreqDifferencePercentage);
 
     TestTrue(TEXT("Frequency parameter affects warping pattern"), FreqDifferencePercentage > 5.0);
 
     // Summary
-    UE_LOG(LogTemp, Log, TEXT("=== Voronoi Warping Test Complete ==="));
-    UE_LOG(LogTemp, Log, TEXT("✓ Warping creates irregular plate boundaries (paper Section 3)"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Amplitude controls irregularity magnitude"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Frequency controls boundary detail scale"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Feature is deterministic and controllable"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Voronoi Warping Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Warping creates irregular plate boundaries (paper Section 3)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Amplitude controls irregularity magnitude"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Frequency controls boundary detail scale"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Feature is deterministic and controllable"));
 
     return true;
 }

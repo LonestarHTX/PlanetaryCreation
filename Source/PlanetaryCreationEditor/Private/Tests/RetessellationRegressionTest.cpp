@@ -1,5 +1,6 @@
 // Milestone 4 Task 1.1 Phase 3: Re-tessellation Regression Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -29,8 +30,8 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Re-tessellation Regression Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Re-tessellation Regression Test ==="));
 
     // Test configuration
     struct FTestConfig
@@ -71,8 +72,8 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
 
     for (const FTestConfig& Config : TestConfigs)
     {
-        UE_LOG(LogTemp, Log, TEXT(""));
-        UE_LOG(LogTemp, Log, TEXT("Test %d: Level %d, Render Level %d, %d plates, %d steps, %.1f° threshold"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test %d: Level %d, Render Level %d, %d plates, %d steps, %.1f° threshold"),
             TestNum, Config.SubdivisionLevel, Config.RenderSubdivisionLevel,
             Config.ExpectedPlateCount, Config.SimSteps, Config.ThresholdDegrees);
 
@@ -125,21 +126,21 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
             TestEqual(FString::Printf(TEXT("Test %d: Vertex count preserved"), TestNum), PostVertexCount, PreVertexCount);
 
             RebuildTimes.Add(RebuildTimeMs);
-            UE_LOG(LogTemp, Log, TEXT("  ✓ Rebuild: %.2f ms, %d vertices"), RebuildTimeMs, PostVertexCount);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rebuild: %.2f ms, %d vertices"), RebuildTimeMs, PostVertexCount);
         }
         else
         {
             TestEqual(FString::Printf(TEXT("Test %d: No rebuild (early exit)"), TestNum), PostRebuildCount, PreRebuildCount);
-            UE_LOG(LogTemp, Log, TEXT("  ✓ No rebuild: Plates within threshold"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ No rebuild: Plates within threshold"));
         }
 
         TestNum++;
     }
 
     // Performance summary
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Performance Summary ==="));
-    UE_LOG(LogTemp, Log, TEXT("Rebuild count: %d"), RebuildTimes.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Performance Summary ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Rebuild count: %d"), RebuildTimes.Num());
 
     if (RebuildTimes.Num() > 0)
     {
@@ -156,29 +157,29 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
 
         const double AvgTime = TotalTime / RebuildTimes.Num();
 
-        UE_LOG(LogTemp, Log, TEXT("Rebuild times: Min=%.2f ms, Avg=%.2f ms, Max=%.2f ms"), MinTime, AvgTime, MaxTime);
-        UE_LOG(LogTemp, Log, TEXT("Performance budget: 50 ms (target), 120 ms (ship)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Rebuild times: Min=%.2f ms, Avg=%.2f ms, Max=%.2f ms"), MinTime, AvgTime, MaxTime);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Performance budget: 50 ms (target), 120 ms (ship)"));
 
         // Verify performance budget (soft assertion - expected to exceed in initial implementation)
         TestTrue(TEXT("Max rebuild time under ship budget (120ms)"), MaxTime < 120.0);
 
         if (MaxTime < 50.0)
         {
-            UE_LOG(LogTemp, Log, TEXT("✅ All rebuilds under target budget (50ms)"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("✅ All rebuilds under target budget (50ms)"));
         }
         else if (MaxTime < 100.0)
         {
-            UE_LOG(LogTemp, Log, TEXT("⚠️ Some rebuilds exceed target (50ms) but under stretch goal (100ms)"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("⚠️ Some rebuilds exceed target (50ms) but under stretch goal (100ms)"));
         }
         else if (MaxTime < 120.0)
         {
-            UE_LOG(LogTemp, Log, TEXT("⚠️ Some rebuilds exceed stretch goal (100ms) but under ship budget (120ms)"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("⚠️ Some rebuilds exceed stretch goal (100ms) but under ship budget (120ms)"));
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("❌ PERF OVERAGE: Max rebuild time %.2f ms exceeds ship budget (120ms)"), MaxTime);
-            UE_LOG(LogTemp, Error, TEXT("   ⚠️ EXPECTED OVERAGE - Flagged for Milestone 6 optimization pass (SIMD/GPU)"));
-            UE_LOG(LogTemp, Error, TEXT("   Current baseline: %.2f ms | Target: 50 ms | Ship budget: 120 ms"), MaxTime);
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("❌ PERF OVERAGE: Max rebuild time %.2f ms exceeds ship budget (120ms)"), MaxTime);
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("   ⚠️ EXPECTED OVERAGE - Flagged for Milestone 6 optimization pass (SIMD/GPU)"));
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("   Current baseline: %.2f ms | Target: 50 ms | Ship budget: 120 ms"), MaxTime);
         }
     }
 

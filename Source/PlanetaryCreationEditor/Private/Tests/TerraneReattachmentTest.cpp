@@ -1,5 +1,6 @@
 // Milestone 6 Task 1.3: Terrane Reattachment Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -33,9 +34,9 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Milestone 6 Task 1.3: Terrane Reattachment Test ==="));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Milestone 6 Task 1.3: Terrane Reattachment Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Initialize simulation with multiple continental plates
     FTectonicSimulationParameters Params;
@@ -65,13 +66,13 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
         ContinentalCount = 2;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Plate configuration: %d continental plates"), ContinentalCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Plate configuration: %d continental plates"), ContinentalCount);
 
     // ========================================
     // TEST 1: Extract Terrane from Source Plate
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("--- Test 1: Terrane Extraction ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 1: Terrane Extraction ---"));
 
     // Find first continental plate
     int32 SourcePlateID = INDEX_NONE;
@@ -155,7 +156,7 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
 
     TestTrue(TEXT("Sufficient terrane vertices selected"), TerraneVertices.Num() >= 10);
     const double TerraneArea = Service->ComputeTerraneArea(TerraneVertices);
-    UE_LOG(LogTemp, Log, TEXT("  Selected %d vertices, area: %.2f km²"), TerraneVertices.Num(), TerraneArea);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Selected %d vertices, area: %.2f km²"), TerraneVertices.Num(), TerraneArea);
 
     // Extract terrane
     int32 TerraneID = INDEX_NONE;
@@ -164,20 +165,20 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
 
     if (!bExtracted)
     {
-        UE_LOG(LogTemp, Error, TEXT("  ❌ FAIL: Could not extract terrane"));
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("  ❌ FAIL: Could not extract terrane"));
         return false;
     }
 
     const TArray<FContinentalTerrane>& TerranesAfterExtraction = Service->GetTerranes();
     TestEqual(TEXT("One terrane exists after extraction"), TerranesAfterExtraction.Num(), 1);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Terrane %d extracted successfully"), TerraneID);
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Terrane %d extracted successfully"), TerraneID);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 2: Manual Reattachment to Different Continental Plate
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 2: Manual Reattachment ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 2: Manual Reattachment ---"));
 
     // Find second continental plate (different from source)
     int32 TargetPlateID = INDEX_NONE;
@@ -203,7 +204,7 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Vertices on target plate before reattachment: %d"), VerticesOnTargetBefore);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices on target plate before reattachment: %d"), VerticesOnTargetBefore);
 
     // Perform reattachment
     const double ReattachmentStartTime = FPlatformTime::Seconds();
@@ -214,11 +215,11 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
 
     if (!bReattached)
     {
-        UE_LOG(LogTemp, Error, TEXT("  ❌ FAIL: Reattachment failed"));
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("  ❌ FAIL: Reattachment failed"));
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Reattachment time: %.2f ms (target: <10ms)"), ReattachmentTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Reattachment time: %.2f ms (target: <10ms)"), ReattachmentTimeMs);
     TestTrue(TEXT("Reattachment performance <10ms"), ReattachmentTimeMs < 10.0);
 
     // Verify terrane removed from active list
@@ -236,16 +237,16 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Vertices on target plate after reattachment: %d"), VerticesOnTargetAfter);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices on target plate after reattachment: %d"), VerticesOnTargetAfter);
     TestEqual(TEXT("All terrane vertices reassigned to target"), VerticesOnTargetAfter, TerraneVertices.Num());
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Terrane vertices sutured to target plate"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Terrane vertices sutured to target plate"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 3: Topology Validation After Reattachment
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 3: Topology Validation ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 3: Topology Validation ---"));
 
     const TArray<FVector3d>& RenderVertices = Service->GetRenderVertices();
 
@@ -267,8 +268,8 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
     int32 F = RenderTriangles.Num() / 3;
     int32 EulerChar = V - E + F;
 
-    UE_LOG(LogTemp, Log, TEXT("  V = %d, E = %d, F = %d"), V, E, F);
-    UE_LOG(LogTemp, Log, TEXT("  V - E + F = %d (should be 2 for sphere)"), EulerChar);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  V = %d, E = %d, F = %d"), V, E, F);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  V - E + F = %d (should be 2 for sphere)"), EulerChar);
 
     TestEqual(TEXT("Euler characteristic = 2"), EulerChar, 2);
 
@@ -300,13 +301,13 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
 
     TestEqual(TEXT("Non-manifold edge count"), NonManifoldEdges, 0);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Topology valid (Euler = 2, all edges manifold)"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Topology valid (Euler = 2, all edges manifold)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 4: Automatic Reattachment via Simulation Loop
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 4: Automatic Reattachment via Collision ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 4: Automatic Reattachment via Collision ---"));
 
     // Reset simulation to test automatic reattachment
     Service->SetParameters(Params);
@@ -326,7 +327,7 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
         TerranesToModify[0].State = ETerraneState::Colliding;
         TerranesToModify[0].TargetPlateID = TargetPlateID;
 
-        UE_LOG(LogTemp, Log, TEXT("  Manually set terrane %d to Colliding state with target plate %d"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Manually set terrane %d to Colliding state with target plate %d"),
             NewTerraneID, TargetPlateID);
 
         // Advance one step to trigger automatic reattachment
@@ -336,27 +337,27 @@ bool FTerraneReattachmentTest::RunTest(const FString& Parameters)
         const TArray<FContinentalTerrane>& TerranesAfterStep = Service->GetTerranes();
         TestEqual(TEXT("Terrane automatically reattached (removed from list)"), TerranesAfterStep.Num(), 0);
 
-        UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Automatic reattachment triggered by Colliding state"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Automatic reattachment triggered by Colliding state"));
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("  ❌ FAIL: Terrane not found for collision test"));
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("  ❌ FAIL: Terrane not found for collision test"));
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // Summary
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("=== Terrane Reattachment Test Summary ==="));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Manual reattachment: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Vertex reassignment: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Topology preservation: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Performance (<10ms): PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Automatic reattachment: PASS"));
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Terrane Reattachment Test PASSED"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Terrane Reattachment Test Summary ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Manual reattachment: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Vertex reassignment: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Topology preservation: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Performance (<10ms): PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Automatic reattachment: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Terrane Reattachment Test PASSED"));
 
     return true;
 }

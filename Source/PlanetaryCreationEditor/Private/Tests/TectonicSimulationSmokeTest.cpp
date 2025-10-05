@@ -1,3 +1,4 @@
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationController.h"
 
@@ -13,6 +14,6 @@ bool FTectonicSimulationSmokeTest::RunTest(const FString& Parameters)
 
     Controller.Shutdown();
 
-    UE_LOG(LogTemp, Display, TEXT("TODO: Capture performance metrics via Unreal Insights in Milestone 5."));
+    UE_LOG(LogPlanetaryCreation, Display, TEXT("TODO: Capture performance metrics via Unreal Insights in Milestone 5."));
     return true;
 }

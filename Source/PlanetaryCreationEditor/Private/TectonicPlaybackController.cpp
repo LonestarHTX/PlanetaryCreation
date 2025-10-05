@@ -1,4 +1,6 @@
 #include "TectonicPlaybackController.h"
+
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationController.h"
 #include "Containers/Ticker.h"
 
@@ -29,7 +31,7 @@ void FTectonicPlaybackController::Play()
 {
 	if (!SimulationController.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("FTectonicPlaybackController::Play() - Invalid simulation controller"));
+		UE_LOG(LogPlanetaryCreation, Warning, TEXT("FTectonicPlaybackController::Play() - Invalid simulation controller"));
 		return;
 	}
 
@@ -45,7 +47,7 @@ void FTectonicPlaybackController::Play()
 	// Register ticker callback
 	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FTectonicPlaybackController::TickPlayback));
 
-	UE_LOG(LogTemp, Log, TEXT("FTectonicPlaybackController::Play() - Playback started at %.1f×, %.1f steps/sec"),
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("FTectonicPlaybackController::Play() - Playback started at %.1f×, %.1f steps/sec"),
 		PlaybackSpeedMultiplier, StepsPerSecond);
 }
 
@@ -65,7 +67,7 @@ void FTectonicPlaybackController::Pause()
 		TickerHandle.Reset();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("FTectonicPlaybackController::Pause() - Playback paused after %d steps"), StepCount);
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("FTectonicPlaybackController::Pause() - Playback paused after %d steps"), StepCount);
 }
 
 void FTectonicPlaybackController::Stop()
@@ -86,26 +88,26 @@ void FTectonicPlaybackController::Stop()
 		TickerHandle.Reset();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("FTectonicPlaybackController::Stop() - Playback stopped"));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("FTectonicPlaybackController::Stop() - Playback stopped"));
 }
 
 void FTectonicPlaybackController::SetPlaybackSpeed(float SpeedMultiplier)
 {
 	PlaybackSpeedMultiplier = FMath::Clamp(SpeedMultiplier, 0.1f, 10.0f);
-	UE_LOG(LogTemp, Log, TEXT("FTectonicPlaybackController::SetPlaybackSpeed() - Speed set to %.1f×"), PlaybackSpeedMultiplier);
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("FTectonicPlaybackController::SetPlaybackSpeed() - Speed set to %.1f×"), PlaybackSpeedMultiplier);
 }
 
 void FTectonicPlaybackController::SetStepRate(float InStepsPerSecond)
 {
 	StepsPerSecond = FMath::Clamp(InStepsPerSecond, 0.1f, 10.0f);
-	UE_LOG(LogTemp, Log, TEXT("FTectonicPlaybackController::SetStepRate() - Step rate set to %.1f steps/sec"), StepsPerSecond);
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("FTectonicPlaybackController::SetStepRate() - Step rate set to %.1f steps/sec"), StepsPerSecond);
 }
 
 bool FTectonicPlaybackController::TickPlayback(float DeltaTime)
 {
 	if (!SimulationController.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("FTectonicPlaybackController::TickPlayback() - Invalid simulation controller, stopping playback"));
+		UE_LOG(LogPlanetaryCreation, Warning, TEXT("FTectonicPlaybackController::TickPlayback() - Invalid simulation controller, stopping playback"));
 		Stop();
 		return false;
 	}
@@ -141,7 +143,7 @@ void FTectonicPlaybackController::ExecuteStep()
 		// Log every 10 steps for debugging
 		if (StepCount % 10 == 0)
 		{
-			UE_LOG(LogTemp, Log, TEXT("FTectonicPlaybackController::ExecuteStep() - Executed %d steps"), StepCount);
+			UE_LOG(LogPlanetaryCreation, Log, TEXT("FTectonicPlaybackController::ExecuteStep() - Executed %d steps"), StepCount);
 		}
 	}
 }

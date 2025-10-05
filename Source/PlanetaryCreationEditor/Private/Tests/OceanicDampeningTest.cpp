@@ -1,5 +1,6 @@
 // Milestone 5 Task 2.3: Oceanic Dampening Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -28,12 +29,12 @@ bool FOceanicDampeningTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Oceanic Dampening Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Oceanic Dampening Test ==="));
 
     // Test 1: Seafloor Smoothing
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Seafloor Smoothing (Below Sea Level Only)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Seafloor Smoothing (Below Sea Level Only)"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 12345;
@@ -92,16 +93,16 @@ bool FOceanicDampeningTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Seafloor vertices: %d (with age: %d)"), SeafloorVertices, SeafloorWithAge);
-    UE_LOG(LogTemp, Log, TEXT("  Continental vertices: %d"), ContinentalVertices);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Seafloor vertices: %d (with age: %d)"), SeafloorVertices, SeafloorWithAge);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Continental vertices: %d"), ContinentalVertices);
 
     TestTrue(TEXT("Some seafloor vertices tracked"), SeafloorVertices > 0);
     TestTrue(TEXT("Crust age accumulating"), SeafloorWithAge > 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Seafloor tracking validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Seafloor tracking validated"));
 
     // Test 2: Age-Subsidence Relationship
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Age-Subsidence Formula"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Age-Subsidence Formula"));
 
     Params.Seed = 54321;
     Service->SetParameters(Params);
@@ -153,24 +154,24 @@ bool FOceanicDampeningTest::RunTest(const FString& Parameters)
     if (YoungCount > 0) AvgDepthYoung /= YoungCount;
     if (OldCount > 0) AvgDepthOld /= OldCount;
 
-    UE_LOG(LogTemp, Log, TEXT("  Max crust age: %.1f My"), MaxAge);
-    UE_LOG(LogTemp, Log, TEXT("  Young crust (<10 My) avg depth: %.1f m (n=%d)"), AvgDepthYoung, YoungCount);
-    UE_LOG(LogTemp, Log, TEXT("  Old crust (>20 My) avg depth: %.1f m (n=%d)"), AvgDepthOld, OldCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max crust age: %.1f My"), MaxAge);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Young crust (<10 My) avg depth: %.1f m (n=%d)"), AvgDepthYoung, YoungCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Old crust (>20 My) avg depth: %.1f m (n=%d)"), AvgDepthOld, OldCount);
 
     // Old crust should be deeper (more negative elevation)
     if (YoungCount > 0 && OldCount > 0)
     {
         TestTrue(TEXT("Older crust is deeper"), AvgDepthOld < AvgDepthYoung);
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Age-subsidence relationship validated"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Age-subsidence relationship validated"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ Insufficient age variance for subsidence test"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ Insufficient age variance for subsidence test"));
     }
 
     // Test 3: Determinism
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Determinism (Same Seed → Same Results)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Determinism (Same Seed → Same Results)"));
 
     Params.Seed = 77777;
     Params.bEnableDynamicRetessellation = false;
@@ -228,15 +229,15 @@ bool FOceanicDampeningTest::RunTest(const FString& Parameters)
         if (ElevDiff > 1e-3) ElevMismatchCount++;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Age mismatches: %d / %d (max diff: %.9f My)"), AgeMismatchCount, AgeRun1.Num(), MaxAgeDiff);
-    UE_LOG(LogTemp, Log, TEXT("  Elevation mismatches: %d / %d (max diff: %.6f m)"), ElevMismatchCount, ElevRun1.Num(), MaxElevDiff);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Age mismatches: %d / %d (max diff: %.9f My)"), AgeMismatchCount, AgeRun1.Num(), MaxAgeDiff);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Elevation mismatches: %d / %d (max diff: %.6f m)"), ElevMismatchCount, ElevRun1.Num(), MaxElevDiff);
 
     TestEqual(TEXT("Deterministic crust age"), AgeMismatchCount, 0);
     TestEqual(TEXT("Deterministic seafloor elevation"), ElevMismatchCount, 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Determinism validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Determinism validated"));
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Oceanic Dampening Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Oceanic Dampening Test Complete ==="));
     AddInfo(TEXT("✅ Oceanic dampening test complete (3 tests)"));
     AddInfo(FString::Printf(TEXT("Seafloor vertices: %d | Max age: %.1f My | Determinism: ✓"),
         SeafloorVertices, MaxAge));

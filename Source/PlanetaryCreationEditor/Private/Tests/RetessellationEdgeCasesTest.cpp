@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -28,10 +29,10 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("=== Re-tessellation Edge Cases Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Re-tessellation Edge Cases Test ==="));
 
     // Test 1: Extreme drift (>90° from initial)
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Extreme drift scenario (>90°)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Extreme drift scenario (>90°)"));
 
     FTectonicSimulationParameters Params = Service->GetParameters();
     Params.Seed = 12345;
@@ -90,7 +91,7 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
             if (AngleDegrees > 90.0)
             {
                 bExtremeDriftAchieved = true;
-                UE_LOG(LogTemp, Log, TEXT("Test 1: Plate %d drifted %.1f° (>90°) after %d steps"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Plate %d drifted %.1f° (>90°) after %d steps"),
                     i, AngleDegrees, StepsRun);
                 break;
             }
@@ -115,12 +116,12 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
     const int32 E = (Triangles.Num() / 3) * 3 / 2; // Each edge shared by 2 triangles
     const int32 EulerChar = V - E + F;
 
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Topology after extreme drift: V=%d E=%d F=%d χ=%d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Topology after extreme drift: V=%d E=%d F=%d χ=%d"),
         V, E, F, EulerChar);
     TestEqual(TEXT("Euler characteristic preserved after extreme drift"), EulerChar, 2);
 
     // Test 2: Multi-plate simultaneous drift
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Multi-plate simultaneous drift"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Multi-plate simultaneous drift"));
 
     Params.Seed = 99999;
     Service->SetParameters(Params);
@@ -154,12 +155,12 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
     const int32 E2 = (Triangles2.Num() / 3) * 3 / 2;
     const int32 EulerChar2 = V2 - E2 + F2;
 
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Topology after multi-plate drift: V=%d E=%d F=%d χ=%d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Topology after multi-plate drift: V=%d E=%d F=%d χ=%d"),
         V2, E2, F2, EulerChar2);
     TestEqual(TEXT("Euler characteristic preserved after multi-plate drift"), EulerChar2, 2);
 
     // Test 3: Re-tessellation during active rift propagation
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Re-tessellation during active rift"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Re-tessellation during active rift"));
 
     Params.Seed = 54321;
     Params.LloydIterations = 2; // Some convergence for stable rifts
@@ -187,7 +188,7 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
         if (BoundaryPair.Value.BoundaryState == EBoundaryState::Rifting)
         {
             bHasActiveRift = true;
-            UE_LOG(LogTemp, Log, TEXT("Test 3: Active rift found between plates %d-%d (width: %.1f m)"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Active rift found between plates %d-%d (width: %.1f m)"),
                 BoundaryPair.Key.Key, BoundaryPair.Key.Value, BoundaryPair.Value.RiftWidthMeters);
             break;
         }
@@ -213,12 +214,12 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
     const int32 E3 = (Triangles3.Num() / 3) * 3 / 2;
     const int32 EulerChar3 = V3 - E3 + F3;
 
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Topology after rift re-tessellation: V=%d E=%d F=%d χ=%d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Topology after rift re-tessellation: V=%d E=%d F=%d χ=%d"),
         V3, E3, F3, EulerChar3);
     TestEqual(TEXT("Euler characteristic preserved during rift re-tessellation"), EulerChar3, 2);
 
     // Test 4: Boundary consistency after re-tessellation
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Boundary consistency after re-tessellation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Boundary consistency after re-tessellation"));
 
     const int32 BoundaryCountBefore = Boundaries.Num();
     const int32 PlateCountBefore = Service->GetPlates().Num();
@@ -230,7 +231,7 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
     const int32 BoundaryCountAfter = BoundariesAfter.Num();
     const int32 PlateCountAfter = Service->GetPlates().Num();
 
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Boundaries before: %d, after: %d | Plates: %d → %d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Boundaries before: %d, after: %d | Plates: %d → %d"),
         BoundaryCountBefore, BoundaryCountAfter, PlateCountBefore, PlateCountAfter);
 
     // Boundary count should be reasonable: between P-1 and P*(P-1)/2 where P = plate count
@@ -251,11 +252,11 @@ bool FRetessellationEdgeCasesTest::RunTest(const FString& Parameters)
     }
 
     // Summary
-    UE_LOG(LogTemp, Log, TEXT("=== Re-tessellation Edge Cases Test Complete ==="));
-    UE_LOG(LogTemp, Log, TEXT("✓ Extreme drift (>90°) handled correctly"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Multi-plate simultaneous drift preserved topology"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Re-tessellation during active rift succeeded"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Boundary consistency maintained after re-tessellation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Re-tessellation Edge Cases Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Extreme drift (>90°) handled correctly"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Multi-plate simultaneous drift preserved topology"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Re-tessellation during active rift succeeded"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Boundary consistency maintained after re-tessellation"));
 
     return true;
 }

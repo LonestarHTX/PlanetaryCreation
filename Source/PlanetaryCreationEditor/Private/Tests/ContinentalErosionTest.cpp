@@ -1,5 +1,6 @@
 // Milestone 5 Task 2.1: Continental Erosion Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -29,12 +30,12 @@ bool FContinentalErosionTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Continental Erosion Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Continental Erosion Test ==="));
 
     // Test 1: Basic Erosion Enabled
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Basic Erosion (Continental Only)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Basic Erosion (Continental Only)"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 12345;
@@ -97,17 +98,17 @@ bool FContinentalErosionTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Vertices above sea level: %d (eroding: %d)"), AboveSeaLevelCount, ErodingAboveCount);
-    UE_LOG(LogTemp, Log, TEXT("  Vertices below sea level: %d (eroding: %d)"), BelowSeaLevelCount, ErodingBelowCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices above sea level: %d (eroding: %d)"), AboveSeaLevelCount, ErodingAboveCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices below sea level: %d (eroding: %d)"), BelowSeaLevelCount, ErodingBelowCount);
 
     // Erosion should only affect continental crust (above sea level)
     TestTrue(TEXT("Some vertices eroding above sea level"), ErodingAboveCount > 0);
     TestEqual(TEXT("No erosion below sea level"), ErodingBelowCount, 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Continental-only erosion validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Continental-only erosion validated"));
 
     // Test 2: Sea Level Constraint
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Sea Level Constraint (Elevation Never Below Sea Level)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Sea Level Constraint (Elevation Never Below Sea Level)"));
 
     Params.Seed = 54321;
     Params.SeaLevel = 1000.0; // 1km sea level
@@ -158,16 +159,16 @@ bool FContinentalErosionTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Sea level: %.1f m"), Params.SeaLevel);
-    UE_LOG(LogTemp, Log, TEXT("  Min continental elevation after 20 steps: %.1f m"), MinContinentalElevationT2);
-    UE_LOG(LogTemp, Log, TEXT("  Continental vertices below sea level: %d / %d"), ContinentalBelowSeaLevelT2, ContinentalVertexCountT2);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Sea level: %.1f m"), Params.SeaLevel);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Min continental elevation after 20 steps: %.1f m"), MinContinentalElevationT2);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Continental vertices below sea level: %d / %d"), ContinentalBelowSeaLevelT2, ContinentalVertexCountT2);
 
     TestEqual(TEXT("No continental vertices eroded below sea level"), ContinentalBelowSeaLevelT2, 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Sea level constraint validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Sea level constraint validated"));
 
     // Test 3: Determinism
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Determinism (Same Seed → Same Results)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Determinism (Same Seed → Same Results)"));
 
     Params.Seed = 77777;
     Params.SeaLevel = 0.0;
@@ -226,16 +227,16 @@ bool FContinentalErosionTest::RunTest(const FString& Parameters)
         if (ElevationDiff > 1e-3) ElevationMismatchCount++; // 1mm tolerance
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Erosion mismatches: %d / %d (max diff: %.9f m/My)"), ErosionMismatchCount, ErosionRun1.Num(), MaxErosionDiff);
-    UE_LOG(LogTemp, Log, TEXT("  Elevation mismatches: %d / %d (max diff: %.6f m)"), ElevationMismatchCount, ElevationRun1.Num(), MaxElevationDiff);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Erosion mismatches: %d / %d (max diff: %.9f m/My)"), ErosionMismatchCount, ErosionRun1.Num(), MaxErosionDiff);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Elevation mismatches: %d / %d (max diff: %.6f m)"), ElevationMismatchCount, ElevationRun1.Num(), MaxElevationDiff);
 
     TestEqual(TEXT("Deterministic erosion rates"), ErosionMismatchCount, 0);
     TestEqual(TEXT("Deterministic elevations"), ElevationMismatchCount, 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Determinism validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Determinism validated"));
 
     // Test 4: Erosion Reduces Elevation Over Time
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Erosion Reduces Elevation Over Time"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Erosion Reduces Elevation Over Time"));
 
     Params.Seed = 99999;
     Params.SeaLevel = 0.0;
@@ -280,16 +281,16 @@ bool FContinentalErosionTest::RunTest(const FString& Parameters)
         AvgElevationChange /= ContinentalVertexCount;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Continental vertices: %d"), ContinentalVertexCount);
-    UE_LOG(LogTemp, Log, TEXT("  Avg elevation change after 10 steps: %.2f m"), AvgElevationChange);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Continental vertices: %d"), ContinentalVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Avg elevation change after 10 steps: %.2f m"), AvgElevationChange);
 
     // Erosion should reduce elevation (negative change), but uplift from stress might counteract it
     // Just verify that erosion is having SOME effect (not zero change)
     TestTrue(TEXT("Erosion affects elevation"), FMath::Abs(AvgElevationChange) > 0.01);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Erosion effect on elevation validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Erosion effect on elevation validated"));
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Continental Erosion Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Continental Erosion Test Complete ==="));
     AddInfo(TEXT("✅ Continental erosion test complete (4 tests)"));
     AddInfo(FString::Printf(TEXT("Eroding vertices: %d | Min continental elevation: %.1f m | Determinism: ✓"),
         ErodingAboveCount, MinContinentalElevationT2));

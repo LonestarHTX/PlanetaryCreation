@@ -1,5 +1,6 @@
 // Milestone 4 Task 2.1: Hotspot Generation & Drift (Paper Section 4.4)
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "Math/RandomStream.h"
 
@@ -15,7 +16,7 @@ void UTectonicSimulationService::GenerateHotspots()
 
     FRandomStream RNG(Parameters.Seed + 1000); // Offset seed to avoid collision with plate generation
 
-    UE_LOG(LogTemp, Log, TEXT("[Hotspots] Generating %d major + %d minor hotspots (seed=%d)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Hotspots] Generating %d major + %d minor hotspots (seed=%d)"),
         Parameters.MajorHotspotCount, Parameters.MinorHotspotCount, Parameters.Seed);
 
     // Generate major hotspots (large, long-lived plumes)
@@ -50,7 +51,7 @@ void UTectonicSimulationService::GenerateHotspots()
 
         Hotspots.Add(Hotspot);
 
-        UE_LOG(LogTemp, Verbose, TEXT("  Major hotspot %d: pos=(%.3f, %.3f, %.3f), output=%.2f, radius=%.3f rad"),
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Major hotspot %d: pos=(%.3f, %.3f, %.3f), output=%.2f, radius=%.3f rad"),
             Hotspot.HotspotID, Hotspot.Position.X, Hotspot.Position.Y, Hotspot.Position.Z,
             Hotspot.ThermalOutput, Hotspot.InfluenceRadius);
     }
@@ -87,12 +88,12 @@ void UTectonicSimulationService::GenerateHotspots()
 
         Hotspots.Add(Hotspot);
 
-        UE_LOG(LogTemp, Verbose, TEXT("  Minor hotspot %d: pos=(%.3f, %.3f, %.3f), output=%.2f, radius=%.3f rad"),
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Minor hotspot %d: pos=(%.3f, %.3f, %.3f), output=%.2f, radius=%.3f rad"),
             Hotspot.HotspotID, Hotspot.Position.X, Hotspot.Position.Y, Hotspot.Position.Z,
             Hotspot.ThermalOutput, Hotspot.InfluenceRadius);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[Hotspots] Generated %d total hotspots"), Hotspots.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Hotspots] Generated %d total hotspots"), Hotspots.Num());
 }
 
 void UTectonicSimulationService::UpdateHotspotDrift(double DeltaTimeMy)

@@ -1,5 +1,6 @@
 // Milestone 4 Task 3.1: High-Resolution Boundary Overlay
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -127,7 +128,7 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
         AddBoundaryEdge(V2, V0, Plate2, Plate0);
     }
 
-    UE_LOG(LogTemp, Verbose, TEXT("[HighResBoundary] Found %d boundary edges from %d triangles"),
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Found %d boundary edges from %d triangles"),
         BoundaryEdges.Num(), RenderTriangles.Num() / 3);
 
     // Draw boundary edges with color/width modulation
@@ -216,6 +217,6 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
         );
     }
 
-    UE_LOG(LogTemp, Verbose, TEXT("[HighResBoundary] Drew %d boundary edges"), BoundaryEdges.Num());
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Drew %d boundary edges"), BoundaryEdges.Num());
 #endif
 }

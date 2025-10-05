@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "TectonicSimulationController.h"
@@ -43,10 +44,10 @@ bool FPerformanceProfilingTest::RunTest(const FString& Parameters)
     FPlatformMemoryStats MemStatsBefore = FPlatformMemory::GetStats();
     const uint64 MemoryBeforeMB = MemStatsBefore.UsedPhysical / (1024 * 1024);
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== MILESTONE 3 PERFORMANCE PROFILING ==="));
-    UE_LOG(LogTemp, Log, TEXT("Memory before test: %llu MB"), MemoryBeforeMB);
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== MILESTONE 3 PERFORMANCE PROFILING ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Memory before test: %llu MB"), MemoryBeforeMB);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Test each subdivision level (0-6)
     struct FLevelStats
@@ -63,7 +64,7 @@ bool FPerformanceProfilingTest::RunTest(const FString& Parameters)
 
     for (int32 Level = 0; Level <= 6; ++Level)
     {
-        UE_LOG(LogTemp, Log, TEXT("--- Testing Subdivision Level %d ---"), Level);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Testing Subdivision Level %d ---"), Level);
 
         FTectonicSimulationParameters Params;
         Params.Seed = 42;
@@ -115,15 +116,15 @@ bool FPerformanceProfilingTest::RunTest(const FString& Parameters)
 
         LevelStats.Add(Stats);
 
-        UE_LOG(LogTemp, Log, TEXT("  Vertices: %d | Triangles: %d"), Stats.VertexCount, Stats.TriangleCount);
-        UE_LOG(LogTemp, Log, TEXT("  Avg Step Time: %.2f ms"), Stats.AvgStepTimeMs);
-        UE_LOG(LogTemp, Log, TEXT("  Avg Simulation Time: %.2f ms"), Stats.AvgMeshBuildTimeMs);
-        UE_LOG(LogTemp, Log, TEXT("  Path: %s"), Stats.bUsesAsync ? TEXT("ASYNC") : TEXT("SYNC"));
-        UE_LOG(LogTemp, Log, TEXT(""));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices: %d | Triangles: %d"), Stats.VertexCount, Stats.TriangleCount);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Avg Step Time: %.2f ms"), Stats.AvgStepTimeMs);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Avg Simulation Time: %.2f ms"), Stats.AvgMeshBuildTimeMs);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Path: %s"), Stats.bUsesAsync ? TEXT("ASYNC") : TEXT("SYNC"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
     }
 
     // 100-step benchmark at level 3 (acceptance criteria target)
-    UE_LOG(LogTemp, Log, TEXT("--- 100-Step Benchmark (Level 3) ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- 100-Step Benchmark (Level 3) ---"));
 
     FTectonicSimulationParameters BenchmarkParams;
     BenchmarkParams.Seed = 12345;
@@ -151,52 +152,52 @@ bool FPerformanceProfilingTest::RunTest(const FString& Parameters)
 
         if ((i + 1) % 20 == 0)
         {
-            UE_LOG(LogTemp, Verbose, TEXT("  Completed %d/100 steps..."), i + 1);
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Completed %d/100 steps..."), i + 1);
         }
     }
 
     const double BenchmarkEnd = FPlatformTime::Seconds();
     const double TotalBenchmarkTimeSeconds = BenchmarkEnd - BenchmarkStart;
 
-    UE_LOG(LogTemp, Log, TEXT("  Total Time: %.2f seconds"), TotalBenchmarkTimeSeconds);
-    UE_LOG(LogTemp, Log, TEXT("  Avg Step Time: %.2f ms"), TotalBenchmarkTime / 100.0);
-    UE_LOG(LogTemp, Log, TEXT("  Min Step Time: %.2f ms"), MinStepTime);
-    UE_LOG(LogTemp, Log, TEXT("  Max Step Time: %.2f ms"), MaxStepTime);
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total Time: %.2f seconds"), TotalBenchmarkTimeSeconds);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Avg Step Time: %.2f ms"), TotalBenchmarkTime / 100.0);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Min Step Time: %.2f ms"), MinStepTime);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max Step Time: %.2f ms"), MaxStepTime);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Memory footprint check
     FPlatformMemoryStats MemStatsAfter = FPlatformMemory::GetStats();
     const uint64 MemoryAfterMB = MemStatsAfter.UsedPhysical / (1024 * 1024);
     const int64 MemoryDeltaMB = static_cast<int64>(MemoryAfterMB) - static_cast<int64>(MemoryBeforeMB);
 
-    UE_LOG(LogTemp, Log, TEXT("--- Memory Footprint ---"));
-    UE_LOG(LogTemp, Log, TEXT("  Before: %llu MB"), MemoryBeforeMB);
-    UE_LOG(LogTemp, Log, TEXT("  After: %llu MB"), MemoryAfterMB);
-    UE_LOG(LogTemp, Log, TEXT("  Delta: %lld MB"), MemoryDeltaMB);
-    UE_LOG(LogTemp, Log, TEXT("  Target: <500 MB total simulation state"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Memory Footprint ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Before: %llu MB"), MemoryBeforeMB);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After: %llu MB"), MemoryAfterMB);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Delta: %lld MB"), MemoryDeltaMB);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Target: <500 MB total simulation state"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Summary table
-    UE_LOG(LogTemp, Log, TEXT("=== PERFORMANCE SUMMARY ==="));
-    UE_LOG(LogTemp, Log, TEXT("Level | Vertices | Triangles | Avg Step (ms) | Path"));
-    UE_LOG(LogTemp, Log, TEXT("------|----------|-----------|---------------|------"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== PERFORMANCE SUMMARY ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Level | Vertices | Triangles | Avg Step (ms) | Path"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("------|----------|-----------|---------------|------"));
     for (const FLevelStats& Stats : LevelStats)
     {
-        UE_LOG(LogTemp, Log, TEXT("  %d   | %8d | %9d | %13.2f | %s"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  %d   | %8d | %9d | %13.2f | %s"),
             Stats.Level, Stats.VertexCount, Stats.TriangleCount,
             Stats.AvgStepTimeMs, Stats.bUsesAsync ? TEXT("ASYNC") : TEXT("SYNC "));
     }
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Acceptance criteria validation
     const double Level3AvgTime = LevelStats[3].AvgStepTimeMs;
     const bool bMeetsPerformanceTarget = (Level3AvgTime < 100.0);
 
-    UE_LOG(LogTemp, Log, TEXT("=== ACCEPTANCE CRITERIA ==="));
-    UE_LOG(LogTemp, Log, TEXT("  Target: Step time <100ms at level 3"));
-    UE_LOG(LogTemp, Log, TEXT("  Actual: %.2f ms"), Level3AvgTime);
-    UE_LOG(LogTemp, Log, TEXT("  Status: %s"), bMeetsPerformanceTarget ? TEXT("✅ PASS") : TEXT("❌ FAIL"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== ACCEPTANCE CRITERIA ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Target: Step time <100ms at level 3"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Actual: %.2f ms"), Level3AvgTime);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Status: %s"), bMeetsPerformanceTarget ? TEXT("✅ PASS") : TEXT("❌ FAIL"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     Controller->Shutdown();
 

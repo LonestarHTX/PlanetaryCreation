@@ -1,4 +1,8 @@
 #include "TectonicSimulationService.h"
+
+#include "PlanetaryCreationLogging.h"
+
+DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "Math/RandomStream.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -134,7 +138,7 @@ void UTectonicSimulationService::ResetSimulation()
             }
         }
     }
-    UE_LOG(LogTemp, Warning, TEXT("[DEBUG] ResetSimulation: Initialized %d vertices (%d oceanic @ -6000m, %d continental @ 0m)"),
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DEBUG] ResetSimulation: Initialized %d vertices (%d oceanic @ -6000m, %d continental @ 0m)"),
         VertexCount, OceanicCount, ContinentalCount);
 
     // DEBUG: Check vertex 0 specifically
@@ -144,7 +148,7 @@ void UTectonicSimulationService::ResetSimulation()
         const double Elev0 = VertexElevationValues[0];
         const bool bOceanic0 = (Plate0 != INDEX_NONE && Plates.IsValidIndex(Plate0)) ?
             (Plates[Plate0].CrustType == ECrustType::Oceanic) : false;
-        UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Vertex 0: Plate=%d, Oceanic=%s, Elevation=%.2f m"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DEBUG] Vertex 0: Plate=%d, Oceanic=%s, Elevation=%.2f m"),
             Plate0, bOceanic0 ? TEXT("YES") : TEXT("NO"), Elev0);
     }
 
@@ -152,7 +156,7 @@ void UTectonicSimulationService::ResetSimulation()
     HistoryStack.Empty();
     CurrentHistoryIndex = -1;
     CaptureHistorySnapshot();
-    UE_LOG(LogTemp, Log, TEXT("ResetSimulation: History stack initialized with initial state"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("ResetSimulation: History stack initialized with initial state"));
 }
 
 void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
@@ -215,6 +219,9 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
         // Milestone 5 Task 2.3: Apply oceanic dampening
         ApplyOceanicDampening(StepDurationMy);
+
+        // Ensure amplified elevation starts from current base elevation before Stage B passes run (or remain disabled).
+        InitializeAmplifiedElevationBaseline();
 
         // Milestone 6 Task 2.1: Apply Stage B oceanic amplification
         // Must run after erosion/dampening to use base elevations as input
@@ -282,7 +289,7 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
 
     if (Parameters.PlanetRadius < MinRadius || Parameters.PlanetRadius > MaxRadius)
     {
-        UE_LOG(LogTemp, Warning, TEXT("PlanetRadius %.0f m outside valid range [%.0f, %.0f]. Clamping to valid range."),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("PlanetRadius %.0f m outside valid range [%.0f, %.0f]. Clamping to valid range."),
             Parameters.PlanetRadius, MinRadius, MaxRadius);
         Parameters.PlanetRadius = FMath::Clamp(Parameters.PlanetRadius, MinRadius, MaxRadius);
     }
@@ -302,7 +309,7 @@ void UTectonicSimulationService::SetHeightmapVisualizationEnabled(bool bEnabled)
     // Increment surface data version so cached LODs rebuild with updated vertex colors.
     SurfaceDataVersion++;
 
-    UE_LOG(LogTemp, Log, TEXT("[Visualization] Heightmap visualization %s (SurfaceVersion=%d)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Visualization] Heightmap visualization %s (SurfaceVersion=%d)"),
         bEnabled ? TEXT("enabled") : TEXT("disabled"), SurfaceDataVersion);
 }
 
@@ -315,7 +322,7 @@ void UTectonicSimulationService::SetAutomaticLODEnabled(bool bEnabled)
 
     Parameters.bEnableAutomaticLOD = bEnabled;
 
-    UE_LOG(LogTemp, Log, TEXT("[LOD] Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD] Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
 }
 
 void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
@@ -328,7 +335,7 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
         return; // No change needed
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[LOD] Updating render subdivision level: L%d → L%d (preserving simulation state)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD] Updating render subdivision level: L%d → L%d (preserving simulation state)"),
         Parameters.RenderSubdivisionLevel, NewLevel);
 
     // Update parameter
@@ -349,7 +356,7 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
     // Milestone 4 Task 2.3: Recompute thermal field for new render vertices
     ComputeThermalField();
 
-    UE_LOG(LogTemp, Log, TEXT("[LOD] Render mesh regenerated at L%d: %d vertices, %d triangles"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD] Render mesh regenerated at L%d: %d vertices, %d triangles"),
         NewLevel, RenderVertices.Num(), RenderTriangles.Num() / 3);
 }
 
@@ -431,7 +438,7 @@ void UTectonicSimulationService::GenerateIcospherePlates()
         Plate.CrustThickness = bIsOceanic ? 7.0 : 35.0; // Oceanic ~7km, Continental ~35km
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Generated %d plates from icosphere subdivision level %d"), NumPlates, SubdivisionLevel);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Generated %d plates from icosphere subdivision level %d"), NumPlates, SubdivisionLevel);
 }
 
 void UTectonicSimulationService::SubdivideIcosphere(int32 SubdivisionLevel)
@@ -527,7 +534,7 @@ void UTectonicSimulationService::InitializeEulerPoles()
         Plate.AngularVelocity = RNG.FRandRange(0.01, 0.1);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Initialized Euler poles for %d plates"), Plates.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Initialized Euler poles for %d plates"), Plates.Num());
 }
 
 void UTectonicSimulationService::BuildBoundaryAdjacencyMap()
@@ -568,7 +575,7 @@ void UTectonicSimulationService::BuildBoundaryAdjacencyMap()
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Built boundary adjacency map with %d boundaries"), Boundaries.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Built boundary adjacency map with %d boundaries"), Boundaries.Num());
 }
 
 void UTectonicSimulationService::ValidateSolidAngleCoverage()
@@ -610,12 +617,12 @@ void UTectonicSimulationService::ValidateSolidAngleCoverage()
     const double ExpectedSolidAngle = 4.0 * PI;
     const double Error = FMath::Abs(TotalSolidAngle - ExpectedSolidAngle) / ExpectedSolidAngle;
 
-    UE_LOG(LogTemp, Log, TEXT("Solid angle validation: Total=%.6f, Expected=%.6f (4π), Error=%.4f%%"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Solid angle validation: Total=%.6f, Expected=%.6f (4π), Error=%.4f%%"),
         TotalSolidAngle, ExpectedSolidAngle, Error * 100.0);
 
     if (Error > 0.01) // 1% tolerance
     {
-        UE_LOG(LogTemp, Warning, TEXT("Solid angle coverage error exceeds 1%% tolerance"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Solid angle coverage error exceeds 1%% tolerance"));
     }
 }
 
@@ -649,7 +656,7 @@ void UTectonicSimulationService::MigratePlateCentroids(double DeltaTimeMy)
         if (Plate.PlateID < 3)
         {
             const double DisplacementRadians = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(V, Plate.Centroid), -1.0, 1.0));
-            UE_LOG(LogTemp, VeryVerbose, TEXT("Plate %d displaced by %.6f radians (%.2f km on Earth-scale)"),
+            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Plate %d displaced by %.6f radians (%.2f km on Earth-scale)"),
                 Plate.PlateID, DisplacementRadians, DisplacementRadians * 6370.0);
         }
     }
@@ -784,7 +791,7 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
 
     }
 
-    UE_LOG(LogTemp, VeryVerbose, TEXT("Boundary classification: %d divergent, %d convergent, %d transform"),
+    UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Boundary classification: %d divergent, %d convergent, %d transform"),
         DivergentCount, ConvergentCount, TransformCount);
 }
 
@@ -1026,11 +1033,11 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     const FString CSVContent = FString::Join(CSVLines, TEXT("\n"));
     if (FFileHelper::SaveStringToFile(CSVContent, *FilePath))
     {
-        UE_LOG(LogTemp, Log, TEXT("Exported metrics to: %s"), *FilePath);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Exported metrics to: %s"), *FilePath);
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to export metrics to: %s"), *FilePath);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to export metrics to: %s"), *FilePath);
     }
 }
 
@@ -1106,8 +1113,10 @@ void UTectonicSimulationService::GenerateRenderMesh()
     }
 
     const int32 ExpectedFaceCount = 20 * FMath::Pow(4.0f, static_cast<float>(SubdivLevel));
-    UE_LOG(LogTemp, Log, TEXT("Generated render mesh: Level %d, %d vertices, %d triangles (expected %d)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Generated render mesh: Level %d, %d vertices, %d triangles (expected %d)"),
         SubdivLevel, RenderVertices.Num(), Faces.Num(), ExpectedFaceCount);
+
+    BuildRenderVertexAdjacency();
 
     // Validate Euler characteristic (V - E + F = 2)
     const int32 V = RenderVertices.Num();
@@ -1117,12 +1126,12 @@ void UTectonicSimulationService::GenerateRenderMesh()
 
     if (EulerChar != 2)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Render mesh Euler characteristic validation failed: V=%d, E=%d, F=%d, χ=%d (expected 2)"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Render mesh Euler characteristic validation failed: V=%d, E=%d, F=%d, χ=%d (expected 2)"),
             V, E, F, EulerChar);
     }
     else
     {
-        UE_LOG(LogTemp, Verbose, TEXT("Render mesh topology validated: Euler characteristic χ=2"));
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Render mesh topology validated: Euler characteristic χ=2"));
     }
 }
 
@@ -1152,7 +1161,7 @@ void UTectonicSimulationService::BuildVoronoiMapping()
 
     if (RenderVertices.Num() == 0 || Plates.Num() == 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Cannot build Voronoi mapping: RenderVertices=%d, Plates=%d"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Cannot build Voronoi mapping: RenderVertices=%d, Plates=%d"),
             RenderVertices.Num(), Plates.Num());
         return;
     }
@@ -1207,7 +1216,7 @@ void UTectonicSimulationService::BuildVoronoiMapping()
 
     const double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
 
-    UE_LOG(LogTemp, Log, TEXT("Built Voronoi mapping: %d vertices → %d plates in %.2f ms (avg %.3f μs per vertex)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Built Voronoi mapping: %d vertices → %d plates in %.2f ms (avg %.3f μs per vertex)"),
         RenderVertices.Num(), Plates.Num(), ElapsedMs, (ElapsedMs * 1000.0) / RenderVertices.Num());
 
     // Validate all vertices assigned
@@ -1222,7 +1231,71 @@ void UTectonicSimulationService::BuildVoronoiMapping()
 
     if (UnassignedCount > 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Voronoi mapping incomplete: %d vertices unassigned"), UnassignedCount);
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Voronoi mapping incomplete: %d vertices unassigned"), UnassignedCount);
+    }
+}
+
+void UTectonicSimulationService::BuildRenderVertexAdjacency()
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount == 0)
+    {
+        RenderVertexAdjacencyOffsets.Reset();
+        RenderVertexAdjacency.Reset();
+        return;
+    }
+
+    TArray<TSet<int32>> NeighborSets;
+    NeighborSets.SetNum(VertexCount);
+
+    for (int32 TriIdx = 0; TriIdx < RenderTriangles.Num(); TriIdx += 3)
+    {
+        const int32 A = RenderTriangles[TriIdx];
+        const int32 B = RenderTriangles[TriIdx + 1];
+        const int32 C = RenderTriangles[TriIdx + 2];
+
+        if (!NeighborSets.IsValidIndex(A) || !NeighborSets.IsValidIndex(B) || !NeighborSets.IsValidIndex(C))
+        {
+            continue;
+        }
+
+        NeighborSets[A].Add(B);
+        NeighborSets[A].Add(C);
+        NeighborSets[B].Add(A);
+        NeighborSets[B].Add(C);
+        NeighborSets[C].Add(A);
+        NeighborSets[C].Add(B);
+    }
+
+    RenderVertexAdjacencyOffsets.SetNum(VertexCount + 1);
+    RenderVertexAdjacencyOffsets[0] = 0;
+
+    int32 RunningTotal = 0;
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        RenderVertexAdjacencyOffsets[VertexIdx] = RunningTotal;
+        RunningTotal += NeighborSets[VertexIdx].Num();
+    }
+    RenderVertexAdjacencyOffsets[VertexCount] = RunningTotal;
+
+    RenderVertexAdjacency.SetNum(RunningTotal);
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 Start = RenderVertexAdjacencyOffsets[VertexIdx];
+        const int32 Count = NeighborSets[VertexIdx].Num();
+        if (Count == 0)
+        {
+            continue;
+        }
+
+        TArray<int32> SortedNeighbors = NeighborSets[VertexIdx].Array();
+        SortedNeighbors.Sort();
+
+        for (int32 LocalIdx = 0; LocalIdx < Count; ++LocalIdx)
+        {
+            RenderVertexAdjacency[Start + LocalIdx] = SortedNeighbors[LocalIdx];
+        }
     }
 }
 
@@ -1382,14 +1455,14 @@ void UTectonicSimulationService::ApplyLloydRelaxation()
     const int32 MaxIterations = Parameters.LloydIterations;
     if (MaxIterations <= 0)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("Lloyd relaxation disabled (iterations=0)"));
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Lloyd relaxation disabled (iterations=0)"));
         return;
     }
 
     constexpr double ConvergenceThreshold = 0.01; // radians (~0.57°)
     constexpr double Alpha = 0.5; // Step weight for stability
 
-    UE_LOG(LogTemp, Log, TEXT("Starting Lloyd relaxation with %d iterations, ε=%.4f rad"), MaxIterations, ConvergenceThreshold);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Starting Lloyd relaxation with %d iterations, ε=%.4f rad"), MaxIterations, ConvergenceThreshold);
 
     for (int32 Iteration = 0; Iteration < MaxIterations; ++Iteration)
     {
@@ -1426,7 +1499,7 @@ void UTectonicSimulationService::ApplyLloydRelaxation()
 
             if (Cell.Num() == 0)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Lloyd iteration %d: Plate %d has empty Voronoi cell"), Iteration, PlateIdx);
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("Lloyd iteration %d: Plate %d has empty Voronoi cell"), Iteration, PlateIdx);
                 continue;
             }
 
@@ -1448,19 +1521,19 @@ void UTectonicSimulationService::ApplyLloydRelaxation()
             MaxDelta = FMath::Max(MaxDelta, Delta);
         }
 
-        UE_LOG(LogTemp, Verbose, TEXT("Lloyd iteration %d: max delta = %.6f rad (%.4f°)"),
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Lloyd iteration %d: max delta = %.6f rad (%.4f°)"),
             Iteration, MaxDelta, FMath::RadiansToDegrees(MaxDelta));
 
         // Early termination if converged
         if (MaxDelta < ConvergenceThreshold)
         {
-            UE_LOG(LogTemp, Log, TEXT("Lloyd relaxation converged after %d iterations (delta=%.6f rad < ε=%.4f rad)"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Lloyd relaxation converged after %d iterations (delta=%.6f rad < ε=%.4f rad)"),
                 Iteration + 1, MaxDelta, ConvergenceThreshold);
             return;
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Lloyd relaxation completed %d iterations (did not fully converge)"), MaxIterations);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Lloyd relaxation completed %d iterations (did not fully converge)"), MaxIterations);
 }
 
 void UTectonicSimulationService::CheckRetessellationNeeded()
@@ -1504,12 +1577,12 @@ void UTectonicSimulationService::CheckRetessellationNeeded()
     {
         if (Parameters.bEnableDynamicRetessellation)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Re-tessellation triggered: Plate %d drifted %.2f° (threshold: %.2f°). Implementation deferred to M4."),
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("Re-tessellation triggered: Plate %d drifted %.2f° (threshold: %.2f°). Implementation deferred to M4."),
                 MaxDriftPlateID, FMath::RadiansToDegrees(MaxDrift), Parameters.RetessellationThresholdDegrees);
         }
         else
         {
-            UE_LOG(LogTemp, Verbose, TEXT("Re-tessellation would be needed: Plate %d drifted %.2f° (threshold: %.2f°), but bEnableDynamicRetessellation=false"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Re-tessellation would be needed: Plate %d drifted %.2f° (threshold: %.2f°), but bEnableDynamicRetessellation=false"),
                 MaxDriftPlateID, FMath::RadiansToDegrees(MaxDrift), Parameters.RetessellationThresholdDegrees);
         }
     }
@@ -1564,10 +1637,10 @@ void UTectonicSimulationService::CaptureHistorySnapshot()
     {
         HistoryStack.RemoveAt(0);
         CurrentHistoryIndex = HistoryStack.Num() - 1;
-        UE_LOG(LogTemp, Verbose, TEXT("History stack full, removed oldest snapshot (max %d)"), MaxHistorySize);
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("History stack full, removed oldest snapshot (max %d)"), MaxHistorySize);
     }
 
-    UE_LOG(LogTemp, Verbose, TEXT("CaptureHistorySnapshot: Snapshot %d captured at %.1f My"),
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("CaptureHistorySnapshot: Snapshot %d captured at %.1f My"),
         CurrentHistoryIndex, CurrentTimeMy);
 }
 
@@ -1575,7 +1648,7 @@ bool UTectonicSimulationService::Undo()
 {
     if (!CanUndo())
     {
-        UE_LOG(LogTemp, Warning, TEXT("Undo: No previous state available"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Undo: No previous state available"));
         return false;
     }
 
@@ -1609,7 +1682,7 @@ bool UTectonicSimulationService::Undo()
     Terranes = Snapshot.Terranes;
     NextTerraneID = Snapshot.NextTerraneID;
 
-    UE_LOG(LogTemp, Log, TEXT("Undo: Restored snapshot %d (%.1f My)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Undo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
     return true;
 }
@@ -1618,7 +1691,7 @@ bool UTectonicSimulationService::Redo()
 {
     if (!CanRedo())
     {
-        UE_LOG(LogTemp, Warning, TEXT("Redo: No future state available"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Redo: No future state available"));
         return false;
     }
 
@@ -1652,7 +1725,7 @@ bool UTectonicSimulationService::Redo()
     Terranes = Snapshot.Terranes;
     NextTerraneID = Snapshot.NextTerraneID;
 
-    UE_LOG(LogTemp, Log, TEXT("Redo: Restored snapshot %d (%.1f My)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Redo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
     return true;
 }
@@ -1661,7 +1734,7 @@ bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
 {
     if (!HistoryStack.IsValidIndex(Index))
     {
-        UE_LOG(LogTemp, Warning, TEXT("JumpToHistoryIndex: Invalid index %d (stack size %d)"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("JumpToHistoryIndex: Invalid index %d (stack size %d)"),
             Index, HistoryStack.Num());
         return false;
     }
@@ -1696,7 +1769,7 @@ bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
     Terranes = Snapshot.Terranes;
     NextTerraneID = Snapshot.NextTerraneID;
 
-    UE_LOG(LogTemp, Log, TEXT("JumpToHistoryIndex: Jumped to snapshot %d (%.1f My)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("JumpToHistoryIndex: Jumped to snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
     return true;
 }
@@ -1874,7 +1947,7 @@ const FContinentalTerrane* UTectonicSimulationService::GetTerraneByID(int32 Terr
 
 bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArray<int32>& TerraneVertexIndices, int32& OutTerraneID)
 {
-    UE_LOG(LogTemp, Log, TEXT("ExtractTerrane: Attempting to extract %d vertices from plate %d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("ExtractTerrane: Attempting to extract %d vertices from plate %d"),
         TerraneVertexIndices.Num(), SourcePlateID);
 
     // Find source plate
@@ -1890,14 +1963,14 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
 
     if (!SourcePlate)
     {
-        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Source plate %d not found"), SourcePlateID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Source plate %d not found"), SourcePlateID);
         return false;
     }
 
     // Validation: Source must be continental
     if (SourcePlate->CrustType != ECrustType::Continental)
     {
-        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Source plate %d is not continental"), SourcePlateID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Source plate %d is not continental"), SourcePlateID);
         return false;
     }
 
@@ -1906,7 +1979,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
     {
         if (VertexIdx < 0 || VertexIdx >= RenderVertices.Num())
         {
-            UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Invalid vertex index %d (range: 0-%d)"),
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Invalid vertex index %d (range: 0-%d)"),
                 VertexIdx, RenderVertices.Num() - 1);
             return false;
         }
@@ -1914,7 +1987,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
         // Check vertex belongs to source plate
         if (VertexPlateAssignments[VertexIdx] != SourcePlateID)
         {
-            UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Vertex %d does not belong to plate %d (assigned to %d)"),
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Vertex %d does not belong to plate %d (assigned to %d)"),
                 VertexIdx, SourcePlateID, VertexPlateAssignments[VertexIdx]);
             return false;
         }
@@ -1924,7 +1997,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
     const double TerraneArea = ComputeTerraneArea(TerraneVertexIndices);
     if (TerraneArea < 100.0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("ExtractTerrane: Terrane area %.2f km² below minimum 100 km², rejecting extraction"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExtractTerrane: Terrane area %.2f km² below minimum 100 km², rejecting extraction"),
             TerraneArea);
         return false;
     }
@@ -1941,7 +2014,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
 
     if (TerraneVertexIndices.Num() == PlateVertexCount)
     {
-        UE_LOG(LogTemp, Warning, TEXT("ExtractTerrane: Extracting all %d vertices from plate %d (treat as plate split)"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExtractTerrane: Extracting all %d vertices from plate %d (treat as plate split)"),
             PlateVertexCount, SourcePlateID);
         // TODO: Convert to plate split instead of terrane extraction (deferred to edge case implementation)
         return false;
@@ -1951,7 +2024,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
     FString ValidationError;
     if (!ValidateTopology(ValidationError))
     {
-        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Pre-extraction topology invalid: %s"), *ValidationError);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Pre-extraction topology invalid: %s"), *ValidationError);
         return false;
     }
 
@@ -1989,7 +2062,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
     // Validate post-extraction topology
     if (!ValidateTopology(ValidationError))
     {
-        UE_LOG(LogTemp, Error, TEXT("ExtractTerrane: Post-extraction topology invalid: %s"), *ValidationError);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Post-extraction topology invalid: %s"), *ValidationError);
 
         // Rollback: Reassign vertices back to source plate
         for (int32 VertexIdx : TerraneVertexIndices)
@@ -2005,7 +2078,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
     // Increment topology version (mesh structure unchanged, but plate assignments changed)
     TopologyVersion++;
 
-    UE_LOG(LogTemp, Log, TEXT("ExtractTerrane: Successfully extracted terrane %d (%.2f km²) from plate %d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("ExtractTerrane: Successfully extracted terrane %d (%.2f km²) from plate %d"),
         OutTerraneID, TerraneArea, SourcePlateID);
 
     // Milestone 6 Task 1.2: Automatically assign carrier plate to initiate transport
@@ -2016,7 +2089,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
 
 bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPlateID)
 {
-    UE_LOG(LogTemp, Log, TEXT("ReattachTerrane: Attempting to reattach terrane %d to plate %d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("ReattachTerrane: Attempting to reattach terrane %d to plate %d"),
         TerraneID, TargetPlateID);
 
     // Find terrane
@@ -2034,7 +2107,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
 
     if (!Terrane)
     {
-        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Terrane %d not found"), TerraneID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Terrane %d not found"), TerraneID);
         return false;
     }
 
@@ -2043,7 +2116,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
         Terrane->State != ETerraneState::Transporting &&
         Terrane->State != ETerraneState::Colliding)
     {
-        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Terrane %d not in detached state (current: %d, expected: 1=Extracted, 2=Transporting, 3=Colliding)"),
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Terrane %d not in detached state (current: %d, expected: 1=Extracted, 2=Transporting, 3=Colliding)"),
             TerraneID, static_cast<int32>(Terrane->State));
         return false;
     }
@@ -2061,14 +2134,14 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
 
     if (!TargetPlate)
     {
-        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Target plate %d not found"), TargetPlateID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Target plate %d not found"), TargetPlateID);
         return false;
     }
 
     // Validation: Target must be continental
     if (TargetPlate->CrustType != ECrustType::Continental)
     {
-        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Target plate %d is not continental"), TargetPlateID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Target plate %d is not continental"), TargetPlateID);
         return false;
     }
 
@@ -2076,7 +2149,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
     FString ValidationError;
     if (!ValidateTopology(ValidationError))
     {
-        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Pre-reattachment topology invalid: %s"), *ValidationError);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Pre-reattachment topology invalid: %s"), *ValidationError);
         return false;
     }
 
@@ -2085,7 +2158,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
     {
         if (VertexIdx < 0 || VertexIdx >= VertexPlateAssignments.Num())
         {
-            UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Invalid vertex index %d in terrane %d"),
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Invalid vertex index %d in terrane %d"),
                 VertexIdx, TerraneID);
             return false;
         }
@@ -2102,7 +2175,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
     // Validate post-reattachment topology
     if (!ValidateTopology(ValidationError))
     {
-        UE_LOG(LogTemp, Error, TEXT("ReattachTerrane: Post-reattachment topology invalid: %s"), *ValidationError);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Post-reattachment topology invalid: %s"), *ValidationError);
 
         // Rollback: Unassign vertices
         for (int32 VertexIdx : Terrane->VertexIndices)
@@ -2124,7 +2197,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
     // Increment topology version
     TopologyVersion++;
 
-    UE_LOG(LogTemp, Log, TEXT("ReattachTerrane: Successfully reattached terrane %d to plate %d (%.2f My transport duration)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("ReattachTerrane: Successfully reattached terrane %d to plate %d (%.2f My transport duration)"),
         TerraneID, TargetPlateID, CurrentTimeMy - Terrane->ExtractionTimeMy);
 
     return true;
@@ -2145,14 +2218,14 @@ bool UTectonicSimulationService::AssignTerraneCarrier(int32 TerraneID)
 
     if (!Terrane)
     {
-        UE_LOG(LogTemp, Error, TEXT("AssignTerraneCarrier: Terrane %d not found"), TerraneID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("AssignTerraneCarrier: Terrane %d not found"), TerraneID);
         return false;
     }
 
     // Validation: Terrane must be in Extracted state
     if (Terrane->State != ETerraneState::Extracted)
     {
-        UE_LOG(LogTemp, Error, TEXT("AssignTerraneCarrier: Terrane %d not in Extracted state (current: %d)"),
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("AssignTerraneCarrier: Terrane %d not in Extracted state (current: %d)"),
             TerraneID, static_cast<int32>(Terrane->State));
         return false;
     }
@@ -2178,7 +2251,7 @@ bool UTectonicSimulationService::AssignTerraneCarrier(int32 TerraneID)
 
     if (NearestOceanicPlateID == INDEX_NONE)
     {
-        UE_LOG(LogTemp, Warning, TEXT("AssignTerraneCarrier: No oceanic plates found, terrane %d remains in Extracted state"), TerraneID);
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("AssignTerraneCarrier: No oceanic plates found, terrane %d remains in Extracted state"), TerraneID);
         return false;
     }
 
@@ -2187,7 +2260,7 @@ bool UTectonicSimulationService::AssignTerraneCarrier(int32 TerraneID)
     Terrane->State = ETerraneState::Transporting;
 
     const double DistanceKm = MinDistance * (Parameters.PlanetRadius / 1000.0);
-    UE_LOG(LogTemp, Log, TEXT("AssignTerraneCarrier: Terrane %d assigned to oceanic carrier %d (distance: %.1f km)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("AssignTerraneCarrier: Terrane %d assigned to oceanic carrier %d (distance: %.1f km)"),
         TerraneID, NearestOceanicPlateID, DistanceKm);
 
     return true;
@@ -2216,7 +2289,7 @@ void UTectonicSimulationService::UpdateTerranePositions(double DeltaTimeMy)
 
         if (!CarrierPlate)
         {
-            UE_LOG(LogTemp, Warning, TEXT("UpdateTerranePositions: Carrier plate %d not found for terrane %d"),
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("UpdateTerranePositions: Carrier plate %d not found for terrane %d"),
                 Terrane.CarrierPlateID, Terrane.TerraneID);
             continue;
         }
@@ -2330,7 +2403,7 @@ void UTectonicSimulationService::DetectTerraneCollisions()
                 Terrane.TargetPlateID = Plate.PlateID;
 
                 const double DistanceKm = MinDistanceToBoundary * (Parameters.PlanetRadius / 1000.0);
-                UE_LOG(LogTemp, Log, TEXT("DetectTerraneCollisions: Terrane %d approaching plate %d (distance: %.1f km, threshold: %.1f km)"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("DetectTerraneCollisions: Terrane %d approaching plate %d (distance: %.1f km, threshold: %.1f km)"),
                     Terrane.TerraneID, Plate.PlateID, DistanceKm, CollisionThreshold_km);
 
                 break; // Stop checking other plates for this terrane
@@ -2351,13 +2424,13 @@ void UTectonicSimulationService::ProcessTerraneReattachments()
         {
             if (Terrane.TargetPlateID == INDEX_NONE)
             {
-                UE_LOG(LogTemp, Warning, TEXT("ProcessTerraneReattachments: Terrane %d in Colliding state but no target plate assigned, skipping"),
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("ProcessTerraneReattachments: Terrane %d in Colliding state but no target plate assigned, skipping"),
                     Terrane.TerraneID);
                 continue;
             }
 
             const double TransportDuration = CurrentTimeMy - Terrane.ExtractionTimeMy;
-            UE_LOG(LogTemp, Log, TEXT("ProcessTerraneReattachments: Auto-reattaching terrane %d to plate %d after %.2f My transport"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("ProcessTerraneReattachments: Auto-reattaching terrane %d to plate %d after %.2f My transport"),
                 Terrane.TerraneID, Terrane.TargetPlateID, TransportDuration);
 
             // Attempt reattachment (will validate topology and rollback on failure)
@@ -2365,7 +2438,7 @@ void UTectonicSimulationService::ProcessTerraneReattachments()
 
             if (!bSuccess)
             {
-                UE_LOG(LogTemp, Warning, TEXT("ProcessTerraneReattachments: Failed to reattach terrane %d, will retry next step"),
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("ProcessTerraneReattachments: Failed to reattach terrane %d, will retry next step"),
                     Terrane.TerraneID);
                 // Keep terrane in Colliding state for retry next step
             }
@@ -2407,7 +2480,7 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         return Tangent.IsNearlyZero() ? FVector3d::ZAxisVector : Tangent;
     };
 
-    const double SegmentAngleTolerance = 1e-3; // Radians
+    constexpr double GreatCircleSegmentAngleToleranceRad = 1e-3; // Radians (approx 0.057°)
 
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
@@ -2483,7 +2556,7 @@ void UTectonicSimulationService::ComputeRidgeDirections()
                 const double ArcAC = FMath::Acos(FMath::Clamp(EdgeV0 | GreatCirclePoint, -1.0, 1.0));
                 const double ArcCB = FMath::Acos(FMath::Clamp(GreatCirclePoint | EdgeV1, -1.0, 1.0));
 
-                const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + SegmentAngleTolerance);
+                const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + GreatCircleSegmentAngleToleranceRad);
 
                 auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
                 {
@@ -2508,6 +2581,43 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         }
 
         VertexRidgeDirections[VertexIdx] = NearestBoundaryTangent;
+    }
+}
+
+void UTectonicSimulationService::SetHighlightSeaLevel(bool bEnabled)
+{
+    if (bHighlightSeaLevel == bEnabled)
+    {
+        return;
+    }
+
+    bHighlightSeaLevel = bEnabled;
+
+    // Update UI overlays without forcing a full simulation reset.
+    SurfaceDataVersion++;
+}
+
+void UTectonicSimulationService::InitializeAmplifiedElevationBaseline()
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount == 0)
+    {
+        return;
+    }
+
+    if (VertexAmplifiedElevation.Num() != VertexCount)
+    {
+        VertexAmplifiedElevation.SetNumZeroed(VertexCount);
+    }
+
+    if (VertexElevationValues.Num() != VertexCount)
+    {
+        VertexElevationValues.SetNumZeroed(VertexCount);
+    }
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        VertexAmplifiedElevation[VertexIdx] = VertexElevationValues[VertexIdx];
     }
 }
 
@@ -2541,7 +2651,7 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
                 BaseElevation_m < Parameters.SeaLevel - 10.0 &&
                 DebugMismatchCount < 3)
             {
-                UE_LOG(LogTemp, Warning, TEXT("StageB: vertex %d depth %.1f m but plate %d marked %s"),
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("StageB: vertex %d depth %.1f m but plate %d marked %s"),
                     VertexIdx, BaseElevation_m, PlateID,
                     Plate.CrustType == ECrustType::Continental ? TEXT("continental") : TEXT("other"));
                 DebugMismatchCount++;
@@ -2579,16 +2689,6 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     checkf(VertexAmplifiedElevation.Num() == VertexCount, TEXT("VertexAmplifiedElevation not initialized"));
     checkf(VertexElevationValues.Num() == VertexCount, TEXT("VertexElevationValues not initialized (must run erosion first)"));
     checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized"));
-
-    // Initialize VertexAmplifiedElevation from base if oceanic amplification didn't run
-    // (VertexAmplifiedElevation is SetNumZeroed during render mesh generation)
-    if (!Parameters.bEnableOceanicAmplification)
-    {
-        for (int32 i = 0; i < VertexCount; ++i)
-        {
-            VertexAmplifiedElevation[i] = VertexElevationValues[i];
-        }
-    }
 
     // Get project content directory for loading exemplar data
     const FString ProjectContentDir = FPaths::ProjectContentDir();

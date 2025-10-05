@@ -1,6 +1,7 @@
 // Milestone 4 Task 1.1 Phase 1: Re-tessellation POC
 // Temporary standalone file for POC - will integrate into TectonicSimulationService.cpp in Phase 2
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "HAL/PlatformTime.h"
 
@@ -39,7 +40,7 @@ void UTectonicSimulationService::RestoreRetessellationSnapshot(const FRetessella
     VertexSedimentThickness = Snapshot.VertexSedimentThickness;
     VertexCrustAge = Snapshot.VertexCrustAge;
 
-    UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Rolled back to timestamp %.2f My"), Snapshot.TimestampMy);
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Re-tessellation] Rolled back to timestamp %.2f My"), Snapshot.TimestampMy);
 }
 
 bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSnapshot& Snapshot) const
@@ -49,7 +50,7 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
     {
         if (Vertex.ContainsNaN() || !FMath::IsFinite(Vertex.X) || !FMath::IsFinite(Vertex.Y) || !FMath::IsFinite(Vertex.Z))
         {
-            UE_LOG(LogTemp, Error, TEXT("[Re-tessellation] Validation failed: NaN/Inf vertex detected"));
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("[Re-tessellation] Validation failed: NaN/Inf vertex detected"));
             return false;
         }
     }
@@ -83,7 +84,7 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
 
     if (EulerChar != 2)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Re-tessellation] Validation failed: Euler characteristic = %d (expected 2), V=%d E=%d F=%d"),
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[Re-tessellation] Validation failed: Euler characteristic = %d (expected 2), V=%d E=%d F=%d"),
             EulerChar, V, E, F);
         return false;
     }
@@ -150,7 +151,7 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
 
     if (AreaVariance > 0.01) // >1% variance
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Validation warning: Mesh area %.4f sr (expected %.4f sr, variance %.2f%%)"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Re-tessellation] Validation warning: Mesh area %.4f sr (expected %.4f sr, variance %.2f%%)"),
             TotalMeshArea, ExpectedSphereArea, AreaVariance * 100.0);
         // Don't fail on this - just warn
     }
@@ -160,12 +161,12 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
     {
         if (Assignment == INDEX_NONE)
         {
-            UE_LOG(LogTemp, Error, TEXT("[Re-tessellation] Validation failed: Vertex with INDEX_NONE assignment"));
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("[Re-tessellation] Validation failed: Vertex with INDEX_NONE assignment"));
             return false;
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Validation passed: Euler=%d, MeshArea=%.4f sr, AreaVariance=%.2f%%, Voronoi=100%%"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Re-tessellation] Validation passed: Euler=%d, MeshArea=%.4f sr, AreaVariance=%.2f%%, Voronoi=100%%"),
         EulerChar, TotalMeshArea, AreaVariance * 100.0);
 
     return true;
@@ -189,7 +190,7 @@ bool UTectonicSimulationService::PerformRetessellation()
     {
         if (!InitialPlateCentroids.IsValidIndex(i))
         {
-            UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Plate %d has no initial centroid (skipping drift check)"), Plates[i].PlateID);
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Re-tessellation] Plate %d has no initial centroid (skipping drift check)"), Plates[i].PlateID);
             continue;
         }
 
@@ -203,7 +204,7 @@ bool UTectonicSimulationService::PerformRetessellation()
         if (AngularDistanceRad > ThresholdRad)
         {
             const double AngularDistanceDeg = FMath::RadiansToDegrees(AngularDistanceRad);
-            UE_LOG(LogTemp, Warning, TEXT("[Re-tessellation] Plate %d drifted %.2f° (threshold: %.2f°)"),
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Re-tessellation] Plate %d drifted %.2f° (threshold: %.2f°)"),
                 Plates[i].PlateID, AngularDistanceDeg, Parameters.RetessellationThresholdDegrees);
             DriftedPlateIDs.Add(Plates[i].PlateID);
         }
@@ -211,13 +212,13 @@ bool UTectonicSimulationService::PerformRetessellation()
 
     if (DriftedPlateIDs.Num() == 0)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("[Re-tessellation] No drifted plates detected"));
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[Re-tessellation] No drifted plates detected"));
         return true; // No rebuild needed
     }
 
     // Step 3: Phase 2 - Full mesh rebuild for drifted plates
     // TODO Phase 2c: Replace with incremental boundary fan split
-    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Rebuilding mesh for %d drifted plate(s) (full rebuild)"), DriftedPlateIDs.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Re-tessellation] Rebuilding mesh for %d drifted plate(s) (full rebuild)"), DriftedPlateIDs.Num());
 
     // Trigger full mesh regeneration
     GenerateRenderMesh();
@@ -264,7 +265,7 @@ bool UTectonicSimulationService::PerformRetessellation()
     // Step 4: Validate result
     if (!ValidateRetessellation(Snapshot))
     {
-        UE_LOG(LogTemp, Error, TEXT("[Re-tessellation] Validation failed! Rolling back..."));
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[Re-tessellation] Validation failed! Rolling back..."));
         RestoreRetessellationSnapshot(Snapshot);
         return false;
     }
@@ -278,7 +279,7 @@ bool UTectonicSimulationService::PerformRetessellation()
             if (Plates[i].PlateID == PlateID && InitialPlateCentroids.IsValidIndex(i))
             {
                 InitialPlateCentroids[i] = Plates[i].Centroid;
-                UE_LOG(LogTemp, Verbose, TEXT("[Re-tessellation] Reset reference centroid for Plate %d"), PlateID);
+                UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[Re-tessellation] Reset reference centroid for Plate %d"), PlateID);
             }
         }
     }
@@ -288,12 +289,12 @@ bool UTectonicSimulationService::PerformRetessellation()
     LastRetessellationTimeMs = (EndTime - StartTime) * 1000.0;
     RetessellationCount++;
 
-    UE_LOG(LogTemp, Log, TEXT("[Re-tessellation] Completed in %.2f ms (count: %d, plates rebuilt: %d)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Re-tessellation] Completed in %.2f ms (count: %d, plates rebuilt: %d)"),
         LastRetessellationTimeMs, RetessellationCount, DriftedPlateIDs.Num());
 
     // Milestone 4 Phase 4.2: Increment topology version (topology changed)
     TopologyVersion++;
-    UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Topology version incremented: %d"), TopologyVersion);
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] Topology version incremented: %d"), TopologyVersion);
 
     return true;
 }

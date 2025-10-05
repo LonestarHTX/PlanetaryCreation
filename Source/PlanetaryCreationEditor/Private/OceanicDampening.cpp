@@ -38,24 +38,6 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
         VertexSedimentThickness.SetNumZeroed(VertexCount);
     }
 
-    // Build adjacency map: vertex -> neighbors
-    TMap<int32, TArray<int32>> VertexNeighbors;
-    const int32 TriangleCount = RenderTriangles.Num() / 3;
-
-    for (int32 TriIdx = 0; TriIdx < TriangleCount; ++TriIdx)
-    {
-        const int32 V0 = RenderTriangles[TriIdx * 3 + 0];
-        const int32 V1 = RenderTriangles[TriIdx * 3 + 1];
-        const int32 V2 = RenderTriangles[TriIdx * 3 + 2];
-
-        VertexNeighbors.FindOrAdd(V0).AddUnique(V1);
-        VertexNeighbors.FindOrAdd(V0).AddUnique(V2);
-        VertexNeighbors.FindOrAdd(V1).AddUnique(V0);
-        VertexNeighbors.FindOrAdd(V1).AddUnique(V2);
-        VertexNeighbors.FindOrAdd(V2).AddUnique(V0);
-        VertexNeighbors.FindOrAdd(V2).AddUnique(V1);
-    }
-
     // Apply dampening to vertices below sea level
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
@@ -103,56 +85,61 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
         );
 
         // Gaussian smoothing: average with neighbors (dampens roughness)
-        const TArray<int32>* Neighbors = VertexNeighbors.Find(VertexIdx);
-
-        if (Neighbors && Neighbors->Num() > 0)
+        if (!RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx) || !RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1))
         {
-            double SmoothedElevation = Elevation_m; // Start with current elevation (meters)
-            double WeightSum = 1.0; // Self weight
+            const double AgeSubsidencePull = (TargetDepth_m - Elevation_m) * 0.01 * DeltaTimeMy;
+            VertexElevationValues[VertexIdx] = FMath::Min(Elevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
+            continue;
+        }
 
-            for (int32 NeighborIdx : *Neighbors)
+        const int32 NeighborStart = RenderVertexAdjacencyOffsets[VertexIdx];
+        const int32 NeighborEnd = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+
+        if (NeighborEnd <= NeighborStart)
+        {
+            const double AgeSubsidencePull = (TargetDepth_m - Elevation_m) * 0.01 * DeltaTimeMy;
+            VertexElevationValues[VertexIdx] = FMath::Min(Elevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
+            continue;
+        }
+
+        double SmoothedElevation = Elevation_m; // Start with current elevation (meters)
+        double WeightSum = 1.0; // Self weight
+
+        for (int32 NeighborOffset = NeighborStart; NeighborOffset < NeighborEnd; ++NeighborOffset)
+        {
+            const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(NeighborOffset) ? RenderVertexAdjacency[NeighborOffset] : INDEX_NONE;
+            if (!VertexElevationValues.IsValidIndex(NeighborIdx))
             {
-                if (!VertexElevationValues.IsValidIndex(NeighborIdx))
-                {
-                    continue;
-                }
-
-                const double NeighborElevation = VertexElevationValues[NeighborIdx];
-
-                // Geodesic distance on unit sphere
-                const FVector3d& V1 = RenderVertices[VertexIdx];
-                const FVector3d& V2 = RenderVertices[NeighborIdx];
-                const double DotProduct = FMath::Clamp(FVector3d::DotProduct(V1.GetSafeNormal(), V2.GetSafeNormal()), -1.0, 1.0);
-                const double GeodesicDistance = FMath::Acos(DotProduct); // Radians
-
-                // Gaussian weight (radius = 0.1 rad ≈ 5.7°)
-                const double SmoothingRadius = 0.1;
-                const double Weight = FMath::Exp(-GeodesicDistance * GeodesicDistance / (2.0 * SmoothingRadius * SmoothingRadius));
-
-                SmoothedElevation += NeighborElevation * Weight;
-                WeightSum += Weight;
+                continue;
             }
 
-            SmoothedElevation /= WeightSum;
+            const double NeighborElevation = VertexElevationValues[NeighborIdx];
 
-            // Dampen toward smoothed elevation (slow subsidence rate)
-            const double DampenRate = Parameters.OceanicDampeningConstant * DeltaTimeMy;
-            const double NewElevation_m = FMath::Lerp(Elevation_m, SmoothedElevation, FMath::Min(1.0, DampenRate));
+            // Geodesic distance on unit sphere
+            const FVector3d& V1 = RenderVertices[VertexIdx];
+            const FVector3d& V2 = RenderVertices[NeighborIdx];
+            const double DotProduct = FMath::Clamp(FVector3d::DotProduct(V1.GetSafeNormal(), V2.GetSafeNormal()), -1.0, 1.0);
+            const double GeodesicDistance = FMath::Acos(DotProduct); // Radians
 
-            // Also pull toward age-subsidence target depth (all in meters)
-            const double AgeSubsidencePull = (TargetDepth_m - NewElevation_m) * 0.01 * DeltaTimeMy; // 1% per My pull
+            // Gaussian weight (radius = 0.1 rad ≈ 5.7°)
+            const double SmoothingRadius = 0.1;
+            const double Weight = FMath::Exp(-GeodesicDistance * GeodesicDistance / (2.0 * SmoothingRadius * SmoothingRadius));
 
-            // M5 Phase 3 fix: Clamp oceanic elevations below sea level (prevent stress from lifting them)
-            VertexElevationValues[VertexIdx] = FMath::Min(NewElevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
+            SmoothedElevation += NeighborElevation * Weight;
+            WeightSum += Weight;
         }
-        else
-        {
-            // No neighbors - just apply age-subsidence (meters)
-            const double AgeSubsidencePull = (TargetDepth_m - Elevation_m) * 0.01 * DeltaTimeMy;
 
-            // M5 Phase 3 fix: Clamp oceanic elevations below sea level
-            VertexElevationValues[VertexIdx] = FMath::Min(Elevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
-        }
+        SmoothedElevation /= WeightSum;
+
+        // Dampen toward smoothed elevation (slow subsidence rate)
+        const double DampenRate = Parameters.OceanicDampeningConstant * DeltaTimeMy;
+        const double NewElevation_m = FMath::Lerp(Elevation_m, SmoothedElevation, FMath::Min(1.0, DampenRate));
+
+        // Also pull toward age-subsidence target depth (all in meters)
+        const double AgeSubsidencePull = (TargetDepth_m - NewElevation_m) * 0.01 * DeltaTimeMy; // 1% per My pull
+
+        // M5 Phase 3 fix: Clamp oceanic elevations below sea level (prevent stress from lifting them)
+        VertexElevationValues[VertexIdx] = FMath::Min(NewElevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
     }
 
     // Reset crust age at divergent boundaries (new oceanic crust)

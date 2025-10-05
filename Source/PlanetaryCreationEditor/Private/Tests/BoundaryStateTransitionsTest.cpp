@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -33,10 +34,10 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("=== Boundary State Transitions Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Boundary State Transitions Test ==="));
 
     // Test 1: Nascent → Active transition
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Nascent → Active transition"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Nascent → Active transition"));
 
     FTectonicSimulationParameters Params = Service->GetParameters();
     Params.Seed = 77777;
@@ -56,7 +57,7 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Initial nascent boundaries: %d of %d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Initial nascent boundaries: %d of %d"),
         NascentCount, InitialBoundaries.Num());
     TestTrue(TEXT("Some boundaries start as nascent"), NascentCount > 0);
 
@@ -92,14 +93,14 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Test 1: After 10 steps - Active: %d, Nascent: %d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: After 10 steps - Active: %d, Nascent: %d"),
         ActiveCount, NascentCountAfter);
 
     TestTrue(TEXT("Some boundaries transitioned to Active"), ActiveCount > 0);
     TestTrue(TEXT("Nascent count decreased"), NascentCountAfter < NascentCount);
 
     // Test 2: Active → Dormant transition (velocity realignment)
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Active → Dormant transition"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Active → Dormant transition"));
 
     // Continue running to establish active boundaries
     Service->AdvanceSteps(10);
@@ -114,7 +115,7 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Active boundaries before realignment: %d"), ActiveCountBefore);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Active boundaries before realignment: %d"), ActiveCountBefore);
 
     // Realign velocities to reduce stress on some boundaries
     TArray<FTectonicPlate>& Plates2 = Service->GetPlatesForModification();
@@ -136,7 +137,7 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
         if (BoundaryPair.Value.BoundaryState == EBoundaryState::Dormant)
         {
             DormantCount++;
-            UE_LOG(LogTemp, Verbose, TEXT("Test 2: Dormant boundary %d-%d (stress: %.1f)"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Test 2: Dormant boundary %d-%d (stress: %.1f)"),
                 BoundaryPair.Key.Key, BoundaryPair.Key.Value, BoundaryPair.Value.AccumulatedStress);
         }
         else if (BoundaryPair.Value.BoundaryState == EBoundaryState::Active)
@@ -145,16 +146,16 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Test 2: After realignment - Dormant: %d, Active: %d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: After realignment - Dormant: %d, Active: %d"),
         DormantCount, ActiveCountAfter);
 
     // Note: Dormant transition may not always occur depending on dynamics
     // This is more of an observational test
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Dormant transition observed: %s"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Dormant transition observed: %s"),
         DormantCount > 0 ? TEXT("YES") : TEXT("NO (non-critical)"));
 
     // Test 3: Active → Rifting transition
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Active → Rifting transition"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Active → Rifting transition"));
 
     Params.Seed = 88888;
     Params.LloydIterations = 3;
@@ -187,7 +188,7 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
             if (BoundaryPair.Value.BoundaryState == EBoundaryState::Rifting)
             {
                 bRiftingAchieved = true;
-                UE_LOG(LogTemp, Log, TEXT("Test 3: Rifting boundary found after %d steps (plates %d-%d, width: %.1f m)"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Rifting boundary found after %d steps (plates %d-%d, width: %.1f m)"),
                     StepsToRift, BoundaryPair.Key.Key, BoundaryPair.Key.Value,
                     BoundaryPair.Value.RiftWidthMeters);
                 break;
@@ -201,7 +202,7 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Active → Rifting transition occurred"), bRiftingAchieved);
 
     // Test 4: Rifting → Split sequence
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Rifting → Split sequence"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Rifting → Split sequence"));
 
     if (bRiftingAchieved)
     {
@@ -221,7 +222,7 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
             if (PlateCountAfter > PlateCountBefore)
             {
                 bSplitOccurred = true;
-                UE_LOG(LogTemp, Log, TEXT("Test 4: Split occurred after %d additional steps (rift widened sufficiently)"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Split occurred after %d additional steps (rift widened sufficiently)"),
                     AdditionalSteps);
                 break;
             }
@@ -230,16 +231,16 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
         if (bSplitOccurred)
         {
             TestTrue(TEXT("Rifting → Split sequence completed"), true);
-            UE_LOG(LogTemp, Log, TEXT("Test 4: Full state sequence: Nascent → Active → Rifting → Split ✓"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Full state sequence: Nascent → Active → Rifting → Split ✓"));
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("Test 4: Split did not occur within time limit (rift may need more widening)"));
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("Test 4: Split did not occur within time limit (rift may need more widening)"));
         }
     }
 
     // Test 5: State transition counts and statistics
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Boundary state distribution"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Boundary state distribution"));
 
     const TMap<TPair<int32, int32>, FPlateBoundary>& FinalBoundaries = Service->GetBoundaries();
     int32 NascentFinal = 0, ActiveFinal = 0, DormantFinal = 0, RiftingFinal = 0;
@@ -256,23 +257,23 @@ bool FBoundaryStateTransitionsTest::RunTest(const FString& Parameters)
     }
 
     const int32 TotalBoundaries = FinalBoundaries.Num();
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Final state distribution (%d boundaries):"), TotalBoundaries);
-    UE_LOG(LogTemp, Log, TEXT("  - Nascent: %d (%.1f%%)"), NascentFinal, 100.0 * NascentFinal / TotalBoundaries);
-    UE_LOG(LogTemp, Log, TEXT("  - Active: %d (%.1f%%)"), ActiveFinal, 100.0 * ActiveFinal / TotalBoundaries);
-    UE_LOG(LogTemp, Log, TEXT("  - Dormant: %d (%.1f%%)"), DormantFinal, 100.0 * DormantFinal / TotalBoundaries);
-    UE_LOG(LogTemp, Log, TEXT("  - Rifting: %d (%.1f%%)"), RiftingFinal, 100.0 * RiftingFinal / TotalBoundaries);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Final state distribution (%d boundaries):"), TotalBoundaries);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  - Nascent: %d (%.1f%%)"), NascentFinal, 100.0 * NascentFinal / TotalBoundaries);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  - Active: %d (%.1f%%)"), ActiveFinal, 100.0 * ActiveFinal / TotalBoundaries);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  - Dormant: %d (%.1f%%)"), DormantFinal, 100.0 * DormantFinal / TotalBoundaries);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  - Rifting: %d (%.1f%%)"), RiftingFinal, 100.0 * RiftingFinal / TotalBoundaries);
 
     // All boundaries should have valid states
     TestEqual(TEXT("All boundaries have valid states"),
         NascentFinal + ActiveFinal + DormantFinal + RiftingFinal, TotalBoundaries);
 
     // Summary
-    UE_LOG(LogTemp, Log, TEXT("=== Boundary State Transitions Test Complete ==="));
-    UE_LOG(LogTemp, Log, TEXT("✓ Nascent → Active transition validated"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Active → Dormant transition observed"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Active → Rifting transition validated"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Rifting → Split sequence validated"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Boundary state distribution tracked correctly"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Boundary State Transitions Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Nascent → Active transition validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Active → Dormant transition observed"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Active → Rifting transition validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Rifting → Split sequence validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Boundary state distribution tracked correctly"));
 
     return true;
 }

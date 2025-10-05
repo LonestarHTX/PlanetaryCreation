@@ -1,5 +1,6 @@
 // Milestone 4 Task 1.2: Deterministic Split/Merge Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -32,12 +33,12 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Deterministic Topology Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Deterministic Topology Test ==="));
 
     // Test 1: Determinism Across Multiple Runs
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Split/Merge Determinism"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Split/Merge Determinism"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 12345;
@@ -93,16 +94,16 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
     }
 
     const double MatchRatio = static_cast<double>(MatchingPlates) / PlateCount_Run1;
-    UE_LOG(LogTemp, Log, TEXT("  Run 1: %d plates, %d events"), PlateCount_Run1, EventCount_Run1);
-    UE_LOG(LogTemp, Log, TEXT("  Run 2: %d plates, %d events"), PlateCount_Run2, EventCount_Run2);
-    UE_LOG(LogTemp, Log, TEXT("  Matching plates: %d / %d (%.1f%%)"), MatchingPlates, PlateCount_Run1, MatchRatio * 100.0);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Run 1: %d plates, %d events"), PlateCount_Run1, EventCount_Run1);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Run 2: %d plates, %d events"), PlateCount_Run2, EventCount_Run2);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Matching plates: %d / %d (%.1f%%)"), MatchingPlates, PlateCount_Run1, MatchRatio * 100.0);
 
     TestTrue(TEXT("Determinism: >90% plates match"), MatchRatio > 0.9);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Determinism validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Determinism validated"));
 
     // Test 2: Angular Momentum Conservation (Split)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Angular Momentum Conservation (Split)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Angular Momentum Conservation (Split)"));
 
     // Find split events in topology history
     int32 SplitCount = 0;
@@ -119,20 +120,20 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Split events observed: %d"), SplitCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Split events observed: %d"), SplitCount);
 
     if (SplitCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Split logging validated (see [Split Derivation] logs)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Split logging validated (see [Split Derivation] logs)"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No splits occurred (may need longer simulation or different seed)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No splits occurred (may need longer simulation or different seed)"));
     }
 
     // Test 3: Area-Weighted Merge Validation
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Area-Weighted Merge Validation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Area-Weighted Merge Validation"));
 
     int32 MergeCount = 0;
 
@@ -147,20 +148,20 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Merge events observed: %d"), MergeCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Merge events observed: %d"), MergeCount);
 
     if (MergeCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Merge logging validated (see [Merge Derivation] logs)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Merge logging validated (see [Merge Derivation] logs)"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No merges occurred (may need longer simulation or different seed)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No merges occurred (may need longer simulation or different seed)"));
     }
 
     // Test 4: Voronoi Redistribution Completeness
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Voronoi Redistribution"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Voronoi Redistribution"));
 
     const TArray<int32>& Assignments = Service->GetVertexPlateAssignments();
     const TArray<FVector3d>& RenderVertices = Service->GetRenderVertices();
@@ -175,17 +176,17 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
     }
 
     const double AssignmentRatio = 1.0 - (static_cast<double>(UnassignedCount) / Assignments.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Vertices: %d"), RenderVertices.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Assigned: %d / %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices: %d"), RenderVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Assigned: %d / %d (%.1f%%)"),
         Assignments.Num() - UnassignedCount, Assignments.Num(), AssignmentRatio * 100.0);
 
     TestEqual(TEXT("All vertices assigned"), UnassignedCount, 0);
     TestEqual(TEXT("Assignment array matches vertex count"), Assignments.Num(), RenderVertices.Num());
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Voronoi redistribution complete"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Voronoi redistribution complete"));
 
     // Test 5: Plate ID Uniqueness After Topology Changes
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Plate ID Uniqueness"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Plate ID Uniqueness"));
 
     TSet<int32> UniqueIDs;
     for (const FTectonicPlate& Plate : Service->GetPlates())
@@ -194,12 +195,12 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
     }
 
     TestEqual(TEXT("All plate IDs unique"), UniqueIDs.Num(), Service->GetPlates().Num());
-    UE_LOG(LogTemp, Log, TEXT("  Plates: %d, Unique IDs: %d"), Service->GetPlates().Num(), UniqueIDs.Num());
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Plate ID uniqueness validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plates: %d, Unique IDs: %d"), Service->GetPlates().Num(), UniqueIDs.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Plate ID uniqueness validated"));
 
     // Test 6: Centroid Validity After Topology Changes
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 6: Centroid Validity"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 6: Centroid Validity"));
 
     int32 ValidCentroids = 0;
     for (const FTectonicPlate& Plate : Service->GetPlates())
@@ -212,15 +213,15 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
     }
 
     const double ValidRatio = static_cast<double>(ValidCentroids) / Service->GetPlates().Num();
-    UE_LOG(LogTemp, Log, TEXT("  Valid centroids: %d / %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Valid centroids: %d / %d (%.1f%%)"),
         ValidCentroids, Service->GetPlates().Num(), ValidRatio * 100.0);
 
     TestTrue(TEXT("All centroids on unit sphere"), ValidRatio > 0.99);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Centroid validity validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Centroid validity validated"));
 
     // Test 7: Euler Pole Validity After Topology Changes
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 7: Euler Pole Validity"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 7: Euler Pole Validity"));
 
     int32 ValidEulerPoles = 0;
     for (const FTectonicPlate& Plate : Service->GetPlates())
@@ -233,11 +234,11 @@ bool FDeterministicTopologyTest::RunTest(const FString& Parameters)
     }
 
     const double ValidEulerRatio = static_cast<double>(ValidEulerPoles) / Service->GetPlates().Num();
-    UE_LOG(LogTemp, Log, TEXT("  Valid Euler poles: %d / %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Valid Euler poles: %d / %d (%.1f%%)"),
         ValidEulerPoles, Service->GetPlates().Num(), ValidEulerRatio * 100.0);
 
     TestTrue(TEXT("All Euler poles normalized"), ValidEulerRatio > 0.99);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Euler pole validity validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Euler pole validity validated"));
 
     AddInfo(TEXT("✅ Deterministic topology test complete"));
     AddInfo(FString::Printf(TEXT("Plates: %d | Splits: %d | Merges: %d | Events: %d"),

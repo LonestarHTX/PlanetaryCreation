@@ -1,6 +1,8 @@
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
+#include "Hash/CityHash.h"
+#include "Misc/FileHelper.h"
 
 // Helper function to compute hash of plate state for determinism testing
 static uint32 HashPlateState(const TArray<FTectonicPlate>& Plates)
@@ -14,6 +16,26 @@ static uint32 HashPlateState(const TArray<FTectonicPlate>& Plates)
         Hash = HashCombine(Hash, GetTypeHash(FMath::RoundToInt(Plate.Centroid.Z * 1000000.0)));
         Hash = HashCombine(Hash, GetTypeHash(static_cast<uint8>(Plate.CrustType)));
     }
+    return Hash;
+}
+
+static uint64 HashSimulationState(const UTectonicSimulationService* Service)
+{
+    auto HashArray = [](const auto& Array) -> uint64
+    {
+        if (Array.Num() == 0)
+        {
+            return 0ull;
+        }
+        return CityHash64(reinterpret_cast<const char*>(Array.GetData()), sizeof(typename TRemoveReference<decltype(Array[0])>::Type) * Array.Num());
+    };
+
+    uint64 Hash = 0ull;
+    Hash ^= HashArray(Service->GetRenderVertices());
+    Hash ^= HashArray(Service->GetRenderTriangles());
+    Hash ^= HashArray(Service->GetVertexPlateAssignments());
+    Hash ^= HashArray(Service->GetVertexElevationValues());
+    Hash ^= HashArray(Service->GetVertexAmplifiedElevation());
     return Hash;
 }
 
@@ -158,6 +180,45 @@ bool FTectonicPlateConservationTest::RunTest(const FString& Parameters)
 
     TestEqual(TEXT("Plate count should be conserved across 100 steps"), InitialPlateCount, FinalPlateCount);
     TestTrue(TEXT("Should have at least some plates"), FinalPlateCount > 0);
+
+    return true;
+}
+
+/**
+ * Test: Full simulation state is deterministic across repeated runs.
+ * Runs a short simulation twice and hashes vertex/triangle data.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FSimulationStateDeterminismTest,
+    "PlanetaryCreation.Tectonics.Determinism.SimulationState",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimulationStateDeterminismTest::RunTest(const FString& Parameters)
+{
+    UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
+    TestNotNull(TEXT("Simulation service should be available"), Service);
+    if (!Service)
+    {
+        return false;
+    }
+
+    FTectonicSimulationParameters Params;
+    Params.Seed = 777;
+    Params.SubdivisionLevel = 0;
+    Params.RenderSubdivisionLevel = 4;
+    Params.bEnableOceanicAmplification = true;
+    Params.bEnableContinentalAmplification = true;
+    Params.MinAmplificationLOD = 4;
+
+    Service->SetParameters(Params);
+    Service->AdvanceSteps(20);
+    const uint64 HashA = HashSimulationState(Service);
+
+    Service->SetParameters(Params);
+    Service->AdvanceSteps(20);
+    const uint64 HashB = HashSimulationState(Service);
+
+    TestEqual(TEXT("Simulation state hash must match across identical runs"), HashA, HashB);
 
     return true;
 }

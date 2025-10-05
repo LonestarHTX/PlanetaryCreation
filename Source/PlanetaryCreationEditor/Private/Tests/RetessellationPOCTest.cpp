@@ -1,5 +1,6 @@
 // Milestone 4 Task 1.1 Phase 1: Re-tessellation POC Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -30,11 +31,11 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Re-tessellation POC Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Re-tessellation POC Test ==="));
 
     // Test 1: Snapshot/Restore
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Snapshot/Restore"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Snapshot/Restore"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 12345;
@@ -46,7 +47,7 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
     const int32 OriginalVertexCount = Service->GetRenderVertices().Num();
     const int32 OriginalTriangleCount = Service->GetRenderTriangles().Num() / 3;
 
-    UE_LOG(LogTemp, Log, TEXT("  Original: %d vertices, %d triangles"), OriginalVertexCount, OriginalTriangleCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Original: %d vertices, %d triangles"), OriginalVertexCount, OriginalTriangleCount);
 
     // Capture snapshot
     auto Snapshot = Service->CaptureRetessellationSnapshot();
@@ -57,19 +58,19 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
     Service->AdvanceSteps(5);
     const int32 ModifiedVertexCount = Service->GetRenderVertices().Num();
 
-    UE_LOG(LogTemp, Log, TEXT("  After 5 steps: %d vertices"), ModifiedVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After 5 steps: %d vertices"), ModifiedVertexCount);
 
     // Restore snapshot
     Service->RestoreRetessellationSnapshot(Snapshot);
     const int32 RestoredVertexCount = Service->GetRenderVertices().Num();
 
-    UE_LOG(LogTemp, Log, TEXT("  After restore: %d vertices"), RestoredVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After restore: %d vertices"), RestoredVertexCount);
 
     TestEqual(TEXT("Restored vertex count matches original"), RestoredVertexCount, OriginalVertexCount);
 
     // Test 2: Validation (should pass for valid mesh)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Validation (Clean Mesh)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Validation (Clean Mesh)"));
 
     Service->SetParameters(Params); // Reset to clean state
     auto CleanSnapshot = Service->CaptureRetessellationSnapshot();
@@ -78,8 +79,8 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Validation passes for clean mesh"), ValidationResult);
 
     // Test 3: Re-tessellation with real drift detection
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Re-tessellation (Drift Detection)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Re-tessellation (Drift Detection)"));
 
     Service->SetParameters(Params); // Reset
 
@@ -102,25 +103,25 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Re-tessellation succeeds after drift"), RebuildSuccess);
 
     const int32 PostRebuildVertexCount = Service->GetRenderVertices().Num();
-    UE_LOG(LogTemp, Log, TEXT("  Pre-rebuild: %d vertices"), PreRebuildVertexCount);
-    UE_LOG(LogTemp, Log, TEXT("  Post-rebuild: %d vertices"), PostRebuildVertexCount);
-    UE_LOG(LogTemp, Log, TEXT("  Rebuild time: %.2f ms"), Service->LastRetessellationTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Pre-rebuild: %d vertices"), PreRebuildVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Post-rebuild: %d vertices"), PostRebuildVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Rebuild time: %.2f ms"), Service->LastRetessellationTimeMs);
 
     // Full rebuild preserves vertex count
     TestEqual(TEXT("Vertex count preserved after rebuild"), PostRebuildVertexCount, PreRebuildVertexCount);
 
     // Test 4: Performance logging
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Performance Logging"));
-    UE_LOG(LogTemp, Log, TEXT("  Rebuild count: %d"), Service->RetessellationCount);
-    UE_LOG(LogTemp, Log, TEXT("  Last rebuild time: %.2f ms"), Service->LastRetessellationTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Performance Logging"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Rebuild count: %d"), Service->RetessellationCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Last rebuild time: %.2f ms"), Service->LastRetessellationTimeMs);
 
     TestTrue(TEXT("Rebuild time logged"), Service->LastRetessellationTimeMs > 0.0);
     TestTrue(TEXT("Rebuild count incremented"), Service->RetessellationCount >= 1);
 
     // Test 5: No-rebuild case (high threshold)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: No-Rebuild Case (High Threshold)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: No-Rebuild Case (High Threshold)"));
 
     Params.RetessellationThresholdDegrees = 90.0; // Very high threshold
     Service->SetParameters(Params);
@@ -131,7 +132,7 @@ bool FRetessellationPOCTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Re-tessellation succeeds with high threshold"), NoRebuildSuccess);
     TestEqual(TEXT("Rebuild count unchanged when no drift"), Service->RetessellationCount, PreNoRebuildCount);
 
-    UE_LOG(LogTemp, Log, TEXT("  Rebuild avoided (no plates drifted beyond 90°)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Rebuild avoided (no plates drifted beyond 90°)"));
 
     AddInfo(TEXT("✅ Re-tessellation POC test complete"));
     AddInfo(FString::Printf(TEXT("Snapshot/Restore: Working | Validation: Passing | Rebuild: %.2f ms"),

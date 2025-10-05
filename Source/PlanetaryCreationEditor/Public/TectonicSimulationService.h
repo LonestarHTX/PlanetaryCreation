@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "PlanetaryCreationLogging.h"
 #include "Subsystems/UnrealEditorSubsystem.h"
 #include "TectonicSimulationService.generated.h"
 
@@ -659,6 +660,9 @@ public:
     /** Milestone 6 Task 2.1: Accessor for per-vertex amplified elevation (Stage B, meters). */
     const TArray<double>& GetVertexAmplifiedElevation() const { return VertexAmplifiedElevation; }
 
+    const TArray<int32>& GetRenderVertexAdjacencyOffsets() const { return RenderVertexAdjacencyOffsets; }
+    const TArray<int32>& GetRenderVertexAdjacency() const { return RenderVertexAdjacency; }
+
     /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
     const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
 
@@ -683,6 +687,9 @@ public:
      * and leaves tectonic history untouched.
      */
     void SetHeightmapVisualizationEnabled(bool bEnabled);
+
+    void SetHighlightSeaLevel(bool bEnabled);
+    bool IsHighlightSeaLevelEnabled() const { return bHighlightSeaLevel; }
 
     /**
      * Milestone 4 Phase 4.1: Toggle automatic LOD selection without resetting simulation state.
@@ -740,6 +747,9 @@ public:
     /** Milestone 4 Phase 4.2: Version tracking for LOD cache invalidation. */
     int32 GetTopologyVersion() const { return TopologyVersion; }
     int32 GetSurfaceDataVersion() const { return SurfaceDataVersion; }
+
+    /** Rebuild cached render adjacency after topology or LOD changes. */
+    void BuildRenderVertexAdjacency();
 
     /** Milestone 5 Task 1.3: Full simulation history snapshot for undo/redo. */
     struct FSimulationHistorySnapshot
@@ -986,6 +996,9 @@ private:
     /** Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based terrain synthesis). */
     void ApplyContinentalAmplification();
 
+    /** Ensures VertexAmplifiedElevation starts from the latest base elevation before Stage B passes. */
+    void InitializeAmplifiedElevationBaseline();
+
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
     TArray<FVector3d> BaseSphereSamples;
@@ -1024,6 +1037,13 @@ private:
     /** Milestone 6 Task 2.1: Per-vertex amplified elevation (Stage B, meters). */
     TArray<double> VertexAmplifiedElevation;
 
+    /** Optional sealevel emphasis toggle (visual only). */
+    bool bHighlightSeaLevel = false;
+
+    /** Cached render vertex adjacency (CSR layout: Offsets.Num == RenderVertices.Num + 1). */
+    TArray<int32> RenderVertexAdjacencyOffsets;
+    TArray<int32> RenderVertexAdjacency;
+
     /** Milestone 3 Task 3.3: Initial plate centroid positions (captured after Lloyd relaxation). */
     TArray<FVector3d> InitialPlateCentroids;
 
@@ -1053,4 +1073,14 @@ private:
 
     /** Milestone 5 Task 1.3: Maximum history size (prevents unbounded memory growth). */
     int32 MaxHistorySize = 100;
+
+#if WITH_AUTOMATION_TESTS
+public:
+    void SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure = false, const FString& InOverrideOutputDirectory = FString());
+
+private:
+    bool bForceHeightmapModuleFailure = false;
+    bool bForceHeightmapWriteFailure = false;
+    FString HeightmapExportOverrideDirectory;
+#endif
 };

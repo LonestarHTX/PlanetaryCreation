@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "TectonicSimulationController.h"
@@ -39,8 +40,8 @@ bool FAsyncMeshPipelineTest::RunTest(const FString& Parameters)
     }
 
     // Test 1: Synchronous path (level 0-2)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Test 1: Synchronous Path (Level 0-2) ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Test 1: Synchronous Path (Level 0-2) ==="));
 
     FTectonicSimulationParameters SyncParams;
     SyncParams.Seed = 12345;
@@ -53,15 +54,15 @@ bool FAsyncMeshPipelineTest::RunTest(const FString& Parameters)
     Controller->Initialize();
 
     // Step and check logs for ⚡ [SYNC] marker
-    UE_LOG(LogTemp, Log, TEXT("Stepping at level 2 (should use synchronous path)..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Stepping at level 2 (should use synchronous path)..."));
     Controller->StepSimulation(1);
 
     // Give a frame for mesh update to complete
     FPlatformProcess::Sleep(0.1f);
 
     // Test 2: Asynchronous path (level 3+)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Test 2: Asynchronous Path (Level 3+) ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Test 2: Asynchronous Path (Level 3+) ==="));
 
     FTectonicSimulationParameters AsyncParams;
     AsyncParams.Seed = 12345;
@@ -71,16 +72,16 @@ bool FAsyncMeshPipelineTest::RunTest(const FString& Parameters)
     Service->SetParameters(AsyncParams);
 
     // Step and check logs for 🚀 [ASYNC] dispatch marker
-    UE_LOG(LogTemp, Log, TEXT("Stepping at level 3 (should use asynchronous path)..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Stepping at level 3 (should use asynchronous path)..."));
     Controller->StepSimulation(1);
 
     // Give time for background thread to complete
     FPlatformProcess::Sleep(0.5f);
 
     // Test 3: Rapid stepping guard
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Test 3: Rapid Stepping Guard ==="));
-    UE_LOG(LogTemp, Log, TEXT("Stepping twice rapidly (should trigger ⏸️ skip on second step)..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Test 3: Rapid Stepping Guard ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Stepping twice rapidly (should trigger ⏸️ skip on second step)..."));
 
     Controller->StepSimulation(1);
     Controller->StepSimulation(1); // Should log skip warning

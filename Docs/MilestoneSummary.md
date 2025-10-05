@@ -86,16 +86,19 @@ Detailed plan lives in `Docs/Milestone4_Plan.md`. Final status below.
 - Documentation, gallery, and release notes published (`Docs/ReleaseNotes_M4.md`, `Docs/Milestone4_CompletionSummary.md`).
 - Known limitation: RetessellationRegression perf overage (228 ms @ L6) logged for Milestone 6 SIMD/GPU optimisation.
 
-## Milestone 5 – Validation, Optimization, Packaging *(Weeks 13–15 — Planned)*
-- **Goal:** Move from research-aligned prototype to production-ready editor deliverable.
-- **Planned Deliverables:**
-  - Expanded automation (determinism, mesh integrity, UI regression, new M4 features).
-  - Final performance profiling reports (CPU/GPU/memory budgets) with Unreal Insights.
-  - Lightweight orbital inspection camera (baseline zoom/orbit controller for review builds).
-  - Undo/redo UI controls wired to existing rollback system (toolbar buttons + keyboard shortcuts).
-  - Continuous simulation playback controls (Play/Pause, adjustable timestep cadence, integrates with undo/redo history).
-  - User guide, release notes, risk/validation checklist formalized.
-- **Dependencies:** Completion of Milestone 4 phases.
+## Milestone 5 – Validation, Optimization, Packaging ✅ *(Weeks 13–16 — COMPLETE)*
+- **Goal:** Move from research-aligned prototype to a production-ready editor deliverable.
+- **Highlights:**
+  - Continuous playback system, timeline scrubber, orbital camera, and undo/redo UI shipped; see `FTectonicPlaybackController`, `SPTectonicToolPanel`, `FTectonicOrbitCamera`.
+  - Section 4.5 surface weathering implemented: continental erosion, sediment transport, and oceanic dampening execute every step with deterministic seeding.
+  - Automation suite expanded (playback, erosion, dampening, performance regression); pass rate 17/18 with `RetessellationRegression` perf overage tracked for M6 optimisation.
+  - Unreal Insights profiling established production baselines (L3 6.32 ms, L5 ≈15 ms, L6 ≈35 ms) with ~17× headroom versus target.
+  - Documentation, presets, and release collateral updated (user guide draft, `Docs/Performance_M5.md`, release notes addenda).
+- **Validation:**
+  - Build + automation pass (green except known perf regression).
+  - Manual UX walkthrough covering playback, camera, undo/redo, and presets.
+- **Known Gaps:**
+  - L6 retessellation still exceeds 120 ms budget (documented in `Docs/Performance_M4.md`/`_M5.md`); mitigation scheduled in Milestone 6 SIMD/GPU track.
 
 ## Milestone 6 – Amplification & Performance Parity *(Future, Planned)*
 - **Goal:** Complete paper parity by delivering Stage B amplification, erosion/sediment transport, and performance headroom.
@@ -135,10 +138,9 @@ Detailed plan lives in `Docs/Milestone4_Plan.md`. Final status below.
 ---
 
 ## From Fundamentals to Production
-With Milestones 0–4 complete, the research-aligned fundamentals (deterministic simulation, high-density mesh visualization, dynamic topology, LOD streaming) are proven. To reach a production-level tool:
-1. **Execute Milestone 5:** Formal QA pass, profiling, orbital camera, undo/redo UI, continuous playback, and packaging.
-2. **Deliver Milestone 6:** Stage B amplification, erosion/sediment, terrane handling, SIMD/GPU optimisation, Level 7 parity metrics.
-3. **Follow with Milestones 7–9:** Presentation polish, climate/hydrosphere coupling, and shipping/cinematic readiness.
+With Milestones 0–5 complete, the research-aligned fundamentals and production UX/tooling are in place. To reach full paper parity and shipping polish:
+1. **Deliver Milestone 6:** Stage B amplification, terrane handling, SIMD/GPU optimisation, Level 7 parity metrics.
+2. **Follow with Milestones 7–9:** Presentation polish, climate/hydrosphere coupling, and shipping/cinematic readiness.
 
 All milestones—completed, in-progress, and future—are now documented here so nothing sits “out of scope.”
 

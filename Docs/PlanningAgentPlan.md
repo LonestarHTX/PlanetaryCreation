@@ -114,6 +114,7 @@
 ## Cross-Cutting Workstreams
 - Weekly integration sync between Simulation and Rendering leads to track data contracts.
 - Maintain a risk register highlighting RealtimeMesh API gaps or math uncertainties.
+- Track migration plan for the `StructUtils` plugin dependency (RealtimeMeshComponent) now flagged for removal in UE 5.5+, and secure replacement before engine upgrade.
 - Document deviations from the paper in `ProceduralTectonicPlanetsPaper/README_addendum` (create if needed).
 - Ensure plugin updates mirror source control and CI builds the editor target.
 

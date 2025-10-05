@@ -1,6 +1,7 @@
 // Milestone 6 Task 2.1: Oceanic Amplification Automation Test
 // Validates transform fault synthesis, age-based fault accentuation, and high-frequency detail
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 
@@ -302,7 +303,7 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Amplified elevation has greater variance than base (high-frequency detail added)"),
             AmplifiedElevationVariance > BaseElevationVariance);
 
-        UE_LOG(LogTemp, Log, TEXT("OceanicAmplificationTest: Base variance = %.2f, Amplified variance = %.2f"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("OceanicAmplificationTest: Base variance = %.2f, Amplified variance = %.2f"),
             BaseElevationVariance, AmplifiedElevationVariance);
     }
 
@@ -334,7 +335,7 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
             }
             else if (DebugLoggedContinental < 3)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Continental vertex %d (PlateID=%d, CrustType=%s) modified: Base=%.3f m, Amplified=%.3f m, Diff=%.3f m"),
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("Continental vertex %d (PlateID=%d, CrustType=%s) modified: Base=%.3f m, Amplified=%.3f m, Diff=%.3f m"),
                     VertexIdx, PlateID,
                     Plate.CrustType == ECrustType::Continental ? TEXT("Continental") : TEXT("Oceanic"),
                     BaseElevation[VertexIdx], AmplifiedElevation[VertexIdx], ElevDiff);
@@ -349,12 +350,12 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
             ContinentalUnchangedCount > ContinentalTotalCount * 0.99);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("OceanicAmplificationTest: Summary"));
-    UE_LOG(LogTemp, Log, TEXT("  Total vertices: %d"), RenderVertices.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Oceanic vertices: %d (%.1f%%)"), OceanicVertexCount, 100.0 * OceanicVertexCount / RenderVertices.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Young crust (<10 My): %d, Strong faults: %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("OceanicAmplificationTest: Summary"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total vertices: %d"), RenderVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Oceanic vertices: %d (%.1f%%)"), OceanicVertexCount, 100.0 * OceanicVertexCount / RenderVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Young crust (<10 My): %d, Strong faults: %d (%.1f%%)"),
         YoungCrustCount, StrongFaultCount, YoungCrustCount > 0 ? 100.0 * StrongFaultCount / YoungCrustCount : 0.0);
-    UE_LOG(LogTemp, Log, TEXT("  Old crust (>200 My): %d, Weak faults: %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Old crust (>200 My): %d, Weak faults: %d (%.1f%%)"),
         OldCrustCount, WeakFaultCount, OldCrustCount > 0 ? 100.0 * WeakFaultCount / OldCrustCount : 0.0);
 
     return true;

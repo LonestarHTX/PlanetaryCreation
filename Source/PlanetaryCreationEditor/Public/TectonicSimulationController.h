@@ -34,6 +34,9 @@ struct FMeshBuildSnapshot
 
     /** Milestone 6 Task 2.3: Simulation parameters (needed for heightmap visualization toggle). */
     FTectonicSimulationParameters Parameters;
+
+    /** Visualization flag: highlight sea level isoline. */
+    bool bHighlightSeaLevel = false;
 };
 
 /** Milestone 4 Phase 4.2: Cached LOD mesh snapshot (snapshot of simulation state, not StreamSet). */
@@ -78,6 +81,9 @@ public:
 
     /** Get current elevation mode. */
     EElevationMode GetElevationMode() const { return CurrentElevationMode; }
+
+    /** Refresh preview colors without forcing a full geometry rebuild (used by UI toggles). */
+    bool RefreshPreviewColors();
 
     /** Set boundary overlay visibility (Milestone 3 Task 3.2). */
     void SetBoundariesVisible(bool bVisible);
@@ -152,6 +158,8 @@ private:
 
     /** Milestone 3 Task 4.3: Async mesh build state. */
     mutable std::atomic<bool> bAsyncMeshBuildInProgress{false};
+    mutable std::atomic<int32> ActiveAsyncTasks{0};
+    mutable std::atomic<bool> bShutdownRequested{false};
     mutable double LastMeshBuildTimeMs = 0.0;
 
     /** Milestone 4 Phase 4.1: LOD state. */

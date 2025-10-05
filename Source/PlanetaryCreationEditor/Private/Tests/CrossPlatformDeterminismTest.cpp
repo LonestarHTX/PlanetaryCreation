@@ -1,5 +1,6 @@
 // Milestone 5 Task 3.1: Cross-Platform Determinism Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -37,8 +38,8 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Cross-Platform Determinism Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Cross-Platform Determinism Test ==="));
 
     // Fixed configuration for reproducibility
     FTectonicSimulationParameters Params;
@@ -70,10 +71,10 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
         Plates[i].AngularVelocity = 0.025; // rad/My
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Running 100-step deterministic simulation..."));
-    UE_LOG(LogTemp, Log, TEXT("  Seed: %d"), Params.Seed);
-    UE_LOG(LogTemp, Log, TEXT("  Initial Plates: %d"), Plates.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Initial Vertices: %d"), Service->GetRenderVertices().Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Running 100-step deterministic simulation..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Seed: %d"), Params.Seed);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Initial Plates: %d"), Plates.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Initial Vertices: %d"), Service->GetRenderVertices().Num());
 
     // Run simulation
     Service->AdvanceSteps(100);
@@ -81,8 +82,8 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
     const TArray<FTectonicPlate>& FinalPlates = Service->GetPlatesForModification();
     const TArray<FVector3d>& FinalVertices = Service->GetRenderVertices();
 
-    UE_LOG(LogTemp, Log, TEXT("  Final Plates: %d"), FinalPlates.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Final Vertices: %d"), FinalVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Plates: %d"), FinalPlates.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Vertices: %d"), FinalVertices.Num());
 
     // Compute deterministic hashes
     uint64 PlateHash = 0;
@@ -109,12 +110,12 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
     PlateHash = *reinterpret_cast<const uint64*>(&PlateCentroidSum);
     VertexHash = *reinterpret_cast<const uint64*>(&VertexPositionSum);
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Determinism Fingerprint:"));
-    UE_LOG(LogTemp, Log, TEXT("  Plate Centroid Sum: %.15f"), PlateCentroidSum);
-    UE_LOG(LogTemp, Log, TEXT("  Vertex Position Sum: %.15f"), VertexPositionSum);
-    UE_LOG(LogTemp, Log, TEXT("  Plate Hash: 0x%016llX"), PlateHash);
-    UE_LOG(LogTemp, Log, TEXT("  Vertex Hash: 0x%016llX"), VertexHash);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Determinism Fingerprint:"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plate Centroid Sum: %.15f"), PlateCentroidSum);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertex Position Sum: %.15f"), VertexPositionSum);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plate Hash: 0x%016llX"), PlateHash);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertex Hash: 0x%016llX"), VertexHash);
 
     // Store baseline on first run, compare on subsequent runs
     const FString BaselinePath = FPaths::ProjectSavedDir() / TEXT("Tests") / TEXT("DeterminismBaseline.txt");
@@ -122,8 +123,8 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
     if (FPaths::FileExists(BaselinePath))
     {
         // Load and compare
-        UE_LOG(LogTemp, Log, TEXT(""));
-        UE_LOG(LogTemp, Log, TEXT("Comparing against baseline: %s"), *BaselinePath);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Comparing against baseline: %s"), *BaselinePath);
 
         FString BaselineContent;
         if (FFileHelper::LoadFileToString(BaselineContent, *BaselinePath))
@@ -164,10 +165,10 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
             const double VertexDiff = FMath::Abs(VertexPositionSum - BaselineVertexPositionSum);
             const double Tolerance = 1e-8; // Tight tolerance for double-precision determinism
 
-            UE_LOG(LogTemp, Log, TEXT("  Baseline Plate Centroid Sum: %.15f (diff: %.2e)"), BaselinePlateCentroidSum, CentroidDiff);
-            UE_LOG(LogTemp, Log, TEXT("  Baseline Vertex Position Sum: %.15f (diff: %.2e)"), BaselineVertexPositionSum, VertexDiff);
-            UE_LOG(LogTemp, Log, TEXT("  Baseline Plate Count: %d"), BaselinePlateCount);
-            UE_LOG(LogTemp, Log, TEXT("  Baseline Vertex Count: %d"), BaselineVertexCount);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Baseline Plate Centroid Sum: %.15f (diff: %.2e)"), BaselinePlateCentroidSum, CentroidDiff);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Baseline Vertex Position Sum: %.15f (diff: %.2e)"), BaselineVertexPositionSum, VertexDiff);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Baseline Plate Count: %d"), BaselinePlateCount);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Baseline Vertex Count: %d"), BaselineVertexCount);
 
             // Validate determinism
             TestTrue(TEXT("Plate count matches baseline"), FinalPlates.Num() == BaselinePlateCount);
@@ -177,15 +178,15 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
 
             if (CentroidDiff < Tolerance && VertexDiff < Tolerance)
             {
-                UE_LOG(LogTemp, Log, TEXT(""));
-                UE_LOG(LogTemp, Log, TEXT("DETERMINISM VERIFIED: Results match baseline within %.2e tolerance"), Tolerance);
+                UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("DETERMINISM VERIFIED: Results match baseline within %.2e tolerance"), Tolerance);
             }
             else
             {
-                UE_LOG(LogTemp, Error, TEXT(""));
-                UE_LOG(LogTemp, Error, TEXT("DETERMINISM FAILED: Results differ from baseline"));
-                UE_LOG(LogTemp, Error, TEXT("  This may indicate platform-specific floating-point behavior"));
-                UE_LOG(LogTemp, Error, TEXT("  or non-deterministic algorithm changes."));
+                UE_LOG(LogPlanetaryCreation, Error, TEXT(""));
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("DETERMINISM FAILED: Results differ from baseline"));
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("  This may indicate platform-specific floating-point behavior"));
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("  or non-deterministic algorithm changes."));
             }
         }
         else
@@ -196,8 +197,8 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
     else
     {
         // First run - save baseline
-        UE_LOG(LogTemp, Warning, TEXT(""));
-        UE_LOG(LogTemp, Warning, TEXT("No baseline found - creating new baseline: %s"), *BaselinePath);
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT(""));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("No baseline found - creating new baseline: %s"), *BaselinePath);
 
         FString BaselineContent = FString::Printf(TEXT(
             "# Cross-Platform Determinism Baseline\n"
@@ -224,11 +225,11 @@ bool FCrossPlatformDeterminismTest::RunTest(const FString& Parameters)
         );
 
         FFileHelper::SaveStringToFile(BaselineContent, *BaselinePath);
-        UE_LOG(LogTemp, Warning, TEXT("  Baseline saved. Re-run test to validate determinism."));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  Baseline saved. Re-run test to validate determinism."));
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Cross-Platform Determinism Test COMPLETE"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Cross-Platform Determinism Test COMPLETE"));
 
     return true;
 }

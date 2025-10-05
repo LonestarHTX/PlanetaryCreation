@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -34,15 +35,15 @@ bool FRollbackDeterminismTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("=== Rollback Determinism Test (STUB) ==="));
-    UE_LOG(LogTemp, Warning, TEXT("NOTE: Undo/Redo/GetCurrentTime() API not yet implemented"));
-    UE_LOG(LogTemp, Warning, TEXT("This test is a placeholder for future Phase 5 rollback feature"));
-    UE_LOG(LogTemp, Warning, TEXT("Skipping test - feature pending implementation"));
-    UE_LOG(LogTemp, Warning, TEXT(""));
-    UE_LOG(LogTemp, Warning, TEXT("TODO: Implement UTectonicSimulationService::GetCurrentTime()"));
-    UE_LOG(LogTemp, Warning, TEXT("TODO: Implement UTectonicSimulationService::UndoLastStep()"));
-    UE_LOG(LogTemp, Warning, TEXT("TODO: Implement UTectonicSimulationService::RedoLastUndo()"));
-    UE_LOG(LogTemp, Warning, TEXT("TODO: Implement state history/snapshot mechanism"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("=== Rollback Determinism Test (STUB) ==="));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("NOTE: Undo/Redo/GetCurrentTime() API not yet implemented"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("This test is a placeholder for future Phase 5 rollback feature"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("Skipping test - feature pending implementation"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("TODO: Implement UTectonicSimulationService::GetCurrentTime()"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("TODO: Implement UTectonicSimulationService::UndoLastStep()"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("TODO: Implement UTectonicSimulationService::RedoLastUndo()"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("TODO: Implement state history/snapshot mechanism"));
 
     // Test passes as "not yet implemented" rather than failing
     TestTrue(TEXT("Rollback feature recognized as pending implementation"), true);

@@ -3,6 +3,7 @@
 // assigned specific x_T depending on the recorded endogenous factor σ, i.e. subduction or
 // continental collision. The resulting terrain type is either Andean or Himalayan."
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -71,7 +72,7 @@ bool LoadExemplarLibraryJSON(const FString& ProjectContentDir)
     FString JsonString;
     if (!FFileHelper::LoadFileToString(JsonString, *JsonPath))
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to load ExemplarLibrary.json from: %s"), *JsonPath);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load ExemplarLibrary.json from: %s"), *JsonPath);
         return false;
     }
 
@@ -80,14 +81,14 @@ bool LoadExemplarLibraryJSON(const FString& ProjectContentDir)
 
     if (!FJsonSerializer::Deserialize(JsonReader, JsonObject) || !JsonObject.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to parse ExemplarLibrary.json"));
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to parse ExemplarLibrary.json"));
         return false;
     }
 
     const TArray<TSharedPtr<FJsonValue>>* ExemplarsArray = nullptr;
     if (!JsonObject->TryGetArrayField(TEXT("exemplars"), ExemplarsArray))
     {
-        UE_LOG(LogTemp, Error, TEXT("ExemplarLibrary.json missing 'exemplars' array"));
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ExemplarLibrary.json missing 'exemplars' array"));
         return false;
     }
 
@@ -118,7 +119,7 @@ bool LoadExemplarLibraryJSON(const FString& ProjectContentDir)
     }
 
     bExemplarLibraryLoaded = true;
-    UE_LOG(LogTemp, Log, TEXT("Loaded %d exemplars from ExemplarLibrary.json"), ExemplarLibrary.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Loaded %d exemplars from ExemplarLibrary.json"), ExemplarLibrary.Num());
 
     return true;
 }
@@ -138,7 +139,7 @@ bool LoadExemplarHeightData(FExemplarMetadata& Exemplar, const FString& ProjectC
     TArray<uint8> RawFileData;
     if (!FFileHelper::LoadFileToArray(RawFileData, *PNG16Path))
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to load PNG16: %s"), *PNG16Path);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load PNG16: %s"), *PNG16Path);
         return false;
     }
 
@@ -148,7 +149,7 @@ bool LoadExemplarHeightData(FExemplarMetadata& Exemplar, const FString& ProjectC
 
     if (!ImageWrapper.IsValid() || !ImageWrapper->SetCompressed(RawFileData.GetData(), RawFileData.Num()))
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to decode PNG16: %s"), *PNG16Path);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to decode PNG16: %s"), *PNG16Path);
         return false;
     }
 
@@ -156,7 +157,7 @@ bool LoadExemplarHeightData(FExemplarMetadata& Exemplar, const FString& ProjectC
     TArray64<uint8> RawData;
     if (!ImageWrapper->GetRaw(ERGBFormat::Gray, 16, RawData))
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to extract 16-bit data from PNG16: %s"), *PNG16Path);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to extract 16-bit data from PNG16: %s"), *PNG16Path);
         return false;
     }
 
@@ -171,7 +172,7 @@ bool LoadExemplarHeightData(FExemplarMetadata& Exemplar, const FString& ProjectC
     }
 
     Exemplar.bDataLoaded = true;
-    UE_LOG(LogTemp, Log, TEXT("Loaded PNG16 data for exemplar %s (%dx%d pixels)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Loaded PNG16 data for exemplar %s (%dx%d pixels)"),
         *Exemplar.ID, Exemplar.Width_px, Exemplar.Height_px);
 
     return true;
@@ -354,7 +355,7 @@ double ComputeContinentalAmplification(
     {
         if (!LoadExemplarLibraryJSON(ProjectContentDir))
         {
-            UE_LOG(LogTemp, Error, TEXT("Failed to load exemplar library, skipping continental amplification"));
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load exemplar library, skipping continental amplification"));
             return AmplifiedElevation;
         }
     }

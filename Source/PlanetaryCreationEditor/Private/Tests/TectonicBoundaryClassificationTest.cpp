@@ -1,3 +1,4 @@
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Tests/AutomationEditorCommon.h"
@@ -59,7 +60,7 @@ bool FTectonicBoundaryClassificationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Should have at least one convergent boundary"), ConvergentCount > 0);
 
     // Log breakdown for debugging
-    UE_LOG(LogTemp, Log, TEXT("Boundary classification: %d divergent, %d convergent, %d transform"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Boundary classification: %d divergent, %d convergent, %d transform"),
         DivergentCount, ConvergentCount, TransformCount);
 
     // Verify determinism: run again with same seed

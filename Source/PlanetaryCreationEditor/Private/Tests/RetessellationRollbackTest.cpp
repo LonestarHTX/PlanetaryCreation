@@ -1,5 +1,6 @@
 // Milestone 4 Task 1.4: Re-tessellation Rollback & Validation Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -29,12 +30,12 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Re-tessellation Rollback Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Re-tessellation Rollback Test ==="));
 
     // Test 1: Snapshot & Restore Mechanism
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Snapshot & Restore Integrity"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Snapshot & Restore Integrity"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 42;
@@ -50,7 +51,7 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     const int32 InitialVertexCount = Service->GetRenderVertices().Num();
     const int32 InitialPlateCount = Service->GetPlates().Num();
 
-    UE_LOG(LogTemp, Log, TEXT("  Initial state: %d vertices, %d plates"), InitialVertexCount, InitialPlateCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Initial state: %d vertices, %d plates"), InitialVertexCount, InitialPlateCount);
 
     // Create snapshot
     auto Snapshot = Service->CaptureRetessellationSnapshot();
@@ -62,7 +63,7 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     Service->AdvanceSteps(10);
 
     const int32 PostStepVertexCount = Service->GetRenderVertices().Num();
-    UE_LOG(LogTemp, Log, TEXT("  After 10 steps: %d vertices"), PostStepVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After 10 steps: %d vertices"), PostStepVertexCount);
 
     // Restore snapshot
     Service->RestoreRetessellationSnapshot(Snapshot);
@@ -70,11 +71,11 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     const int32 RestoredVertexCount = Service->GetRenderVertices().Num();
     TestEqual(TEXT("Restored vertex count matches snapshot"), RestoredVertexCount, InitialVertexCount);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Snapshot/restore verified: %d vertices restored"), RestoredVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Snapshot/restore verified: %d vertices restored"), RestoredVertexCount);
 
     // Test 2: Validation Pass (Normal Re-tessellation)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Validation Pass (Normal Operation)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Validation Pass (Normal Operation)"));
 
     Service->SetParameters(Params); // Reset
 
@@ -84,11 +85,11 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     const bool ValidationPass = Service->ValidateRetessellation(Service->CaptureRetessellationSnapshot());
     TestTrue(TEXT("Validation passes for normal re-tessellation"), ValidationPass);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Validation passed for normal re-tessellation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Validation passed for normal re-tessellation"));
 
     // Test 3: Euler Characteristic Validation
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Euler Characteristic Validation (V - E + F = 2)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Euler Characteristic Validation (V - E + F = 2)"));
 
     Service->SetParameters(Params); // Reset
 
@@ -121,12 +122,12 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     const int32 EulerChar = V - E + F;
 
     TestEqual(TEXT("Euler characteristic = 2"), EulerChar, 2);
-    UE_LOG(LogTemp, Log, TEXT("  Euler characteristic: V=%d, E=%d, F=%d, χ=%d"), V, E, F, EulerChar);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Topology validated: χ=2 (closed sphere)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Euler characteristic: V=%d, E=%d, F=%d, χ=%d"), V, E, F, EulerChar);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Topology validated: χ=2 (closed sphere)"));
 
     // Test 4: Area Conservation Validation
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Spherical Area Conservation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Spherical Area Conservation"));
 
     // Calculate total mesh area using spherical triangles
     double TotalMeshArea = 0.0;
@@ -177,13 +178,13 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     const double AreaVariance = FMath::Abs((TotalMeshArea - ExpectedSphereArea) / ExpectedSphereArea);
 
     TestTrue(TEXT("Area variance < 1%"), AreaVariance < 0.01);
-    UE_LOG(LogTemp, Log, TEXT("  Total mesh area: %.4f sr (expected %.4f sr)"), TotalMeshArea, ExpectedSphereArea);
-    UE_LOG(LogTemp, Log, TEXT("  Area variance: %.4f%% (threshold: 1.0%%)"), AreaVariance * 100.0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Area conservation validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total mesh area: %.4f sr (expected %.4f sr)"), TotalMeshArea, ExpectedSphereArea);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Area variance: %.4f%% (threshold: 1.0%%)"), AreaVariance * 100.0);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Area conservation validated"));
 
     // Test 5: Voronoi Coverage Validation
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Voronoi Coverage (No Unassigned Vertices)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Voronoi Coverage (No Unassigned Vertices)"));
 
     const TArray<int32>& Assignments = Service->GetVertexPlateAssignments();
     int32 UnassignedCount = 0;
@@ -197,20 +198,20 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     }
 
     TestEqual(TEXT("All vertices assigned to plates"), UnassignedCount, 0);
-    UE_LOG(LogTemp, Log, TEXT("  Assigned vertices: %d / %d"), Assignments.Num() - UnassignedCount, Assignments.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Assigned vertices: %d / %d"), Assignments.Num() - UnassignedCount, Assignments.Num());
 
     if (UnassignedCount == 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ 100%% Voronoi coverage verified"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ 100%% Voronoi coverage verified"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ %d vertices unassigned"), UnassignedCount);
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ %d vertices unassigned"), UnassignedCount);
     }
 
     // Test 6: Rollback Performance
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 6: Rollback Performance"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 6: Rollback Performance"));
 
     Service->SetParameters(Params); // Reset
 
@@ -222,14 +223,14 @@ bool FRetessellationRollbackTest::RunTest(const FString& Parameters)
     Service->RestoreRetessellationSnapshot(PerfSnapshot);
     const double RestoreTime = (FPlatformTime::Seconds() - RestoreStartTime) * 1000.0;
 
-    UE_LOG(LogTemp, Log, TEXT("  Snapshot creation: %.2f ms"), SnapshotTime);
-    UE_LOG(LogTemp, Log, TEXT("  Snapshot restore: %.2f ms"), RestoreTime);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Snapshot creation: %.2f ms"), SnapshotTime);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Snapshot restore: %.2f ms"), RestoreTime);
 
     // Both operations should be fast (<10ms)
     TestTrue(TEXT("Snapshot creation < 10ms"), SnapshotTime < 10.0);
     TestTrue(TEXT("Snapshot restore < 10ms"), RestoreTime < 10.0);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Rollback performance acceptable"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rollback performance acceptable"));
 
     AddInfo(TEXT("✅ Re-tessellation rollback test complete"));
     AddInfo(FString::Printf(TEXT("Snapshot: %.2fms | Restore: %.2fms | Euler: χ=%d | Area: %.2f%% variance"),

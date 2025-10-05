@@ -1,5 +1,6 @@
 // Milestone 6 Task 1.5: Terrane Serialization & Persistence Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -33,9 +34,9 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Milestone 6 Task 1.5: Terrane Serialization Test ==="));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Milestone 6 Task 1.5: Terrane Serialization Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Initialize simulation
     FTectonicSimulationParameters Params;
@@ -70,14 +71,14 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
     // ========================================
     // TEST 1: Undo After Terrane Extraction
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 1: Undo After Terrane Extraction ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 1: Undo After Terrane Extraction ---"));
 
     // Capture initial state (no terranes)
     const double InitialTimeMy = Service->GetCurrentTimeMy();
     const TArray<FContinentalTerrane>& InitialTerranes = Service->GetTerranes();
     TestEqual(TEXT("No terranes initially"), InitialTerranes.Num(), 0);
 
-    UE_LOG(LogTemp, Log, TEXT("  Initial state: %.1f My, %d terranes"), InitialTimeMy, InitialTerranes.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Initial state: %.1f My, %d terranes"), InitialTimeMy, InitialTerranes.Num());
 
     // Extract terrane
     int32 SeedVertex = INDEX_NONE;
@@ -149,7 +150,7 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
     // Verify terrane exists
     const TArray<FContinentalTerrane>& TerranesAfterExtraction = Service->GetTerranes();
     TestEqual(TEXT("One terrane after extraction"), TerranesAfterExtraction.Num(), 1);
-    UE_LOG(LogTemp, Log, TEXT("  After extraction: %.1f My, %d terranes"), Service->GetCurrentTimeMy(), TerranesAfterExtraction.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After extraction: %.1f My, %d terranes"), Service->GetCurrentTimeMy(), TerranesAfterExtraction.Num());
 
     // Perform undo (should remove terrane)
     Service->Undo();
@@ -159,14 +160,14 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("No terranes after undo"), TerranesAfterUndo.Num(), 0);
     TestEqual(TEXT("Time restored after undo"), Service->GetCurrentTimeMy(), InitialTimeMy);
 
-    UE_LOG(LogTemp, Log, TEXT("  After undo: %.1f My, %d terranes"), Service->GetCurrentTimeMy(), TerranesAfterUndo.Num());
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Undo correctly removed terrane"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After undo: %.1f My, %d terranes"), Service->GetCurrentTimeMy(), TerranesAfterUndo.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Undo correctly removed terrane"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 2: Redo After Undo
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 2: Redo After Undo ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 2: Redo After Undo ---"));
 
     // Perform redo (should restore terrane)
     Service->Redo();
@@ -179,18 +180,18 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
     {
         TestEqual(TEXT("Terrane ID preserved"), TerranesAfterRedo[0].TerraneID, TerraneID);
         TestEqual(TEXT("Terrane vertex count preserved"), TerranesAfterRedo[0].VertexIndices.Num(), TerraneVertices.Num());
-        UE_LOG(LogTemp, Log, TEXT("  Terrane %d restored with %d vertices"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Terrane %d restored with %d vertices"),
             TerranesAfterRedo[0].TerraneID, TerranesAfterRedo[0].VertexIndices.Num());
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  After redo: %.1f My, %d terranes"), Service->GetCurrentTimeMy(), TerranesAfterRedo.Num());
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Redo correctly restored terrane"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After redo: %.1f My, %d terranes"), Service->GetCurrentTimeMy(), TerranesAfterRedo.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Redo correctly restored terrane"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 3: Multiple Undo/Redo Cycles
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 3: Multiple Undo/Redo Cycles ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 3: Multiple Undo/Redo Cycles ---"));
 
     // Advance 5 more steps (terrane should migrate)
     Service->AdvanceSteps(5);
@@ -203,7 +204,7 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
     if (TerranesAfter5Steps.Num() > 0)
     {
         CentroidAfter5Steps = TerranesAfter5Steps[0].Centroid;
-        UE_LOG(LogTemp, Log, TEXT("  After 5 steps: %.1f My, centroid=(%.4f, %.4f, %.4f)"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  After 5 steps: %.1f My, centroid=(%.4f, %.4f, %.4f)"),
             TimeAfter5Steps, CentroidAfter5Steps.X, CentroidAfter5Steps.Y, CentroidAfter5Steps.Z);
     }
 
@@ -218,7 +219,7 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
 
     if (TerranesAfter5Undos.Num() > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("  After 5 undos: %.1f My, centroid=(%.4f, %.4f, %.4f)"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  After 5 undos: %.1f My, centroid=(%.4f, %.4f, %.4f)"),
             Service->GetCurrentTimeMy(),
             TerranesAfter5Undos[0].Centroid.X,
             TerranesAfter5Undos[0].Centroid.Y,
@@ -241,19 +242,19 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
         const double CentroidError = (RestoredCentroid - CentroidAfter5Steps).Length();
         TestTrue(TEXT("Centroid restored accurately"), CentroidError < 1e-10);
 
-        UE_LOG(LogTemp, Log, TEXT("  After 5 redos: %.1f My, centroid=(%.4f, %.4f, %.4f), error=%.2e"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  After 5 redos: %.1f My, centroid=(%.4f, %.4f, %.4f), error=%.2e"),
             Service->GetCurrentTimeMy(),
             RestoredCentroid.X, RestoredCentroid.Y, RestoredCentroid.Z,
             CentroidError);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Multiple undo/redo cycles preserve terrane state"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Multiple undo/redo cycles preserve terrane state"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 4: Terrane State Across Collision/Reattachment
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 4: Terrane State Across Collision/Reattachment ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 4: Terrane State Across Collision/Reattachment ---"));
 
     // Reset simulation
     Service->SetParameters(Params);
@@ -355,7 +356,7 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
         const TArray<FContinentalTerrane>& TerranesAfterReattachment = Service->GetTerranes();
         TestEqual(TEXT("Terrane removed after reattachment"), TerranesAfterReattachment.Num(), 0);
 
-        UE_LOG(LogTemp, Log, TEXT("  After reattachment: %d terranes"), TerranesAfterReattachment.Num());
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  After reattachment: %d terranes"), TerranesAfterReattachment.Num());
 
         // Advance one more step to capture post-reattachment state
         Service->AdvanceSteps(1);
@@ -368,7 +369,7 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
         const TArray<FContinentalTerrane>& TerranesAfterUndoReattachment = Service->GetTerranes();
         TestEqual(TEXT("Terrane restored after undo reattachment"), TerranesAfterUndoReattachment.Num(), 1);
 
-        UE_LOG(LogTemp, Log, TEXT("  After undo reattachment: %d terranes"), TerranesAfterUndoReattachment.Num());
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  After undo reattachment: %d terranes"), TerranesAfterUndoReattachment.Num());
 
         // Undo one more step to restore initial state (after extraction)
         Service->Undo();
@@ -376,26 +377,26 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
         const TArray<FContinentalTerrane>& TerranesAfterSecondUndo = Service->GetTerranes();
         TestEqual(TEXT("No terranes after second undo (back to initial state)"), TerranesAfterSecondUndo.Num(), 0);
 
-        UE_LOG(LogTemp, Log, TEXT("  After second undo: %d terranes (back to initial state)"), TerranesAfterSecondUndo.Num());
-        UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Terrane state across reattachment lifecycle preserved"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  After second undo: %d terranes (back to initial state)"), TerranesAfterSecondUndo.Num());
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Terrane state across reattachment lifecycle preserved"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ SKIP: Could not test reattachment (no terrane or target plate)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ SKIP: Could not test reattachment (no terrane or target plate)"));
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // Summary
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("=== Terrane Serialization Test Summary ==="));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Undo after extraction: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Redo after undo: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Multiple undo/redo cycles: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ State across reattachment: PASS"));
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Terrane Serialization Test PASSED"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Terrane Serialization Test Summary ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Undo after extraction: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Redo after undo: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Multiple undo/redo cycles: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ State across reattachment: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Terrane Serialization Test PASSED"));
 
     return true;
 }

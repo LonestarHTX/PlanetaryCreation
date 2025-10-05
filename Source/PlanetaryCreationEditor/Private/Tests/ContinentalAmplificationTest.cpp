@@ -1,6 +1,7 @@
 // Milestone 6 Task 2.2: Continental Amplification Automation Test
 // Validates exemplar-based terrain synthesis, terrain type classification, and continental detail
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 
@@ -61,7 +62,7 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("At least 20% of vertices are continental"), ContinentalVertexCount > RenderVertices.Num() * 0.2);
     TestTrue(TEXT("At least 20% of vertices are oceanic"), OceanicVertexCount > RenderVertices.Num() * 0.2);
 
-    UE_LOG(LogTemp, Log, TEXT("ContinentalAmplificationTest: Continental vertices: %d (%.1f%%), Oceanic: %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("ContinentalAmplificationTest: Continental vertices: %d (%.1f%%), Oceanic: %d (%.1f%%)"),
         ContinentalVertexCount, 100.0 * ContinentalVertexCount / RenderVertices.Num(),
         OceanicVertexCount, 100.0 * OceanicVertexCount / RenderVertices.Num());
 
@@ -97,7 +98,7 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
 
                 if (DebugLoggedContinental < 3)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("Continental vertex %d amplified: Base=%.1f m, Amplified=%.1f m, Detail=%.1f m"),
+                    UE_LOG(LogPlanetaryCreation, Log, TEXT("Continental vertex %d amplified: Base=%.1f m, Amplified=%.1f m, Detail=%.1f m"),
                         VertexIdx, BaseElevation[VertexIdx], AmplifiedElevation[VertexIdx], ElevationDiff);
                     DebugLoggedContinental++;
                 }
@@ -116,10 +117,10 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
     // or if vertices are classified as Plains. We test that SOME continental vertices show amplification.
     if (ContinentalVertexCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("Continental amplification: %d amplified (%.1f%%), %d unchanged (%.1f%%)"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Continental amplification: %d amplified (%.1f%%), %d unchanged (%.1f%%)"),
             ContinentalAmplifiedCount, 100.0 * ContinentalAmplifiedCount / ContinentalVertexCount,
             ContinentalUnchangedCount, 100.0 * ContinentalUnchangedCount / ContinentalVertexCount);
-        UE_LOG(LogTemp, Log, TEXT("  Avg detail: %.1f m, Max detail: %.1f m"), AvgContinentalDetail, MaxContinentalDetail);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Avg detail: %.1f m, Max detail: %.1f m"), AvgContinentalDetail, MaxContinentalDetail);
 
         // If exemplar library loads, we should see some amplification
         // If it doesn't load, all continental vertices will be unchanged (which is also a valid test result)
@@ -160,7 +161,7 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
                     OceanicChangedCount++;
                     if (DebugLoggedOceanic < 3)
                     {
-                        UE_LOG(LogTemp, Warning, TEXT("Oceanic vertex %d unexpectedly modified by continental amp: Base=%.3f m, Amplified=%.3f m, Diff=%.3f m"),
+                        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Oceanic vertex %d unexpectedly modified by continental amp: Base=%.3f m, Amplified=%.3f m, Diff=%.3f m"),
                             VertexIdx, BaseElevation[VertexIdx], AmplifiedElevation[VertexIdx], ElevationDiff);
                         DebugLoggedOceanic++;
                     }
@@ -174,7 +175,7 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Oceanic vertices unchanged by continental amplification (>99% match base)"),
             OceanicUnchangedCount > OceanicVertexCount * 0.99);
 
-        UE_LOG(LogTemp, Log, TEXT("Oceanic unchanged: %d (%.1f%%), changed: %d (%.1f%%)"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Oceanic unchanged: %d (%.1f%%), changed: %d (%.1f%%)"),
             OceanicUnchangedCount, 100.0 * OceanicUnchangedCount / OceanicVertexCount,
             OceanicChangedCount, 100.0 * OceanicChangedCount / OceanicVertexCount);
     }
@@ -223,7 +224,7 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
             BaseVariance /= ValidCount;
             AmplifiedVariance /= ValidCount;
 
-            UE_LOG(LogTemp, Log, TEXT("Continental variance: Base = %.2f, Amplified = %.2f"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Continental variance: Base = %.2f, Amplified = %.2f"),
                 BaseVariance, AmplifiedVariance);
 
             // If exemplar library loaded, amplified variance should be >= base variance
@@ -268,7 +269,7 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
             MismatchedVertices++;
             if (DebugMismatches < 3)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Determinism mismatch at vertex %d: Run1=%.3f m, Run2=%.3f m, Diff=%.3f m"),
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("Determinism mismatch at vertex %d: Run1=%.3f m, Run2=%.3f m, Diff=%.3f m"),
                     VertexIdx, FirstRunAmplifiedElevation[VertexIdx], SecondRunAmplifiedElevation[VertexIdx], Diff);
                 DebugMismatches++;
             }
@@ -278,7 +279,7 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Same seed produces deterministic amplified elevations (>99% match)"),
         MatchingVertices > RenderVertices.Num() * 0.99);
 
-    UE_LOG(LogTemp, Log, TEXT("Determinism check: %d matching (%.1f%%), %d mismatched (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Determinism check: %d matching (%.1f%%), %d mismatched (%.1f%%)"),
         MatchingVertices, 100.0 * MatchingVertices / RenderVertices.Num(),
         MismatchedVertices, 100.0 * MismatchedVertices / RenderVertices.Num());
 
@@ -286,26 +287,26 @@ bool FContinentalAmplificationTest::RunTest(const FString& Parameters)
     // Test Summary
     // ============================================================================
 
-    UE_LOG(LogTemp, Log, TEXT("ContinentalAmplificationTest: Summary"));
-    UE_LOG(LogTemp, Log, TEXT("  Total vertices: %d"), RenderVertices.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Continental: %d (%.1f%%), Oceanic: %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("ContinentalAmplificationTest: Summary"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total vertices: %d"), RenderVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Continental: %d (%.1f%%), Oceanic: %d (%.1f%%)"),
         ContinentalVertexCount, 100.0 * ContinentalVertexCount / RenderVertices.Num(),
         OceanicVertexCount, 100.0 * OceanicVertexCount / RenderVertices.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Continental amplified: %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Continental amplified: %d (%.1f%%)"),
         ContinentalAmplifiedCount, ContinentalVertexCount > 0 ? 100.0 * ContinentalAmplifiedCount / ContinentalVertexCount : 0.0);
-    UE_LOG(LogTemp, Log, TEXT("  Avg continental detail: %.1f m, Max: %.1f m"), AvgContinentalDetail, MaxContinentalDetail);
-    UE_LOG(LogTemp, Log, TEXT("  Determinism: %d/%d vertices match (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Avg continental detail: %.1f m, Max: %.1f m"), AvgContinentalDetail, MaxContinentalDetail);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Determinism: %d/%d vertices match (%.1f%%)"),
         MatchingVertices, RenderVertices.Num(), 100.0 * MatchingVertices / RenderVertices.Num());
 
     // Final verdict
     if (ContinentalAmplifiedCount == 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("No continental vertices were amplified - exemplar library may have failed to load"));
-        UE_LOG(LogTemp, Warning, TEXT("This is not a test failure - it indicates exemplar data is missing or invalid"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("No continental vertices were amplified - exemplar library may have failed to load"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("This is not a test failure - it indicates exemplar data is missing or invalid"));
     }
     else
     {
-        UE_LOG(LogTemp, Log, TEXT("✅ Continental amplification working correctly"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("✅ Continental amplification working correctly"));
     }
 
     return true;

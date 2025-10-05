@@ -1,5 +1,6 @@
 // Milestone 6 Task 1.1: Terrane Mechanics Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -34,9 +35,9 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Milestone 6 Task 1.1: Terrane Mechanics Test ==="));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Milestone 6 Task 1.1: Terrane Mechanics Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Initialize simulation at Level 3 (642 vertices, production-scale)
     // Use SubdivisionLevel=0 (20 plates) to ensure each plate has enough vertices (~32) for terrane extraction
@@ -53,31 +54,31 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
     const TArray<int32>& VertexPlateAssignments = Service->GetVertexPlateAssignments();
     const TArray<FTectonicPlate>& Plates = Service->GetPlatesForModification();
 
-    UE_LOG(LogTemp, Log, TEXT("Baseline mesh initialized:"));
-    UE_LOG(LogTemp, Log, TEXT("  Vertices: %d"), RenderVertices.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Triangles: %d"), RenderTriangles.Num() / 3);
-    UE_LOG(LogTemp, Log, TEXT("  Plates: %d"), Plates.Num());
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Baseline mesh initialized:"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices: %d"), RenderVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Triangles: %d"), RenderTriangles.Num() / 3);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plates: %d"), Plates.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 1: Baseline Topology Validation
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 1: Baseline Topology Validation ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 1: Baseline Topology Validation ---"));
 
     FString ValidationError;
     TestTrue(TEXT("Baseline topology valid"), Service->ValidateTopology(ValidationError));
     if (!ValidationError.IsEmpty())
     {
-        UE_LOG(LogTemp, Error, TEXT("  Validation error: %s"), *ValidationError);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("  Validation error: %s"), *ValidationError);
         return false;
     }
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Baseline topology valid"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Baseline topology valid"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 2: Find Continental Plate and Select Terrane Region
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 2: Select Terrane Region ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 2: Select Terrane Region ---"));
 
     // Find a continental plate with sufficient vertices (need ~50 for viable terrane)
     int32 ContinentalPlateID = INDEX_NONE;
@@ -108,7 +109,7 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
 
     if (ContinentalPlateID == INDEX_NONE || LargestPlateVertexCount < 10)
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No large continental plates found (need 10+ vertices), assigning largest plate as continental"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No large continental plates found (need 10+ vertices), assigning largest plate as continental"));
         // Find largest plate and make it continental
         TArray<FTectonicPlate>& MutablePlates = Service->GetPlatesForModification();
         for (FTectonicPlate& Plate : MutablePlates)
@@ -151,7 +152,7 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
     }
 
     TestTrue(TEXT("Continental plate has vertices"), PlateVertices.Num() > 0);
-    UE_LOG(LogTemp, Log, TEXT("  Continental plate %d: %d vertices"), ContinentalPlateID, PlateVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Continental plate %d: %d vertices"), ContinentalPlateID, PlateVertices.Num());
 
     // Select ~10 vertices for terrane (or 1/4 of plate vertices, whichever is larger but capped at 50)
     const int32 MinTerraneSize = 10;
@@ -209,17 +210,17 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Selected %d vertices for terrane extraction"), TerraneVertices.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Selected %d vertices for terrane extraction"), TerraneVertices.Num());
     const double TerraneArea = Service->ComputeTerraneArea(TerraneVertices);
-    UE_LOG(LogTemp, Log, TEXT("  Terrane area: %.2f km²"), TerraneArea);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Terrane area: %.2f km²"), TerraneArea);
     TestTrue(TEXT("Terrane area above minimum (100 km²)"), TerraneArea >= 100.0);
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Terrane region selected"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Terrane region selected"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 3: Extract Terrane (Performance <5ms)
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 3: Extract Terrane ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 3: Extract Terrane ---"));
 
     // Capture pre-extraction snapshot for rollback validation
     const TArray<int32> PreExtractionAssignments = VertexPlateAssignments;
@@ -230,11 +231,11 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
     const double ExtractionTimeMs = (FPlatformTime::Seconds() - ExtractionStartTime) * 1000.0;
 
     TestTrue(TEXT("Extraction succeeded"), bExtractionSuccess);
-    UE_LOG(LogTemp, Log, TEXT("  Extraction time: %.2f ms (target: <5ms)"), ExtractionTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Extraction time: %.2f ms (target: <5ms)"), ExtractionTimeMs);
 
     if (!bExtractionSuccess)
     {
-        UE_LOG(LogTemp, Error, TEXT("  ❌ FAIL: Extraction failed - cannot continue test"));
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("  ❌ FAIL: Extraction failed - cannot continue test"));
         return false;
     }
 
@@ -263,20 +264,20 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
 
     // Validate topology still valid after extraction
     TestTrue(TEXT("Post-extraction topology valid"), Service->ValidateTopology(ValidationError));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Terrane extracted successfully (%.2f ms)"), ExtractionTimeMs);
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Terrane extracted successfully (%.2f ms)"), ExtractionTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 4: Reattach Terrane (Performance <10ms)
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 4: Reattach Terrane ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 4: Reattach Terrane ---"));
 
     const double ReattachmentStartTime = FPlatformTime::Seconds();
     const bool bReattachmentSuccess = Service->ReattachTerrane(TerraneID, ContinentalPlateID);
     const double ReattachmentTimeMs = (FPlatformTime::Seconds() - ReattachmentStartTime) * 1000.0;
 
     TestTrue(TEXT("Reattachment succeeded"), bReattachmentSuccess);
-    UE_LOG(LogTemp, Log, TEXT("  Reattachment time: %.2f ms (target: <10ms)"), ReattachmentTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Reattachment time: %.2f ms (target: <10ms)"), ReattachmentTimeMs);
     TestTrue(TEXT("Reattachment performance <10ms"), ReattachmentTimeMs < 10.0);
 
     // Validate terrane removed from active list
@@ -298,7 +299,7 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
     {
         if (PreExtractionAssignments[i] != PostReattachmentAssignments[i])
         {
-            UE_LOG(LogTemp, Error, TEXT("  Vertex %d assignment mismatch: pre=%d, post=%d"),
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("  Vertex %d assignment mismatch: pre=%d, post=%d"),
                 i, PreExtractionAssignments[i], PostReattachmentAssignments[i]);
             bMeshIdentical = false;
             break;
@@ -306,13 +307,13 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
     }
     TestTrue(TEXT("Mesh bit-identical after reattachment"), bMeshIdentical);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Terrane reattached successfully (%.2f ms)"), ReattachmentTimeMs);
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Terrane reattached successfully (%.2f ms)"), ReattachmentTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 5: Rollback Integration (Undo/Redo)
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 5: Rollback Integration ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 5: Rollback Integration ---"));
 
     // Capture history snapshot BEFORE extraction (for undo test)
     Service->CaptureHistorySnapshot();
@@ -343,13 +344,13 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
     Service->Redo();
     TestEqual(TEXT("Terrane restored after redo"), Service->GetTerranes().Num(), 1);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Undo/Redo integration working"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Undo/Redo integration working"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 6: Edge Case - Insufficient Area
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 6: Edge Case - Insufficient Area ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 6: Edge Case - Insufficient Area ---"));
 
     // Refresh plate vertices after undo/redo (vertex assignments may have changed)
     TArray<int32> CurrentPlateVertices;
@@ -374,21 +375,21 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Single-vertex extraction rejected"), bSingleVertexExtraction);
     TestEqual(TEXT("No terrane created for single vertex"), Service->GetTerranes().Num(), 1); // Still has one from redo
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Single-vertex terrane rejected (edge case handled)"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Single-vertex terrane rejected (edge case handled)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // Summary
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("=== Terrane Mechanics Test Summary ==="));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Topology validation: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Extraction (%.2f ms): PASS"), ExtractionTimeMs);
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Reattachment (%.2f ms): PASS"), ReattachmentTimeMs);
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Mesh identity preservation: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Undo/Redo integration: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Edge case handling: PASS"));
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Terrane Mechanics Test PASSED"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Terrane Mechanics Test Summary ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Topology validation: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Extraction (%.2f ms): PASS"), ExtractionTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Reattachment (%.2f ms): PASS"), ReattachmentTimeMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Mesh identity preservation: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Undo/Redo integration: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Edge case handling: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Terrane Mechanics Test PASSED"));
 
     return true;
 }

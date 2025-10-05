@@ -1,5 +1,6 @@
 // Milestone 5 Task 2.2: Sediment Transport Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -28,12 +29,12 @@ bool FSedimentTransportTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Sediment Transport Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Sediment Transport Test ==="));
 
     // Test 1: Basic Sediment Diffusion
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Basic Sediment Diffusion"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Basic Sediment Diffusion"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 12345;
@@ -83,16 +84,16 @@ bool FSedimentTransportTest::RunTest(const FString& Parameters)
         TotalSediment += Thickness;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Vertices with sediment: %d / %d"), VerticesWithSediment, SedimentThickness.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Total sediment: %.2f m"), TotalSediment);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices with sediment: %d / %d"), VerticesWithSediment, SedimentThickness.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total sediment: %.2f m"), TotalSediment);
 
     TestTrue(TEXT("Some vertices accumulated sediment"), VerticesWithSediment > 0);
     TestTrue(TEXT("Total sediment is positive"), TotalSediment > 0.0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Basic sediment diffusion validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Basic sediment diffusion validated"));
 
     // Test 2: Sediment Moves Downhill
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Sediment Moves Downhill"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Sediment Moves Downhill"));
 
     Params.Seed = 54321;
     Service->SetParameters(Params);
@@ -149,17 +150,17 @@ bool FSedimentTransportTest::RunTest(const FString& Parameters)
     if (HighElevCount > 0) HighElevSediment /= HighElevCount;
     if (LowElevCount > 0) LowElevSediment /= LowElevCount;
 
-    UE_LOG(LogTemp, Log, TEXT("  High elevation (>median) avg sediment: %.4f m"), HighElevSediment);
-    UE_LOG(LogTemp, Log, TEXT("  Low elevation (≤median) avg sediment: %.4f m"), LowElevSediment);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  High elevation (>median) avg sediment: %.4f m"), HighElevSediment);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Low elevation (≤median) avg sediment: %.4f m"), LowElevSediment);
 
     // Stage 0 diffusion should move sediment from high to low elevations
     // With uniform ocean floor, we expect SOME sediment in lower half, not necessarily equal distribution
     TestTrue(TEXT("Low elevation has accumulated sediment"), LowElevSediment > 0.0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Downhill sediment transport validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Downhill sediment transport validated"));
 
     // Test 3: Determinism
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Determinism (Same Seed → Same Results)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Determinism (Same Seed → Same Results)"));
 
     Params.Seed = 77777;
     Params.bEnableDynamicRetessellation = false;
@@ -207,13 +208,13 @@ bool FSedimentTransportTest::RunTest(const FString& Parameters)
         if (Diff > 1e-6) MismatchCount++;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Mismatches: %d / %d (max diff: %.9f m)"), MismatchCount, SedimentRun1.Num(), MaxDiff);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Mismatches: %d / %d (max diff: %.9f m)"), MismatchCount, SedimentRun1.Num(), MaxDiff);
 
     TestEqual(TEXT("Deterministic sediment transport"), MismatchCount, 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Determinism validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Determinism validated"));
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Sediment Transport Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Sediment Transport Test Complete ==="));
     AddInfo(TEXT("✅ Sediment transport test complete (3 tests)"));
     AddInfo(FString::Printf(TEXT("Vertices with sediment: %d | Total sediment: %.2f m | Determinism: ✓"),
         VerticesWithSediment, TotalSediment));

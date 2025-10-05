@@ -1,6 +1,7 @@
 // Milestone 4 Task 1.2: Plate Split & Merge Implementation
 // Implements rift-driven splitting and subduction-driven merging per paper Sections 4.2-4.3
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "HAL/PlatformTime.h"
 
@@ -57,13 +58,13 @@ void UTectonicSimulationService::DetectAndExecutePlateSplits()
 
                 if (Parameters.bEnableRiftPropagation && Boundary.BoundaryState == EBoundaryState::Rifting)
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[Split Detection] Plate %d candidate for rift-based split along boundary with Plate %d (rift width=%.0f m > %.0f m, velocity=%.4f rad/My)"),
+                    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Split Detection] Plate %d candidate for rift-based split along boundary with Plate %d (rift width=%.0f m > %.0f m, velocity=%.4f rad/My)"),
                         PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key,
                         Boundary.RiftWidthMeters, Parameters.RiftSplitThresholdMeters, Boundary.RelativeVelocity);
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[Split Detection] Plate %d candidate for duration-based split along boundary with Plate %d (velocity=%.4f rad/My, duration=%.1f My)"),
+                    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Split Detection] Plate %d candidate for duration-based split along boundary with Plate %d (velocity=%.4f rad/My, duration=%.1f My)"),
                         PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key,
                         Boundary.RelativeVelocity, Boundary.DivergentDurationMy);
                 }
@@ -88,11 +89,11 @@ void UTectonicSimulationService::DetectAndExecutePlateSplits()
             const bool Success = SplitPlate(PlateToSplit, BoundaryKey, *Boundary);
             if (Success)
             {
-                UE_LOG(LogTemp, Log, TEXT("[Split] Successfully split Plate %d → new plate count: %d"), PlateToSplit, Plates.Num());
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[Split] Successfully split Plate %d → new plate count: %d"), PlateToSplit, Plates.Num());
             }
             else
             {
-                UE_LOG(LogTemp, Warning, TEXT("[Split] Failed to split Plate %d (validation failed)"), PlateToSplit);
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Split] Failed to split Plate %d (validation failed)"), PlateToSplit);
             }
         }
     }
@@ -139,7 +140,7 @@ void UTectonicSimulationService::DetectAndExecutePlateMerges()
                 CandidateMerges.Add(TPair<TPair<int32, int32>, TPair<int32, int32>>(
                     TPair<int32, int32>(ConsumedID, SurvivorID), PlateIDs));
 
-                UE_LOG(LogTemp, Warning, TEXT("[Merge Detection] Plate %d candidate for merge into Plate %d (stress=%.1f MPa, area ratio=%.2f%%)"),
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Merge Detection] Plate %d candidate for merge into Plate %d (stress=%.1f MPa, area ratio=%.2f%%)"),
                     ConsumedID, SurvivorID, Boundary.AccumulatedStress, AreaRatio * 100.0);
             }
         }
@@ -158,12 +159,12 @@ void UTectonicSimulationService::DetectAndExecutePlateMerges()
             const bool Success = MergePlates(ConsumedID, SurvivorID, BoundaryKey, *Boundary);
             if (Success)
             {
-                UE_LOG(LogTemp, Log, TEXT("[Merge] Successfully merged Plate %d into Plate %d → new plate count: %d"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[Merge] Successfully merged Plate %d into Plate %d → new plate count: %d"),
                     ConsumedID, SurvivorID, Plates.Num());
             }
             else
             {
-                UE_LOG(LogTemp, Warning, TEXT("[Merge] Failed to merge Plate %d into Plate %d (validation failed)"),
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Merge] Failed to merge Plate %d into Plate %d (validation failed)"),
                     ConsumedID, SurvivorID);
             }
         }
@@ -177,7 +178,7 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
     FTectonicPlate* OriginalPlate = Plates.FindByPredicate([PlateID](const FTectonicPlate& P) { return P.PlateID == PlateID; });
     if (!OriginalPlate)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Split] Plate %d not found"), PlateID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[Split] Plate %d not found"), PlateID);
         return false;
     }
 
@@ -246,15 +247,15 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
         : OriginalPlate->EulerPoleAxis; // Fallback to parent axis
 
     // Log the derivation for validation
-    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Parent: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Split Derivation] Parent: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
         ParentOmega.Length(),
         OriginalPlate->EulerPoleAxis.X, OriginalPlate->EulerPoleAxis.Y, OriginalPlate->EulerPoleAxis.Z);
-    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Rift direction: R=(%.3f,%.3f,%.3f), divergence=%.4f rad/My"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Split Derivation] Rift direction: R=(%.3f,%.3f,%.3f), divergence=%.4f rad/My"),
         RiftDirection.X, RiftDirection.Y, RiftDirection.Z, DivergenceMagnitude);
-    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Child A: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Split Derivation] Child A: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
         OriginalPlate->AngularVelocity,
         OriginalPlate->EulerPoleAxis.X, OriginalPlate->EulerPoleAxis.Y, OriginalPlate->EulerPoleAxis.Z);
-    UE_LOG(LogTemp, Log, TEXT("[Split Derivation] Child B: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Split Derivation] Child B: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
         NewPlate.AngularVelocity,
         NewPlate.EulerPoleAxis.X, NewPlate.EulerPoleAxis.Y, NewPlate.EulerPoleAxis.Z);
 
@@ -283,7 +284,7 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
     Event.VelocityAtEvent = Boundary.RelativeVelocity;
     TopologyEvents.Add(Event);
 
-    UE_LOG(LogTemp, Log, TEXT("[Split] Plate %d split into Plate %d at %.2f My (stress=%.1f MPa, velocity=%.4f rad/My)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Split] Plate %d split into Plate %d at %.2f My (stress=%.1f MPa, velocity=%.4f rad/My)"),
         PlateID, NewPlate.PlateID, CurrentTimeMy, Boundary.AccumulatedStress, Boundary.RelativeVelocity);
 
     // Trigger full re-tessellation to rebuild mesh with new plate configuration
@@ -301,7 +302,7 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
     // Validate plate count increased
     if (Plates.Num() != OriginalPlateCount + 1)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Split] Plate count mismatch after split (expected %d, got %d)"),
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[Split] Plate count mismatch after split (expected %d, got %d)"),
             OriginalPlateCount + 1, Plates.Num());
         return false;
     }
@@ -315,7 +316,7 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
 
     // Milestone 4 Phase 4.2: Increment topology version (split changed geometry)
     TopologyVersion++;
-    UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Topology version incremented after split: %d"), TopologyVersion);
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] Topology version incremented after split: %d"), TopologyVersion);
 
     return true;
 }
@@ -329,7 +330,7 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
 
     if (ConsumedIndex == INDEX_NONE || SurvivorIndex == INDEX_NONE)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Merge] Plate %d or %d not found"), ConsumedPlateID, SurvivorPlateID);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[Merge] Plate %d or %d not found"), ConsumedPlateID, SurvivorPlateID);
         return false;
     }
 
@@ -358,7 +359,7 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
 
     if (TotalArea < 1.0)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Merge] Invalid plate areas (survivor=%d, consumed=%d vertices)"),
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[Merge] Invalid plate areas (survivor=%d, consumed=%d vertices)"),
             SurvivorPlate.VertexIndices.Num(), ConsumedPlate.VertexIndices.Num());
         return false;
     }
@@ -380,15 +381,15 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
     const FVector3d MergedCentroid = ((SurvivorPlate.Centroid * AreaSurvivor + ConsumedPlate.Centroid * AreaConsumed) / TotalArea).GetSafeNormal();
 
     // Log the derivation for validation
-    UE_LOG(LogTemp, Log, TEXT("[Merge Derivation] Survivor: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f), area=%d vertices"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Merge Derivation] Survivor: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f), area=%d vertices"),
         SurvivorPlate.AngularVelocity,
         SurvivorPlate.EulerPoleAxis.X, SurvivorPlate.EulerPoleAxis.Y, SurvivorPlate.EulerPoleAxis.Z,
         SurvivorPlate.VertexIndices.Num());
-    UE_LOG(LogTemp, Log, TEXT("[Merge Derivation] Consumed: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f), area=%d vertices"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Merge Derivation] Consumed: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f), area=%d vertices"),
         ConsumedPlate.AngularVelocity,
         ConsumedPlate.EulerPoleAxis.X, ConsumedPlate.EulerPoleAxis.Y, ConsumedPlate.EulerPoleAxis.Z,
         ConsumedPlate.VertexIndices.Num());
-    UE_LOG(LogTemp, Log, TEXT("[Merge Derivation] Merged: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Merge Derivation] Merged: ω=%.4f rad/My, axis=(%.3f,%.3f,%.3f)"),
         MergedAngularVelocity,
         MergedEulerPoleAxis.X, MergedEulerPoleAxis.Y, MergedEulerPoleAxis.Z);
 
@@ -412,7 +413,7 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
     Event.VelocityAtEvent = Boundary.RelativeVelocity;
     TopologyEvents.Add(Event);
 
-    UE_LOG(LogTemp, Log, TEXT("[Merge] Plate %d consumed by Plate %d at %.2f My (stress=%.1f MPa)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Merge] Plate %d consumed by Plate %d at %.2f My (stress=%.1f MPa)"),
         ConsumedPlateID, SurvivorPlateID, CurrentTimeMy, Boundary.AccumulatedStress);
 
     // Remove consumed plate
@@ -429,7 +430,7 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
     // Validate plate count decreased
     if (Plates.Num() != OriginalPlateCount - 1)
     {
-        UE_LOG(LogTemp, Error, TEXT("[Merge] Plate count mismatch after merge (expected %d, got %d)"),
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[Merge] Plate count mismatch after merge (expected %d, got %d)"),
             OriginalPlateCount - 1, Plates.Num());
         return false;
     }
@@ -443,7 +444,7 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
 
     // Milestone 4 Phase 4.2: Increment topology version (merge changed geometry)
     TopologyVersion++;
-    UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Topology version incremented after merge: %d"), TopologyVersion);
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] Topology version incremented after merge: %d"), TopologyVersion);
 
     return true;
 }
@@ -558,7 +559,7 @@ void UTectonicSimulationService::UpdateBoundaryStates(double DeltaTimeMy)
         // Log state transitions
         if (Boundary.BoundaryState != OldState)
         {
-            UE_LOG(LogTemp, Verbose, TEXT("[Boundary State] Plate %d <-> %d: %s → %s at %.2f My (velocity=%.4f rad/My)"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[Boundary State] Plate %d <-> %d: %s → %s at %.2f My (velocity=%.4f rad/My)"),
                 BoundaryPair.Key.Key, BoundaryPair.Key.Value,
                 OldState == EBoundaryState::Nascent ? TEXT("Nascent") : (OldState == EBoundaryState::Active ? TEXT("Active") : TEXT("Dormant")),
                 Boundary.BoundaryState == EBoundaryState::Nascent ? TEXT("Nascent") : (Boundary.BoundaryState == EBoundaryState::Active ? TEXT("Active") : TEXT("Dormant")),

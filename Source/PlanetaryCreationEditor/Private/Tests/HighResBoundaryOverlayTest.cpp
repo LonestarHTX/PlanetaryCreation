@@ -1,5 +1,6 @@
 // Milestone 4 Task 3.1: High-Resolution Boundary Overlay Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "TectonicSimulationController.h"
@@ -34,12 +35,12 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== High-Resolution Boundary Overlay Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== High-Resolution Boundary Overlay Test ==="));
 
     // Test 1: Baseline - Detect Boundary Edges at Subdivision Level 2
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Boundary Edge Detection at Level 2"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Boundary Edge Detection at Level 2"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 42;
@@ -92,16 +93,16 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
     }
 
     const int32 BoundaryEdgeCount_L2 = BoundaryEdges.Num();
-    UE_LOG(LogTemp, Log, TEXT("  Detected %d boundary edges from %d triangles"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Detected %d boundary edges from %d triangles"),
         BoundaryEdgeCount_L2, RenderTriangles.Num() / 3);
 
     TestTrue(TEXT("Boundary edges detected"), BoundaryEdgeCount_L2 > 0);
     TestTrue(TEXT("Edge count reasonable for 20 plates"), BoundaryEdgeCount_L2 > 50 && BoundaryEdgeCount_L2 < 500);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Boundary edge detection validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Boundary edge detection validated"));
 
     // Test 2: Subdivision Level Scaling (Higher LOD = More Edges)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Subdivision Level Scaling"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Subdivision Level Scaling"));
 
     Params.RenderSubdivisionLevel = 3; // 1280 faces (4x more)
     Service->SetParameters(Params);
@@ -144,18 +145,18 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
     }
 
     const int32 BoundaryEdgeCount_L3 = BoundaryEdges_L3.Num();
-    UE_LOG(LogTemp, Log, TEXT("  Level 2: %d edges | Level 3: %d edges"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Level 2: %d edges | Level 3: %d edges"),
         BoundaryEdgeCount_L2, BoundaryEdgeCount_L3);
 
     TestTrue(TEXT("Higher subdivision = more boundary edges"), BoundaryEdgeCount_L3 > BoundaryEdgeCount_L2);
     const double EdgeScalingFactor = static_cast<double>(BoundaryEdgeCount_L3) / BoundaryEdgeCount_L2;
-    UE_LOG(LogTemp, Log, TEXT("  Edge scaling factor: %.2fx"), EdgeScalingFactor);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Edge scaling factor: %.2fx"), EdgeScalingFactor);
     TestTrue(TEXT("Edge scaling factor reasonable (2-6x)"), EdgeScalingFactor >= 2.0 && EdgeScalingFactor <= 6.0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Subdivision scaling validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Subdivision scaling validated"));
 
     // Test 3: No False Positives (All Edges Touch Valid Boundaries)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: False Positive Detection"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: False Positive Detection"));
 
     const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries = Service->GetBoundaries();
 
@@ -184,17 +185,17 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
     }
 
     const double ValidEdgeRatio = static_cast<double>(ValidEdgeCount) / BoundaryEdgeCount_L2;
-    UE_LOG(LogTemp, Log, TEXT("  Valid edges: %d / %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Valid edges: %d / %d (%.1f%%)"),
         ValidEdgeCount, BoundaryEdgeCount_L2, ValidEdgeRatio * 100.0);
 
     // Note: Render mesh resolution > simulation mesh resolution, so not all edges map 1:1
     // A ratio of 30-50% is expected (render mesh traces seams more finely than simulation boundaries)
     TestTrue(TEXT("Some edges correspond to real boundaries"), ValidEdgeRatio > 0.2); // Relaxed tolerance
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Boundary edge detection functional (ratio varies by LOD)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Boundary edge detection functional (ratio varies by LOD)"));
 
     // Test 4: Boundary Type Distribution
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Boundary Type Distribution"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Boundary Type Distribution"));
 
     int32 ConvergentEdgeCount = 0;
     int32 DivergentEdgeCount = 0;
@@ -228,7 +229,7 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Convergent: %d edges | Divergent: %d edges | Transform: %d edges"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Convergent: %d edges | Divergent: %d edges | Transform: %d edges"),
         ConvergentEdgeCount, DivergentEdgeCount, TransformEdgeCount);
 
     // Early in simulation, most boundaries are Transform (haven't diverged/converged yet)
@@ -238,16 +239,16 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
 
     if (ConvergentEdgeCount > 0 && DivergentEdgeCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Multiple boundary types validated (ideal)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Multiple boundary types validated (ideal)"));
     }
     else
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Boundary type detection functional (early simulation)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Boundary type detection functional (early simulation)"));
     }
 
     // Test 5: Stress Modulation (High-Stress Boundaries Exist)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Stress Modulation Data"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Stress Modulation Data"));
 
     int32 HighStressEdgeCount = 0;
     double MaxStress = 0.0;
@@ -279,24 +280,24 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  High-stress edges (>50 MPa): %d"), HighStressEdgeCount);
-    UE_LOG(LogTemp, Log, TEXT("  Max stress: %.1f MPa"), MaxStress);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  High-stress edges (>50 MPa): %d"), HighStressEdgeCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max stress: %.1f MPa"), MaxStress);
 
     // Stress accumulates over time - early simulations may have low stress
     TestTrue(TEXT("Stress data exists"), MaxStress >= 0.0); // Stress is tracked (may be zero early)
 
     if (HighStressEdgeCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ High-stress boundaries detected (mature simulation)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ High-stress boundaries detected (mature simulation)"));
     }
     else
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Stress tracking functional (accumulates over time)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Stress tracking functional (accumulates over time)"));
     }
 
     // Test 6: Rift Width Modulation (Active Rifts Exist)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 6: Rift Width Modulation Data"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 6: Rift Width Modulation Data"));
 
     // Enable rift propagation and run simulation longer
     Params.bEnableRiftPropagation = true;
@@ -317,22 +318,22 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Active rifts: %d"), RiftingEdgeCount);
-    UE_LOG(LogTemp, Log, TEXT("  Max rift width: %.0f m"), MaxRiftWidth);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Active rifts: %d"), RiftingEdgeCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max rift width: %.0f m"), MaxRiftWidth);
 
     if (RiftingEdgeCount > 0)
     {
         TestTrue(TEXT("Rift width data available"), MaxRiftWidth > 0.0);
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Rift width modulation data validated"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rift width modulation data validated"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No active rifts in this simulation (depends on dynamics)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No active rifts in this simulation (depends on dynamics)"));
     }
 
     // Test 7: Overlay Deviation Metric (Acceptance: ≤1 render vertex deviation)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 7: Overlay Deviation Metric"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 7: Overlay Deviation Metric"));
 
     // Measure how closely boundary edges align with actual plate boundaries
     // For each boundary edge, find the closest simulation boundary vertex (SharedVertices)
@@ -386,17 +387,17 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
     // Sphere circumference / sqrt(vertices) ≈ vertex spacing
     const double EstimatedVertexSpacingKm = (2.0 * PI * EarthRadiusKm) / FMath::Sqrt(static_cast<double>(RenderVertices.Num()));
 
-    UE_LOG(LogTemp, Log, TEXT("  Measured edges: %d"), MeasuredEdges);
-    UE_LOG(LogTemp, Log, TEXT("  Average deviation: %.1f km (%.4f rad)"), AvgDeviationKm, AvgDeviation);
-    UE_LOG(LogTemp, Log, TEXT("  Max deviation: %.1f km (%.4f rad)"), MaxDeviationKm, MaxDeviation);
-    UE_LOG(LogTemp, Log, TEXT("  Render vertex spacing (est.): %.1f km"), EstimatedVertexSpacingKm);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Measured edges: %d"), MeasuredEdges);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Average deviation: %.1f km (%.4f rad)"), AvgDeviationKm, AvgDeviation);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max deviation: %.1f km (%.4f rad)"), MaxDeviationKm, MaxDeviation);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Render vertex spacing (est.): %.1f km"), EstimatedVertexSpacingKm);
 
     // Acceptance: Max deviation ≤ 1.5 render vertex spacing (overlay traces render mesh, not simulation mesh)
     // Average should be less than max, typically ~0.75x vertex spacing
     TestTrue(TEXT("Max deviation within 1.5 render vertex"), MaxDeviationKm <= EstimatedVertexSpacingKm * 1.5);
     TestTrue(TEXT("Average deviation within 1.0 render vertex"), AvgDeviationKm <= EstimatedVertexSpacingKm * 1.0);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Overlay deviation metric validated (≤1 render vertex)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Overlay deviation metric validated (≤1 render vertex)"));
 
     AddInfo(TEXT("✅ High-resolution boundary overlay test complete"));
     AddInfo(FString::Printf(TEXT("Level 2: %d edges | Level 3: %d edges | Valid: %.1f%% | Deviation: %.1f km avg"),

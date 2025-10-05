@@ -1,5 +1,7 @@
 #include "SPTectonicToolPanel.h"
 
+#include "PlanetaryCreationLogging.h"
+
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
 #include "TectonicPlaybackController.h"
@@ -482,7 +484,32 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 [
                     SNew(STextBlock)
                     .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationLabel", "Heightmap Visualization"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationTooltip", "Color vertices by elevation: blue (deep ocean -6km) → cyan → green (sea level) → yellow → red (mountains +2km)"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationTooltip", "Color vertices by elevation using a Turbo-inspired ramp: abyssal (-6 km) → coast (0 km) → alpine (+2 km)."))
+                ]
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapLegendLabel", "Legend: deep ocean → coastal shelf → alpine"))
+                .WrapTextAt(340.0f)
+                .ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
+            ]
+
+            // Sea-level highlight toggle
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetSeaLevelHighlightState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnSeaLevelHighlightChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightLabel", "Emphasize Sea Level"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightTooltip", "Render a thin white isoline near 0 m to highlight coastlines."))
                 ]
             ]
 
@@ -520,7 +547,7 @@ FReply SPTectonicToolPanel::HandleRegenerateClicked()
             // Refresh preview mesh without advancing time
             Controller->RebuildPreview();
 
-            UE_LOG(LogTemp, Log, TEXT("Regenerated plates with seed %d"), CachedSeed);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Regenerated plates with seed %d"), CachedSeed);
         }
     }
     return FReply::Handled();
@@ -621,7 +648,7 @@ void SPTectonicToolPanel::OnSubdivisionValueCommitted(int32 NewValue, ETextCommi
             // Refresh preview mesh
             Controller->RebuildPreview();
 
-            UE_LOG(LogTemp, Log, TEXT("Updated render subdivision level to %d"), CachedSubdivisionLevel);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Updated render subdivision level to %d"), CachedSubdivisionLevel);
         }
     }
 }
@@ -641,7 +668,7 @@ void SPTectonicToolPanel::OnVelocityVisualizationChanged(ECheckBoxState NewState
     {
         const bool bEnabled = (NewState == ECheckBoxState::Checked);
         Controller->SetVelocityVisualizationEnabled(bEnabled);
-        UE_LOG(LogTemp, Log, TEXT("Velocity visualization %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Velocity visualization %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
     }
 }
 
@@ -660,7 +687,7 @@ void SPTectonicToolPanel::OnElevationModeChanged(ECheckBoxState NewState)
     {
         const EElevationMode Mode = (NewState == ECheckBoxState::Checked) ? EElevationMode::Displaced : EElevationMode::Flat;
         Controller->SetElevationMode(Mode);
-        UE_LOG(LogTemp, Log, TEXT("Elevation mode: %s"), Mode == EElevationMode::Displaced ? TEXT("Displaced") : TEXT("Flat"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Elevation mode: %s"), Mode == EElevationMode::Displaced ? TEXT("Displaced") : TEXT("Flat"));
     }
 }
 
@@ -679,7 +706,7 @@ void SPTectonicToolPanel::OnBoundaryOverlayChanged(ECheckBoxState NewState)
     {
         const bool bVisible = (NewState == ECheckBoxState::Checked);
         Controller->SetBoundariesVisible(bVisible);
-        UE_LOG(LogTemp, Log, TEXT("Boundary overlay %s"), bVisible ? TEXT("visible") : TEXT("hidden"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Boundary overlay %s"), bVisible ? TEXT("visible") : TEXT("hidden"));
     }
 }
 
@@ -703,7 +730,7 @@ void SPTectonicToolPanel::OnAutomaticLODChanged(ECheckBoxState NewState)
         {
             const bool bEnabled = (NewState == ECheckBoxState::Checked);
             Service->SetAutomaticLODEnabled(bEnabled);
-            UE_LOG(LogTemp, Log, TEXT("Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
         }
     }
 }
@@ -728,10 +755,13 @@ void SPTectonicToolPanel::OnHeightmapVisualizationChanged(ECheckBoxState NewStat
         {
             const bool bEnabled = (NewState == ECheckBoxState::Checked);
             Service->SetHeightmapVisualizationEnabled(bEnabled);
-            UE_LOG(LogTemp, Log, TEXT("Heightmap visualization %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Heightmap visualization %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
 
             // Trigger mesh refresh to apply new coloring immediately
-            Controller->RebuildPreview();
+            if (!Controller->RefreshPreviewColors())
+            {
+                Controller->RebuildPreview();
+            }
         }
     }
 }
@@ -748,12 +778,12 @@ FReply SPTectonicToolPanel::HandlePlayClicked()
     if (PlaybackController->IsPlaying())
     {
         PlaybackController->Pause();
-        UE_LOG(LogTemp, Log, TEXT("Playback paused"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Playback paused"));
     }
     else
     {
         PlaybackController->Play();
-        UE_LOG(LogTemp, Log, TEXT("Playback started"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Playback started"));
     }
 
     return FReply::Handled();
@@ -773,7 +803,7 @@ FReply SPTectonicToolPanel::HandleStopClicked()
     if (PlaybackController)
     {
         PlaybackController->Stop();
-        UE_LOG(LogTemp, Log, TEXT("Playback stopped"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Playback stopped"));
     }
     return FReply::Handled();
 }
@@ -836,7 +866,7 @@ void SPTectonicToolPanel::OnTimelineScrubbed(float NewValue)
             {
                 // Rebuild mesh to reflect the jumped-to state
                 Controller->RebuildPreview();
-                UE_LOG(LogTemp, Log, TEXT("Timeline scrubbed to step %d (%.1f My)"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("Timeline scrubbed to step %d (%.1f My)"),
                     TargetIndex, Service->GetCurrentTimeMy());
             }
         }
@@ -903,7 +933,7 @@ FReply SPTectonicToolPanel::HandleUndoClicked()
             {
                 // Rebuild mesh to reflect restored state
                 Controller->RebuildPreview();
-                UE_LOG(LogTemp, Log, TEXT("Undo successful, mesh rebuilt"));
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("Undo successful, mesh rebuilt"));
             }
         }
     }
@@ -920,7 +950,7 @@ FReply SPTectonicToolPanel::HandleRedoClicked()
             {
                 // Rebuild mesh to reflect restored state
                 Controller->RebuildPreview();
-                UE_LOG(LogTemp, Log, TEXT("Redo successful, mesh rebuilt"));
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("Redo successful, mesh rebuilt"));
             }
         }
     }
@@ -1045,7 +1075,7 @@ FReply SPTectonicToolPanel::HandleResetCameraClicked()
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
         Controller->ResetCamera();
-        UE_LOG(LogTemp, Log, TEXT("Camera reset to default view"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Camera reset to default view"));
     }
     return FReply::Handled();
 }
@@ -1064,4 +1094,33 @@ FText SPTectonicToolPanel::GetCameraStatusText() const
         );
     }
     return NSLOCTEXT("PlanetaryCreation", "CameraUnavailable", "Camera: n/a");
+}
+ECheckBoxState SPTectonicToolPanel::GetSeaLevelHighlightState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (const UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->IsHighlightSeaLevelEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnSeaLevelHighlightChanged(ECheckBoxState NewState)
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            const bool bEnabled = (NewState == ECheckBoxState::Checked);
+            Service->SetHighlightSeaLevel(bEnabled);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Sea level highlight %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+
+            if (!Controller->RefreshPreviewColors())
+            {
+                Controller->RebuildPreview();
+            }
+        }
+    }
 }

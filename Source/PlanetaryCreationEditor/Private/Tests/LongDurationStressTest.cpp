@@ -1,5 +1,6 @@
 // Milestone 5 Task 3.1: Long-Duration Stress Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -35,8 +36,8 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Long-Duration Stress Test (1000 Steps) ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Long-Duration Stress Test (1000 Steps) ==="));
 
     // Configure for stress testing
     FTectonicSimulationParameters Params;
@@ -77,12 +78,12 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
         Plates[i].AngularVelocity = 0.04 + (FMath::Sin(i * 1.3) * 0.03); // 0.01-0.07 rad/My range
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Starting 500-step simulation..."));
-    UE_LOG(LogTemp, Log, TEXT("  Plates: %d"), Plates.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Vertices: %d"), Service->GetRenderVertices().Num());
-    UE_LOG(LogTemp, Log, TEXT("  Erosion: %s"), Params.bEnableContinentalErosion ? TEXT("ON") : TEXT("OFF"));
-    UE_LOG(LogTemp, Log, TEXT("  Dampening: %s"), Params.bEnableOceanicDampening ? TEXT("ON") : TEXT("OFF"));
-    UE_LOG(LogTemp, Log, TEXT("  Sediment: %s"), Params.bEnableSedimentTransport ? TEXT("ON") : TEXT("OFF"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Starting 500-step simulation..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plates: %d"), Plates.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices: %d"), Service->GetRenderVertices().Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Erosion: %s"), Params.bEnableContinentalErosion ? TEXT("ON") : TEXT("OFF"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Dampening: %s"), Params.bEnableOceanicDampening ? TEXT("ON") : TEXT("OFF"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Sediment: %s"), Params.bEnableSedimentTransport ? TEXT("ON") : TEXT("OFF"));
 
     // Track metrics throughout
     int32 InitialVertexCount = Service->GetRenderVertices().Num();
@@ -120,7 +121,7 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
             TopologyEventCount++;
         }
 
-        UE_LOG(LogTemp, Log, TEXT("  Checkpoint %d: Step %d, Plates %d, Vertices %d"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Checkpoint %d: Step %d, Plates %d, Vertices %d"),
             Checkpoint + 1, CurrentStep, CurrentPlateCount, CurrentVertexCount);
 
         // Validate stability
@@ -133,12 +134,12 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
     const int32 FinalPlateCount = Service->GetPlatesForModification().Num();
     const int32 FinalVertexCount = Service->GetRenderVertices().Num();
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Stress Test Complete:"));
-    UE_LOG(LogTemp, Log, TEXT("  Final Step: %d"), CurrentStep);
-    UE_LOG(LogTemp, Log, TEXT("  Final Plates: %d (started with %d)"), FinalPlateCount, InitialPlateCount);
-    UE_LOG(LogTemp, Log, TEXT("  Final Vertices: %d (started with %d)"), FinalVertexCount, InitialVertexCount);
-    UE_LOG(LogTemp, Log, TEXT("  Topology Events: %d"), TopologyEventCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Stress Test Complete:"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Step: %d"), CurrentStep);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Plates: %d (started with %d)"), FinalPlateCount, InitialPlateCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Vertices: %d (started with %d)"), FinalVertexCount, InitialVertexCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Topology Events: %d"), TopologyEventCount);
 
     // Validate completion
     TestEqual(TEXT("Completed 500 steps"), CurrentStep, TotalSteps);
@@ -148,8 +149,8 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Some topology activity occurred"), TopologyEventCount > 0);
 
     // Test determinism by running first checkpoint twice (50 steps each)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Verifying determinism (repeat first 50 steps)..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Verifying determinism (repeat first 50 steps)..."));
 
     // First determinism run
     Service->SetParameters(Params); // Reset
@@ -188,11 +189,11 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Deterministic plate count (vs original)"), Run1PlateCount, PlateCountHistory[0]);
     TestEqual(TEXT("Deterministic vertex count (vs original)"), Run1VertexCount, VertexCountHistory[0]);
 
-    UE_LOG(LogTemp, Log, TEXT("  Run1 Plates: %d, Run2 Plates: %d, Original: %d"), Run1PlateCount, Run2PlateCount, PlateCountHistory[0]);
-    UE_LOG(LogTemp, Log, TEXT("  Run1 Vertices: %d, Run2 Vertices: %d, Original: %d"), Run1VertexCount, Run2VertexCount, VertexCountHistory[0]);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Run1 Plates: %d, Run2 Plates: %d, Original: %d"), Run1PlateCount, Run2PlateCount, PlateCountHistory[0]);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Run1 Vertices: %d, Run2 Vertices: %d, Original: %d"), Run1VertexCount, Run2VertexCount, VertexCountHistory[0]);
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Long-Duration Stress Test PASSED"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Long-Duration Stress Test PASSED"));
 
     return true;
 }

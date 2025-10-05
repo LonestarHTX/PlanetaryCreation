@@ -1,5 +1,6 @@
 // Milestone 4 Task 2.3: Thermal & Stress Coupling Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -29,12 +30,12 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Thermal & Stress Coupling Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Thermal & Stress Coupling Test ==="));
 
     // Test 1: Baseline Temperature Field (No Hotspots)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Baseline Temperature Field"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Baseline Temperature Field"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 42;
@@ -62,16 +63,16 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
     }
     AvgTemp /= TempValues.Num();
 
-    UE_LOG(LogTemp, Log, TEXT("  Baseline temperature range: %.1fK - %.1fK (avg: %.1fK)"), MinTemp, MaxTemp, AvgTemp);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Baseline temperature range: %.1fK - %.1fK (avg: %.1fK)"), MinTemp, MaxTemp, AvgTemp);
 
     // Without hotspots, temperature should be baseline mantle temp (~1600K) +/- subduction heating
     TestTrue(TEXT("Min temp >= 1500K"), MinTemp >= 1500.0);
     TestTrue(TEXT("Max temp < 2500K"), MaxTemp < 2500.0); // Subduction can add ~200-400K
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Baseline temperature field validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Baseline temperature field validated"));
 
     // Test 2: Hotspot Thermal Contribution
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Hotspot Thermal Contribution"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Hotspot Thermal Contribution"));
 
     Params.bEnableHotspots = true;
     Params.MajorHotspotCount = 3;
@@ -114,16 +115,16 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  %d vertices with elevated temperature near hotspots"), ElevatedTempCount);
-    UE_LOG(LogTemp, Log, TEXT("  Max hotspot temperature: %.1fK"), MaxHotspotTemp);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  %d vertices with elevated temperature near hotspots"), ElevatedTempCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max hotspot temperature: %.1fK"), MaxHotspotTemp);
 
     TestTrue(TEXT("Hotspots elevate temperature"), ElevatedTempCount > 0);
     TestTrue(TEXT("Max hotspot temp > 2000K"), MaxHotspotTemp > 2000.0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Hotspot thermal contribution validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Hotspot thermal contribution validated"));
 
     // Test 3: Gaussian Falloff Curve
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Gaussian Falloff Curve Validation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Gaussian Falloff Curve Validation"));
 
     // Sample temperatures at varying distances from a hotspot
     if (Hotspots.Num() > 0)
@@ -164,13 +165,13 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         }
 
         TestTrue(TEXT("Temperature decreases with distance from hotspot"), MonotonicDecrease);
-        UE_LOG(LogTemp, Log, TEXT("  Sampled %d vertices around hotspot"), DistanceTempPairs.Num());
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Gaussian falloff curve validated"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Sampled %d vertices around hotspot"), DistanceTempPairs.Num());
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Gaussian falloff curve validated"));
     }
 
     // Test 4: Subduction Zone Heating
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Subduction Zone Heating"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Subduction Zone Heating"));
 
     // Find convergent boundaries and check nearby vertex temperatures
     const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries = Service->GetBoundaries();
@@ -217,22 +218,22 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Convergent boundaries: %d"), ConvergentCount);
-    UE_LOG(LogTemp, Log, TEXT("  Convergent boundaries with heating: %d"), HeatedConvergentCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Convergent boundaries: %d"), ConvergentCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Convergent boundaries with heating: %d"), HeatedConvergentCount);
 
     if (ConvergentCount > 0)
     {
         TestTrue(TEXT("Some convergent boundaries show heating"), HeatedConvergentCount > 0);
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Subduction zone heating validated"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Subduction zone heating validated"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No active convergent boundaries in this simulation"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No active convergent boundaries in this simulation"));
     }
 
     // Test 5: Stress Modulation from Temperature
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Additive Stress Modulation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Additive Stress Modulation"));
 
     // Verify that hotspot thermal contribution affects stress values
     const TArray<double>& StressValues = Service->GetVertexStressValues();
@@ -262,15 +263,15 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  %d vertices with elevated temperature near hotspots"), HighTempNearHotspotCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  %d vertices with elevated temperature near hotspots"), HighTempNearHotspotCount);
     TestTrue(TEXT("Hotspots contribute to thermal field"), HighTempNearHotspotCount > 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Thermal contribution (paper-aligned) validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Thermal contribution (paper-aligned) validated"));
 
     // ===== PHASE 5 EXPANDED COVERAGE =====
 
     // Test 6: Stress-Temperature Interaction
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 6: Stress-Temperature Interaction (Phase 5)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 6: Stress-Temperature Interaction (Phase 5)"));
 
     Params.Seed = 66666;
     Params.bEnableHotspots = true;
@@ -310,9 +311,9 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         MaxStress6 = FMath::Max(MaxStress6, StressField[i]);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Temperature range: %.1f K to %.1f K"), MinTemp6, MaxTemp6);
-    UE_LOG(LogTemp, Log, TEXT("  Stress range: %.1f MPa to %.1f MPa"), MinStress6, MaxStress6);
-    UE_LOG(LogTemp, Log, TEXT("  Hotspots active: %d"), Service->GetHotspots().Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Temperature range: %.1f K to %.1f K"), MinTemp6, MaxTemp6);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Stress range: %.1f MPa to %.1f MPa"), MinStress6, MaxStress6);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Hotspots active: %d"), Service->GetHotspots().Num());
 
     // Find correlation between high stress and elevated temperature
     int32 HighStressHighTempCount = 0;
@@ -333,9 +334,9 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
     const double CorrelationPercent = HighStressCount > 0 ?
         (100.0 * HighStressHighTempCount / HighStressCount) : 0.0;
 
-    UE_LOG(LogTemp, Log, TEXT("  High stress vertices: %d"), HighStressCount);
-    UE_LOG(LogTemp, Log, TEXT("  High stress + high temp: %d (%.1f%%)"), HighStressHighTempCount, CorrelationPercent);
-    UE_LOG(LogTemp, Log, TEXT("  Using thresholds: Stress >30 MPa, Temp >1700 K"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  High stress vertices: %d"), HighStressCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  High stress + high temp: %d (%.1f%%)"), HighStressHighTempCount, CorrelationPercent);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Using thresholds: Stress >30 MPa, Temp >1700 K"));
 
     // Phase 5 Update: Paper-aligned physics - hotspots (thermal) and plate boundaries (stress) are
     // spatially independent. Hotspots now contribute ONLY to temperature, NOT directly to stress.
@@ -346,11 +347,11 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
     // unrealistic expectations. After removing direct stress addition from hotspots, typical correlation
     // is 3-5% (from subduction heating only), which is physically correct given spatial independence.
     TestTrue(TEXT("Stress-temperature interaction observed"), CorrelationPercent >= 1.0); // Minimal guard: confirms coupling exists
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Stress-temperature interaction validated (%.1f%% correlation)"), CorrelationPercent);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Stress-temperature interaction validated (%.1f%% correlation)"), CorrelationPercent);
 
     // Test 7: Thermal Diffusion Across Plates
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 7: Thermal Diffusion Across Plates (Phase 5)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 7: Thermal Diffusion Across Plates (Phase 5)"));
 
     Params.Seed = 77777;
     Service->SetParameters(Params);
@@ -397,18 +398,18 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
 
     const double AvgTempGradient = CrossPlateEdgeCount > 0 ? (TotalTempGradient / CrossPlateEdgeCount) : 0.0;
 
-    UE_LOG(LogTemp, Log, TEXT("  Cross-plate edges: %d"), CrossPlateEdgeCount);
-    UE_LOG(LogTemp, Log, TEXT("  Avg temp gradient: %.1fK"), AvgTempGradient);
-    UE_LOG(LogTemp, Log, TEXT("  Max temp jump: %.1fK"), MaxTempJump);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Cross-plate edges: %d"), CrossPlateEdgeCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Avg temp gradient: %.1fK"), AvgTempGradient);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max temp jump: %.1fK"), MaxTempJump);
 
     // Thermal diffusion should smooth out extreme jumps
     TestTrue(TEXT("Max temperature jump reasonable"), MaxTempJump < 500.0); // < 500K jump
     TestTrue(TEXT("Average gradient reasonable"), AvgTempGradient < 200.0); // < 200K avg
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Thermal diffusion validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Thermal diffusion validated"));
 
     // Test 8: Hotspot Thermal Influence Radius
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 8: Hotspot Thermal Influence Radius (Phase 5)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 8: Hotspot Thermal Influence Radius (Phase 5)"));
 
     Params.Seed = 88888;
     Service->SetParameters(Params);
@@ -449,8 +450,8 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
             AvgTempWithin /= WithinRadiusCount;
             AvgTempBeyond /= BeyondRadiusCount;
 
-            UE_LOG(LogTemp, Verbose, TEXT("  Hotspot influence radius: %.3f rad"), Hotspot.InfluenceRadius);
-            UE_LOG(LogTemp, Verbose, TEXT("    Within: %.1fK (n=%d) | Beyond: %.1fK (n=%d)"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Hotspot influence radius: %.3f rad"), Hotspot.InfluenceRadius);
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("    Within: %.1fK (n=%d) | Beyond: %.1fK (n=%d)"),
                 AvgTempWithin, WithinRadiusCount, AvgTempBeyond, BeyondRadiusCount);
 
             // Temperature should be higher within radius
@@ -458,11 +459,11 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Hotspot influence radius validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Hotspot influence radius validated"));
 
     // Test 9: Edge Case - Zero Stress, High Temperature
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 9: Edge Case - Zero Stress, High Temperature (Phase 5)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 9: Edge Case - Zero Stress, High Temperature (Phase 5)"));
 
     Params.Seed = 99999;
     Params.bEnableHotspots = true;
@@ -495,9 +496,9 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
         MaxStress9 = FMath::Max(MaxStress9, ZeroStressField[i]);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Temperature range: %.1f K to %.1f K"), MinTemp9, MaxTemp9);
-    UE_LOG(LogTemp, Log, TEXT("  Stress range: %.1f MPa to %.1f MPa"), MinStress9, MaxStress9);
-    UE_LOG(LogTemp, Log, TEXT("  Hotspots active: %d"), Service->GetHotspots().Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Temperature range: %.1f K to %.1f K"), MinTemp9, MaxTemp9);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Stress range: %.1f MPa to %.1f MPa"), MinStress9, MaxStress9);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Hotspots active: %d"), Service->GetHotspots().Num());
 
     // Find vertices with high temperature but low stress
     int32 HighTempLowStressCount = 0;
@@ -513,15 +514,15 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
 
     const double HighTempLowStressPercent = (100.0 * HighTempLowStressCount) / TotalVertices;
 
-    UE_LOG(LogTemp, Log, TEXT("  Vertices with high temp + low stress: %d / %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Vertices with high temp + low stress: %d / %d (%.1f%%)"),
         HighTempLowStressCount, TotalVertices, HighTempLowStressPercent);
 
     TestTrue(TEXT("High temperature possible without high stress"), HighTempLowStressCount > 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Edge case validated (thermal independent of stress)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Edge case validated (thermal independent of stress)"));
 
     // Test 10: Thermal Field Stability Over Time
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 10: Thermal Field Stability Over Time (Phase 5)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 10: Thermal Field Stability Over Time (Phase 5)"));
 
     Params.Seed = 11111;
     Service->SetParameters(Params);
@@ -549,20 +550,20 @@ bool FThermalCouplingTest::RunTest(const FString& Parameters)
     }
     AvgChange /= InitialThermal.Num();
 
-    UE_LOG(LogTemp, Log, TEXT("  Thermal change over 20 steps:"));
-    UE_LOG(LogTemp, Log, TEXT("    Min: %.1fK | Max: %.1fK | Avg: %.1fK"), MinChange, MaxChange, AvgChange);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Thermal change over 20 steps:"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("    Min: %.1fK | Max: %.1fK | Avg: %.1fK"), MinChange, MaxChange, AvgChange);
 
     // Thermal field should be stable (not runaway or collapse)
     TestTrue(TEXT("No thermal runaway"), MaxChange < 1000.0); // < 1000K increase
     TestTrue(TEXT("No thermal collapse"), MinChange > -1000.0); // < 1000K decrease
     TestTrue(TEXT("Average change reasonable"), FMath::Abs(AvgChange) < 100.0); // < 100K avg change
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Thermal field stability validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Thermal field stability validated"));
 
     // ===== END PHASE 5 EXPANSION =====
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Thermal & Stress Coupling Test Complete (Phase 5 Expanded) ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Thermal & Stress Coupling Test Complete (Phase 5 Expanded) ==="));
     AddInfo(TEXT("✅ Thermal & stress coupling test complete (10 tests)"));
     AddInfo(FString::Printf(TEXT("Elevated temps: %d vertices | Max hotspot temp: %.1fK | Subduction heating: %d boundaries"),
         ElevatedTempCount, MaxHotspotTemp, HeatedConvergentCount));

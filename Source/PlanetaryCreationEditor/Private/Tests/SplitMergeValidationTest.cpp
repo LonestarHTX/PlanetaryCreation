@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -28,10 +29,10 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("=== Split/Merge Validation Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Split/Merge Validation Test ==="));
 
     // Test 1: Plate split topology consistency
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Plate split topology consistency"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Plate split topology consistency"));
 
     FTectonicSimulationParameters Params = Service->GetParameters();
     Params.Seed = 11111;
@@ -46,7 +47,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
     const int32 InitialPlateCount = Service->GetPlates().Num();
     const int32 InitialBoundaryCount = Service->GetBoundaries().Num();
 
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Initial state - %d plates, %d boundaries"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Initial state - %d plates, %d boundaries"),
         InitialPlateCount, InitialBoundaryCount);
 
     // Set up divergent boundary to force rift
@@ -76,7 +77,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         if (PlateCountAfter > PlateCountBefore)
         {
             bSplitOccurred = true;
-            UE_LOG(LogTemp, Log, TEXT("Test 1: Split occurred at step %d (%d → %d plates)"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Split occurred at step %d (%d → %d plates)"),
                 StepsUntilSplit, PlateCountBefore, PlateCountAfter);
             break;
         }
@@ -89,7 +90,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         const int32 FinalPlateCount = Service->GetPlates().Num();
         const int32 FinalBoundaryCount = Service->GetBoundaries().Num();
 
-        UE_LOG(LogTemp, Log, TEXT("Test 1: After split - %d plates (+%d), %d boundaries (+%d)"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: After split - %d plates (+%d), %d boundaries (+%d)"),
             FinalPlateCount, FinalPlateCount - InitialPlateCount,
             FinalBoundaryCount, FinalBoundaryCount - InitialBoundaryCount);
 
@@ -104,7 +105,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         const int32 E = (Triangles.Num() / 3) * 3 / 2;
         const int32 EulerChar = V - E + F;
 
-        UE_LOG(LogTemp, Log, TEXT("Test 1: Topology after split: V=%d E=%d F=%d χ=%d"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Topology after split: V=%d E=%d F=%d χ=%d"),
             V, E, F, EulerChar);
         TestEqual(TEXT("Euler characteristic preserved after split"), EulerChar, 2);
 
@@ -122,7 +123,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
     }
 
     // Test 2: Boundary updates after split
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Boundary updates after split"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Boundary updates after split"));
 
     if (bSplitOccurred)
     {
@@ -137,14 +138,14 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
             if (BoundaryPair.Key.Key == NewPlateID || BoundaryPair.Key.Value == NewPlateID)
             {
                 NewPlateBoundaryCount++;
-                UE_LOG(LogTemp, Verbose, TEXT("Test 2: New plate %d has boundary with plate %d (type: %d)"),
+                UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Test 2: New plate %d has boundary with plate %d (type: %d)"),
                     NewPlateID,
                     BoundaryPair.Key.Key == NewPlateID ? BoundaryPair.Key.Value : BoundaryPair.Key.Key,
                     static_cast<int32>(BoundaryPair.Value.BoundaryType));
             }
         }
 
-        UE_LOG(LogTemp, Log, TEXT("Test 2: New plate %d has %d boundaries"), NewPlateID, NewPlateBoundaryCount);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: New plate %d has %d boundaries"), NewPlateID, NewPlateBoundaryCount);
         TestTrue(TEXT("New plate has at least one boundary"), NewPlateBoundaryCount > 0);
 
         // Validate all boundaries reference valid plates
@@ -157,7 +158,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
     }
 
     // Test 3: Plate merge topology consistency
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Plate merge topology consistency"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Plate merge topology consistency"));
 
     Params.Seed = 22222;
     Params.SubdivisionLevel = 0;
@@ -168,7 +169,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
 
     const int32 InitialPlateCount2 = Service->GetPlates().Num();
 
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Initial state - %d plates"), InitialPlateCount2);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Initial state - %d plates"), InitialPlateCount2);
 
     // Set up convergent boundary to force collision
     TArray<FTectonicPlate>& Plates2 = Service->GetPlatesForModification();
@@ -200,7 +201,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         if (PlateCountAfter < PlateCountBefore)
         {
             bMergeOccurred = true;
-            UE_LOG(LogTemp, Log, TEXT("Test 3: Merge occurred at step %d (%d → %d plates)"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Merge occurred at step %d (%d → %d plates)"),
                 StepsUntilMerge, PlateCountBefore, PlateCountAfter);
             break;
         }
@@ -211,7 +212,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         const int32 FinalPlateCount2 = Service->GetPlates().Num();
         const int32 FinalBoundaryCount2 = Service->GetBoundaries().Num();
 
-        UE_LOG(LogTemp, Log, TEXT("Test 3: After merge - %d plates (-%d), %d boundaries"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: After merge - %d plates (-%d), %d boundaries"),
             FinalPlateCount2, InitialPlateCount2 - FinalPlateCount2, FinalBoundaryCount2);
 
         TestEqual(TEXT("Plate count decreased by 1 after merge"), FinalPlateCount2, InitialPlateCount2 - 1);
@@ -225,7 +226,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         const int32 E2 = (Triangles2.Num() / 3) * 3 / 2;
         const int32 EulerChar2 = V2 - E2 + F2;
 
-        UE_LOG(LogTemp, Log, TEXT("Test 3: Topology after merge: V=%d E=%d F=%d χ=%d"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Topology after merge: V=%d E=%d F=%d χ=%d"),
             V2, E2, F2, EulerChar2);
         TestEqual(TEXT("Euler characteristic preserved after merge"), EulerChar2, 2);
 
@@ -241,11 +242,11 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Test 3: Merge did not occur within %d steps (non-critical)"), MaxSteps);
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Test 3: Merge did not occur within %d steps (non-critical)"), MaxSteps);
     }
 
     // Test 4: Stress redistribution after split
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Stress redistribution validation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Stress redistribution validation"));
 
     // Reset and force another split
     Params.Seed = 33333;
@@ -273,7 +274,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         TotalStressBefore += BoundaryPair.Value.AccumulatedStress;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Total stress before topology change: %.1f"), TotalStressBefore);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Total stress before topology change: %.1f"), TotalStressBefore);
 
     // Continue until topology changes
     const int32 PlateCountBeforeChange = Service->GetPlates().Num();
@@ -289,7 +290,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
             TotalStressAfter += BoundaryPair.Value.AccumulatedStress;
         }
 
-        UE_LOG(LogTemp, Log, TEXT("Test 4: Total stress after topology change: %.1f"), TotalStressAfter);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Total stress after topology change: %.1f"), TotalStressAfter);
 
         // Stress should be redistributed (not necessarily conserved due to release on split)
         // But should still be non-zero and reasonable
@@ -302,16 +303,16 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         else
         {
             TestTrue(TEXT("Stress remains valid after topology change"), TotalStressAfter >= 0.0);
-            UE_LOG(LogTemp, Log, TEXT("Test 4: Initial stress was zero, skipping redistribution validation"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Initial stress was zero, skipping redistribution validation"));
         }
     }
 
     // Summary
-    UE_LOG(LogTemp, Log, TEXT("=== Split/Merge Validation Test Complete ==="));
-    UE_LOG(LogTemp, Log, TEXT("✓ Plate split increases plate count by 1"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Topology (Euler characteristic) preserved across splits/merges"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Boundary updates correctly after topology changes"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Stress redistribution maintains reasonable values"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Split/Merge Validation Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Plate split increases plate count by 1"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Topology (Euler characteristic) preserved across splits/merges"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Boundary updates correctly after topology changes"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Stress redistribution maintains reasonable values"));
 
     return true;
 }

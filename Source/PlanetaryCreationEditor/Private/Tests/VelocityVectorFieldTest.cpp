@@ -1,5 +1,6 @@
 // Milestone 4 Task 3.2: Velocity Vector Field Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -33,12 +34,12 @@ bool FVelocityVectorFieldTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Velocity Vector Field Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Velocity Vector Field Test ==="));
 
     // Test 1: Velocity Computation (v = ω × r)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Surface Velocity Computation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Surface Velocity Computation"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 42;
@@ -82,16 +83,16 @@ bool FVelocityVectorFieldTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Plates with velocity: %d / %d"), ValidVelocityCount, Plates.Num());
-    UE_LOG(LogTemp, Log, TEXT("  Velocity range: %.4f - %.4f rad/My"), MinVelocityMagnitude, MaxVelocityMagnitude);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plates with velocity: %d / %d"), ValidVelocityCount, Plates.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Velocity range: %.4f - %.4f rad/My"), MinVelocityMagnitude, MaxVelocityMagnitude);
 
     TestTrue(TEXT("Most plates have velocity"), ValidVelocityCount > Plates.Num() / 2);
     TestTrue(TEXT("Velocity magnitudes reasonable"), MaxVelocityMagnitude > 0.0 && MaxVelocityMagnitude < 0.5);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Surface velocity computation validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Surface velocity computation validated"));
 
     // Test 2: Velocity Direction Consistency
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Velocity Direction Consistency"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Velocity Direction Consistency"));
 
     // Check that velocity direction matches Euler pole rotation
     int32 ConsistentDirectionCount = 0;
@@ -119,15 +120,15 @@ bool FVelocityVectorFieldTest::RunTest(const FString& Parameters)
     }
 
     const double ConsistencyRatio = static_cast<double>(ConsistentDirectionCount) / ValidVelocityCount;
-    UE_LOG(LogTemp, Log, TEXT("  Consistent directions: %d / %d (%.1f%%)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Consistent directions: %d / %d (%.1f%%)"),
         ConsistentDirectionCount, ValidVelocityCount, ConsistencyRatio * 100.0);
 
     TestTrue(TEXT("Velocity directions consistent"), ConsistencyRatio > 0.9);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Velocity direction consistency validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Velocity direction consistency validated"));
 
     // Test 3: Velocity Magnitude Scaling
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Velocity Magnitude Scaling"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Velocity Magnitude Scaling"));
 
     // Find plates with different velocity magnitudes
     TArray<TPair<double, int32>> VelocityPlateMap; // (magnitude, plate ID)
@@ -156,21 +157,21 @@ bool FVelocityVectorFieldTest::RunTest(const FString& Parameters)
         const double MediumVelocity = VelocityPlateMap[VelocityPlateMap.Num() / 2].Key;
         const double FastVelocity = VelocityPlateMap.Last().Key;
 
-        UE_LOG(LogTemp, Log, TEXT("  Slowest: %.4f rad/My (Plate %d)"), SlowVelocity, VelocityPlateMap[0].Value);
-        UE_LOG(LogTemp, Log, TEXT("  Median: %.4f rad/My (Plate %d)"), MediumVelocity, VelocityPlateMap[VelocityPlateMap.Num() / 2].Value);
-        UE_LOG(LogTemp, Log, TEXT("  Fastest: %.4f rad/My (Plate %d)"), FastVelocity, VelocityPlateMap.Last().Value);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Slowest: %.4f rad/My (Plate %d)"), SlowVelocity, VelocityPlateMap[0].Value);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Median: %.4f rad/My (Plate %d)"), MediumVelocity, VelocityPlateMap[VelocityPlateMap.Num() / 2].Value);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Fastest: %.4f rad/My (Plate %d)"), FastVelocity, VelocityPlateMap.Last().Value);
 
         TestTrue(TEXT("Velocity range exists"), FastVelocity > SlowVelocity * 1.5);
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Velocity magnitude scaling validated"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Velocity magnitude scaling validated"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ Not enough plates with velocity for scaling test"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ Not enough plates with velocity for scaling test"));
     }
 
     // Test 4: Arrow Length Scaling
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Arrow Length Scaling"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Arrow Length Scaling"));
 
     // Simulate arrow length calculation
     auto GetArrowLength = [](double VelocityMagnitude, double MaxVelocity) -> float
@@ -190,17 +191,17 @@ bool FVelocityVectorFieldTest::RunTest(const FString& Parameters)
         const float SlowArrowLength = GetArrowLength(SlowVelocity, MaxVelocityMagnitude);
         const float FastArrowLength = GetArrowLength(FastVelocity, MaxVelocityMagnitude);
 
-        UE_LOG(LogTemp, Log, TEXT("  Slow arrow length: %.1f km"), SlowArrowLength);
-        UE_LOG(LogTemp, Log, TEXT("  Fast arrow length: %.1f km"), FastArrowLength);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Slow arrow length: %.1f km"), SlowArrowLength);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Fast arrow length: %.1f km"), FastArrowLength);
 
         TestTrue(TEXT("Arrow length scales with velocity"), FastArrowLength > SlowArrowLength);
         TestTrue(TEXT("Arrow length within bounds"), SlowArrowLength >= 500.0f && FastArrowLength <= 2000.0f);
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Arrow length scaling validated"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Arrow length scaling validated"));
     }
 
     // Test 5: Color Modulation
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Color Modulation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Color Modulation"));
 
     auto GetVelocityColor = [](double NormalizedVelocity) -> FColor
     {
@@ -231,18 +232,18 @@ bool FVelocityVectorFieldTest::RunTest(const FString& Parameters)
     const FColor MediumColor = GetVelocityColor(0.5);
     const FColor FastColor = GetVelocityColor(1.0);
 
-    UE_LOG(LogTemp, Log, TEXT("  Slow (0.0): R=%d G=%d B=%d"), SlowColor.R, SlowColor.G, SlowColor.B);
-    UE_LOG(LogTemp, Log, TEXT("  Medium (0.5): R=%d G=%d B=%d"), MediumColor.R, MediumColor.G, MediumColor.B);
-    UE_LOG(LogTemp, Log, TEXT("  Fast (1.0): R=%d G=%d B=%d"), FastColor.R, FastColor.G, FastColor.B);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Slow (0.0): R=%d G=%d B=%d"), SlowColor.R, SlowColor.G, SlowColor.B);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Medium (0.5): R=%d G=%d B=%d"), MediumColor.R, MediumColor.G, MediumColor.B);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Fast (1.0): R=%d G=%d B=%d"), FastColor.R, FastColor.G, FastColor.B);
 
     TestTrue(TEXT("Slow velocity is blue"), SlowColor.B == 255 && SlowColor.R == 0);
     TestTrue(TEXT("Medium velocity is green"), MediumColor.G == 255 && MediumColor.R == 0 && MediumColor.B == 0);
     TestTrue(TEXT("Fast velocity is red"), FastColor.R == 255 && FastColor.G == 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Color modulation validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Color modulation validated"));
 
     // Test 6: Velocity Data Completeness
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 6: Velocity Data Completeness"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 6: Velocity Data Completeness"));
 
     // Verify all plates have valid centroids and Euler poles
     int32 CompleteDataCount = 0;
@@ -258,9 +259,9 @@ bool FVelocityVectorFieldTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Plates with complete velocity data: %d / %d"), CompleteDataCount, Plates.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plates with complete velocity data: %d / %d"), CompleteDataCount, Plates.Num());
     TestTrue(TEXT("All plates have complete velocity data"), CompleteDataCount == Plates.Num());
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Velocity data completeness validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Velocity data completeness validated"));
 
     AddInfo(TEXT("✅ Velocity vector field test complete"));
     AddInfo(FString::Printf(TEXT("Plates: %d | Valid velocities: %d | Range: %.4f - %.4f rad/My"),

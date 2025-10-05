@@ -1,5 +1,6 @@
 // Milestone 4 Task 3.2: Velocity Vector Field Rendering
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -77,7 +78,7 @@ void FTectonicSimulationController::DrawVelocityVectorField()
         MaxVelocityMagnitude = 0.1; // Default scale
     }
 
-    UE_LOG(LogTemp, Verbose, TEXT("[VelocityField] Velocity range: %.4f - %.4f rad/My"),
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[VelocityField] Velocity range: %.4f - %.4f rad/My"),
         MinVelocityMagnitude, MaxVelocityMagnitude);
 
     auto GetVelocityColor = [](double NormalizedVelocity) -> FColor
@@ -186,6 +187,6 @@ void FTectonicSimulationController::DrawVelocityVectorField()
         );
     }
 
-    UE_LOG(LogTemp, Verbose, TEXT("[VelocityField] Drew %d velocity vectors"), Plates.Num());
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[VelocityField] Drew %d velocity vectors"), Plates.Num());
 #endif
 }

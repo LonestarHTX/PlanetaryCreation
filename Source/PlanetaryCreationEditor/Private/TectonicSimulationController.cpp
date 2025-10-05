@@ -1,5 +1,7 @@
 #include "TectonicSimulationController.h"
 
+#include "PlanetaryCreationLogging.h"
+
 #include "Async/Async.h"
 #include "Async/Future.h"
 #include "Editor.h"
@@ -11,6 +13,7 @@
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshBuilder.h"
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshSectionConfig.h"
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshStreamRange.h"
+#include "UObject/UObjectGlobals.h"
 #include "MaterialDomain.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionVertexColor.h"
@@ -25,7 +28,10 @@
 #include "HeightmapColorPalette.h"
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
-FTectonicSimulationController::~FTectonicSimulationController() = default;
+FTectonicSimulationController::~FTectonicSimulationController()
+{
+    Shutdown();
+}
 
 void FTectonicSimulationController::Initialize()
 {
@@ -34,7 +40,38 @@ void FTectonicSimulationController::Initialize()
 
 void FTectonicSimulationController::Shutdown()
 {
+    bShutdownRequested.store(true, std::memory_order_relaxed);
+
+    const double WaitStart = FPlatformTime::Seconds();
+    while (ActiveAsyncTasks.load(std::memory_order_relaxed) > 0)
+    {
+        FPlatformProcess::Sleep(0.001f);
+
+        // Safety: break after 5 seconds to avoid deadlock
+        if ((FPlatformTime::Seconds() - WaitStart) > 5.0)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ASYNC] Shutdown timed out waiting for %d pending tasks"),
+                ActiveAsyncTasks.load(std::memory_order_relaxed));
+            break;
+        }
+    }
+
+#if WITH_EDITOR
+    if (PreviewActor.IsValid())
+    {
+        if (UWorld* PreviewWorld = PreviewActor->GetWorld())
+        {
+            PreviewWorld->DestroyActor(PreviewActor.Get());
+        }
+        PreviewActor.Reset();
+    }
+#endif
+
+    PreviewMesh.Reset();
+    bAsyncMeshBuildInProgress.store(false);
+    ActiveAsyncTasks.store(0, std::memory_order_relaxed);
     CachedService.Reset();
+    bShutdownRequested.store(false, std::memory_order_relaxed);
 }
 
 void FTectonicSimulationController::StepSimulation(int32 Steps)
@@ -57,6 +94,44 @@ void FTectonicSimulationController::RebuildPreview()
     BuildAndUpdateMesh();
 }
 
+bool FTectonicSimulationController::RefreshPreviewColors()
+{
+    if (bAsyncMeshBuildInProgress.load(std::memory_order_relaxed))
+    {
+        return false;
+    }
+
+    UTectonicSimulationService* Service = GetService();
+    if (!Service)
+    {
+        return false;
+    }
+
+    EnsurePreviewActor();
+    if (!PreviewMesh.IsValid())
+    {
+        return false;
+    }
+
+    const int32 RenderLevel = Service->GetParameters().RenderSubdivisionLevel;
+    const int32 CurrentTopologyVersion = Service->GetTopologyVersion();
+    const int32 CurrentSurfaceVersion = Service->GetSurfaceDataVersion();
+
+    FMeshBuildSnapshot Snapshot = CreateMeshBuildSnapshot();
+
+    RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
+    int32 VertexCount = 0;
+    int32 TriangleCount = 0;
+    BuildMeshFromSnapshot(Snapshot, StreamSet, VertexCount, TriangleCount);
+
+    UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
+
+    // Keep cache aligned with the latest visualization state so future pre-warm hits stay consistent.
+    CacheLODMesh(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount);
+
+    return true;
+}
+
 FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() const
 {
     FMeshBuildSnapshot Snapshot;
@@ -77,7 +152,7 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         // DEBUG: Log elevation array state
         if (Snapshot.VertexElevationValues.Num() > 0)
         {
-            UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Snapshot has %d elevations, first 3: [%.2f, %.2f, %.2f]"),
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DEBUG] Snapshot has %d elevations, first 3: [%.2f, %.2f, %.2f]"),
                 Snapshot.VertexElevationValues.Num(),
                 Snapshot.VertexElevationValues[0],
                 Snapshot.VertexElevationValues.Num() > 1 ? Snapshot.VertexElevationValues[1] : 0.0,
@@ -85,16 +160,17 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("[DEBUG] Snapshot VertexElevationValues is EMPTY!"));
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("[DEBUG] Snapshot VertexElevationValues is EMPTY!"));
         }
         // M6 Task 2.3: Enable amplified elevation if EITHER oceanic OR continental amplification is active
         Snapshot.bUseAmplifiedElevation = (Service->GetParameters().bEnableOceanicAmplification ||
                                            Service->GetParameters().bEnableContinentalAmplification) &&
                                           Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
         Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
+        Snapshot.bHighlightSeaLevel = Service->IsHighlightSeaLevelEnabled();
 
         // DEBUG: Log heightmap visualization state
-        UE_LOG(LogTemp, Warning, TEXT("[DEBUG] CreateMeshBuildSnapshot: bEnableHeightmapVisualization = %s"),
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DEBUG] CreateMeshBuildSnapshot: bEnableHeightmapVisualization = %s"),
             Snapshot.Parameters.bEnableHeightmapVisualization ? TEXT("TRUE") : TEXT("FALSE"));
     }
 
@@ -123,7 +199,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
     const FCachedLODMesh* CachedMesh = GetCachedLOD(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion);
     if (CachedMesh)
     {
-        UE_LOG(LogTemp, Log, TEXT("💾 [LOD Cache] Using cached L%d: %d verts, %d tris (cache hit)"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD Cache] Using cached L%d: %d verts, %d tris (cache hit)"),
             RenderLevel, CachedMesh->VertexCount, CachedMesh->TriangleCount);
 
         // Rebuild from cached snapshot (fast, already computed)
@@ -139,7 +215,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         return;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("🔨 [LOD Cache] L%d not cached, building... (Topo:%d, Surface:%d)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD Cache] L%d not cached, building... (Topo:%d, Surface:%d)"),
         RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion);
 
     // Milestone 3 Task 4.3: Threshold check - async only for level 3+ (1280+ triangles)
@@ -160,7 +236,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         const double EndTime = FPlatformTime::Seconds();
         LastMeshBuildTimeMs = (EndTime - StartTime) * 1000.0;
 
-        UE_LOG(LogTemp, Log, TEXT("⚡ [SYNC] Mesh build: %d verts, %d tris, %.2fms (ThreadID: %u, level %d)"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[SYNC] Mesh build: %d verts, %d tris, %.2fms (ThreadID: %u, level %d)"),
             VertexCount, TriangleCount, LastMeshBuildTimeMs, ThreadID, RenderLevel);
 
         // Milestone 4 Phase 4.2: Cache the snapshot before using it
@@ -176,7 +252,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         // Asynchronous path for high-density meshes (level 3+)
         if (bAsyncMeshBuildInProgress.load())
         {
-            UE_LOG(LogTemp, Warning, TEXT("⏸️ [ASYNC] Skipping mesh rebuild - async build already in progress (rapid stepping detected)"));
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ASYNC] Skipping mesh rebuild - async build already in progress (rapid stepping detected)"));
             return; // Skip if already building
         }
 
@@ -185,12 +261,20 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
 
         // Create snapshot on game thread (captures current simulation state)
         FMeshBuildSnapshot Snapshot = CreateMeshBuildSnapshot();
+        ActiveAsyncTasks.fetch_add(1, std::memory_order_relaxed);
 
         // Kick off async mesh build on background thread
-        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, StartTime, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]()
+        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, StartTime, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]() mutable
         {
+            if (bShutdownRequested.load(std::memory_order_relaxed))
+            {
+                ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
+                bAsyncMeshBuildInProgress.store(false);
+                return;
+            }
+
             const uint32 BackgroundThreadID = FPlatformTLS::GetCurrentThreadId();
-            UE_LOG(LogTemp, Log, TEXT("⚙️ [ASYNC] Building mesh on background thread (ThreadID: %u)"), BackgroundThreadID);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[ASYNC] Building mesh on background thread (ThreadID: %u)"), BackgroundThreadID);
 
             // Build mesh on background thread (thread-safe, no UObject access)
             RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
@@ -206,9 +290,17 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
             AsyncTask(ENamedThreads::GameThread, [this, StreamSet = MoveTemp(StreamSet), VertexCount, TriangleCount, BuildTimeMs, BackgroundThreadID, Snapshot, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]() mutable
             {
                 const uint32 GameThreadID = FPlatformTLS::GetCurrentThreadId();
+
+                if (bShutdownRequested.load(std::memory_order_relaxed))
+                {
+                    bAsyncMeshBuildInProgress.store(false);
+                    ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
+                    return;
+                }
+
                 LastMeshBuildTimeMs = BuildTimeMs;
 
-                UE_LOG(LogTemp, Log, TEXT("✅ [ASYNC] Mesh build completed: %d verts, %d tris, %.2fms (Background: %u → Game: %u)"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[ASYNC] Mesh build completed: %d verts, %d tris, %.2fms (Background: %u -> Game: %u)"),
                     VertexCount, TriangleCount, LastMeshBuildTimeMs, BackgroundThreadID, GameThreadID);
 
                 // Milestone 4 Phase 4.2: Cache the snapshot before using it
@@ -219,11 +311,13 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
 
                 // Pre-warm neighboring LODs opportunistically
                 PreWarmNeighboringLODs();
+
+                ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
             });
         });
 
         const uint32 MainThreadID = FPlatformTLS::GetCurrentThreadId();
-        UE_LOG(LogTemp, Log, TEXT("🚀 [ASYNC] Mesh build dispatched from game thread (ThreadID: %u, level %d)"), MainThreadID, RenderLevel);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[ASYNC] Mesh build dispatched from game thread (ThreadID: %u, level %d)"), MainThreadID, RenderLevel);
     }
 }
 
@@ -246,7 +340,10 @@ void FTectonicSimulationController::SetVelocityVisualizationEnabled(bool bEnable
     if (bShowVelocityField != bEnabled)
     {
         bShowVelocityField = bEnabled;
-        RebuildPreview(); // Refresh mesh with new visualization mode
+        if (!RefreshPreviewColors())
+        {
+            RebuildPreview(); // Fallback when geometry/LOD state forces rebuild
+        }
         DrawVelocityVectorField(); // Milestone 4 Task 3.2: Draw velocity arrows
     }
 }
@@ -324,7 +421,7 @@ void FTectonicSimulationController::EnsurePreviewActor() const
     }
 
     FActorSpawnParameters SpawnParams;
-    SpawnParams.Name = TEXT("TectonicPreviewActor");
+    SpawnParams.Name = MakeUniqueObjectName(World->PersistentLevel, ARealtimeMeshActor::StaticClass(), TEXT("TectonicPreviewActor"));
     SpawnParams.ObjectFlags = RF_Transient;
     SpawnParams.OverrideLevel = World->PersistentLevel;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -465,7 +562,7 @@ void FTectonicSimulationController::DrawBoundaryLines()
     const TArray<FVector3d>& SharedVertices = Service->GetSharedVertices();
     const double CurrentTimeMy = Service->GetCurrentTimeMy();
 
-    UE_LOG(LogTemp, Verbose, TEXT("Drawing %d boundaries at time %.2f My"), Boundaries.Num(), CurrentTimeMy);
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Drawing %d boundaries at time %.2f My"), Boundaries.Num(), CurrentTimeMy);
 
     // M5 Phase 3: Convert planet radius from meters to UE centimeters
     const float RadiusUE = MetersToUE(Service->GetParameters().PlanetRadius);
@@ -625,6 +722,19 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
 
     // Helper to map elevation to color (M6 Task 2.3: Heightmap visualization mode)
     // Uses paper-compliant elevation range: -6000m (abyssal plains) to ~1000m+ (mountains)
+    static const FLinearColor TurboStops[] = {
+        FLinearColor(0.18995f, 0.07176f, 0.23217f),
+        FLinearColor(0.25107f, 0.25237f, 0.63374f),
+        FLinearColor(0.27628f, 0.47750f, 0.96100f),
+        FLinearColor(0.29768f, 0.71187f, 0.98323f),
+        FLinearColor(0.43579f, 0.86843f, 0.78214f),
+        FLinearColor(0.70195f, 0.88660f, 0.37626f),
+        FLinearColor(0.94863f, 0.76827f, 0.08182f),
+        FLinearColor(0.98826f, 0.52222f, 0.13959f)
+    };
+    static constexpr int32 TurboStopCount = UE_ARRAY_COUNT(TurboStops);
+    static constexpr double SeaLevelBiasGamma = 0.9; // Slight compression around sea level for emphasis
+
     auto GetElevationColor = [](double ElevationMeters) -> FColor
     {
         // Normalize elevation from paper range: -6000m (blue) to +2000m (red)
@@ -634,44 +744,30 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
             0.0, 1.0
         );
 
-        // Multi-stop gradient: Blue → Cyan → Green → Yellow → Red
-        if (NormalizedHeight < 0.25)
-        {
-            // Blue (240°) → Cyan (180°)
-            const float Hue = FMath::Lerp(240.0f, 180.0f, static_cast<float>(NormalizedHeight / 0.25));
-            FLinearColor HSV(Hue, 1.0f, 1.0f);
-            return HSV.HSVToLinearRGB().ToFColor(false);
-        }
-        else if (NormalizedHeight < 0.5)
-        {
-            // Cyan (180°) → Green (120°)
-            const float Hue = FMath::Lerp(180.0f, 120.0f, static_cast<float>((NormalizedHeight - 0.25) / 0.25));
-            FLinearColor HSV(Hue, 1.0f, 1.0f);
-            return HSV.HSVToLinearRGB().ToFColor(false);
-        }
-        else if (NormalizedHeight < 0.75)
-        {
-            // Green (120°) → Yellow (60°)
-            const float Hue = FMath::Lerp(120.0f, 60.0f, static_cast<float>((NormalizedHeight - 0.5) / 0.25));
-            FLinearColor HSV(Hue, 1.0f, 1.0f);
-            return HSV.HSVToLinearRGB().ToFColor(false);
-        }
-        else
-        {
-            // Yellow (60°) → Red (0°)
-            const float Hue = FMath::Lerp(60.0f, 0.0f, static_cast<float>((NormalizedHeight - 0.75) / 0.25));
-            FLinearColor HSV(Hue, 1.0f, 1.0f);
-            return HSV.HSVToLinearRGB().ToFColor(false);
-        }
+        // Bias around sea level to give isoline more contrast
+        const double BiasedHeight = FMath::Pow(NormalizedHeight, SeaLevelBiasGamma);
+
+        const double Scaled = BiasedHeight * (TurboStopCount - 1);
+        const int32 Index = FMath::Clamp(static_cast<int32>(Scaled), 0, TurboStopCount - 2);
+        const double Fraction = Scaled - static_cast<double>(Index);
+
+        const FLinearColor Color = FMath::Lerp(TurboStops[Index], TurboStops[Index + 1], static_cast<float>(Fraction));
+        return Color.ToFColor(false);
     };
 
-    // Build vertices with elevation displacement and visualization
-    TArray<int32> VertexToBuilderIndex;
-    VertexToBuilderIndex.SetNumUninitialized(RenderVertices.Num());
+    struct FPreviewMeshVertex
+    {
+        FVector3f Position = FVector3f::ZeroVector;
+        FVector3f Normal = FVector3f::ZAxisVector;
+        FVector3f TangentX = FVector3f::XAxisVector;
+        FColor Color = FColor::Black;
+        FVector2f UV = FVector2f::ZeroVector;
+        int32 PrimaryIndex = INDEX_NONE;
+        int32 SeamWrappedIndex = INDEX_NONE;
+    };
 
-    // Store displaced positions for normal recalculation
-    TArray<FVector3f> DisplacedPositions;
-    DisplacedPositions.SetNumUninitialized(RenderVertices.Num());
+    TArray<FPreviewMeshVertex> PreviewVertices;
+    PreviewVertices.SetNum(RenderVertices.Num());
 
     /**
      * M5 Phase 3: Stress-to-elevation conversion (simplified cosmetic visualization).
@@ -685,9 +781,9 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
     auto VertexToEquirectangularUV = [](const FVector3f& Direction) -> FVector2f
     {
         const FVector3f Normalized = Direction.GetSafeNormal();
-        const double U = 0.5 + (FMath::Atan2(Normalized.Y, Normalized.X) / (2.0 * PI));
-        const double V = 0.5 - (FMath::Asin(FMath::Clamp<double>(Normalized.Z, -1.0, 1.0)) / PI);
-        return FVector2f(static_cast<float>(U), static_cast<float>(V));
+        const float U = 0.5f + static_cast<float>(FMath::Atan2(Normalized.Y, Normalized.X) / (2.0 * PI));
+        const float V = 0.5f - static_cast<float>(FMath::Asin(FMath::Clamp(static_cast<double>(Normalized.Z), -1.0, 1.0)) / PI);
+        return FVector2f(U, V);
     };
 
     for (int32 i = 0; i < RenderVertices.Num(); ++i)
@@ -712,13 +808,16 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
                 ElevationMeters = Snapshot.VertexElevationValues[i];
             }
 
-            // DEBUG: Log first vertex color calculation
-            if (i == 0)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[DEBUG] Heightmap mode active: Vertex 0 elevation = %.2f m"), ElevationMeters);
-            }
-
             VertexColor = GetElevationColor(ElevationMeters);
+
+            if (Snapshot.bHighlightSeaLevel)
+            {
+                const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
+                if (FMath::Abs(ElevationMeters - SeaLevelMeters) <= 50.0)
+                {
+                    VertexColor = FColor::White;
+                }
+            }
         }
         else if (Snapshot.bShowVelocityField && VertexVelocities.IsValidIndex(i))
         {
@@ -758,8 +857,6 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
             Position += Normal * DisplacementUE;
         }
 
-        DisplacedPositions[i] = Position;
-
         // Normal (will be recalculated if displaced)
         const FVector3f Normal = Position.GetSafeNormal();
 
@@ -773,19 +870,68 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
             .SetColor(VertexColor)
             .SetTexCoord(TexCoord);
 
-        VertexToBuilderIndex[i] = VertexId;
+        FPreviewMeshVertex& PreviewVertex = PreviewVertices[i];
+        PreviewVertex.Position = Position;
+        PreviewVertex.Normal = Normal;
+        PreviewVertex.TangentX = TangentX;
+        PreviewVertex.Color = VertexColor;
+        PreviewVertex.UV = TexCoord;
+        PreviewVertex.PrimaryIndex = VertexId;
+        PreviewVertex.SeamWrappedIndex = INDEX_NONE;
         OutVertexCount++;
     }
 
-    // Build triangles (groups of 3 indices)
-    for (int32 i = 0; i < RenderTriangles.Num(); i += 3)
-    {
-        const int32 V0 = VertexToBuilderIndex[RenderTriangles[i]];
-        const int32 V1 = VertexToBuilderIndex[RenderTriangles[i + 1]];
-        const int32 V2 = VertexToBuilderIndex[RenderTriangles[i + 2]];
+    constexpr float UVSeamWrapThreshold = 0.5f; // If U spans more than half the range the triangle crosses the seam
+    constexpr float UVSeamSplitReference = 0.5f; // Vertices below this U belong to the wrapped side when seam crossing occurs
 
-        // CCW winding when viewed from outside
-        Builder.AddTriangle(V0, V2, V1);
+    const auto ResolveSeamVertexIndex = [&Builder, &OutVertexCount](FPreviewMeshVertex& Vertex) -> int32
+    {
+        if (Vertex.SeamWrappedIndex != INDEX_NONE)
+        {
+            return Vertex.SeamWrappedIndex;
+        }
+
+        FVector2f WrappedUV = Vertex.UV;
+        WrappedUV.X += 1.0f;
+
+        Vertex.SeamWrappedIndex = Builder.AddVertex(Vertex.Position)
+            .SetNormalAndTangent(Vertex.Normal, Vertex.TangentX)
+            .SetColor(Vertex.Color)
+            .SetTexCoord(WrappedUV);
+
+        OutVertexCount++;
+        return Vertex.SeamWrappedIndex;
+    };
+
+    for (int32 TriangleIdx = 0; TriangleIdx < RenderTriangles.Num(); TriangleIdx += 3)
+    {
+        const int32 SourceIndex0 = RenderTriangles[TriangleIdx];
+        const int32 SourceIndex1 = RenderTriangles[TriangleIdx + 1];
+        const int32 SourceIndex2 = RenderTriangles[TriangleIdx + 2];
+
+        FPreviewMeshVertex& Vertex0 = PreviewVertices[SourceIndex0];
+        FPreviewMeshVertex& Vertex1 = PreviewVertices[SourceIndex1];
+        FPreviewMeshVertex& Vertex2 = PreviewVertices[SourceIndex2];
+
+        const float MaxU = FMath::Max3(Vertex0.UV.X, Vertex1.UV.X, Vertex2.UV.X);
+        const float MinU = FMath::Min3(Vertex0.UV.X, Vertex1.UV.X, Vertex2.UV.X);
+        const bool bCrossesSeam = (MaxU - MinU) > UVSeamWrapThreshold;
+
+        auto GetTriangleVertexIndex = [&](FPreviewMeshVertex& Vertex) -> int32
+        {
+            if (!bCrossesSeam || Vertex.UV.X >= UVSeamSplitReference)
+            {
+                return Vertex.PrimaryIndex;
+            }
+
+            return ResolveSeamVertexIndex(Vertex);
+        };
+
+        const int32 V0 = GetTriangleVertexIndex(Vertex0);
+        const int32 V1 = GetTriangleVertexIndex(Vertex1);
+        const int32 V2 = GetTriangleVertexIndex(Vertex2);
+
+        Builder.AddTriangle(V0, V2, V1); // CCW winding when viewed from outside
         OutTriangleCount++;
     }
 }
@@ -874,7 +1020,7 @@ void FTectonicSimulationController::UpdateLOD()
         if (bApplyChange)
         {
             TargetLODLevel = NewTargetLOD;
-            UE_LOG(LogTemp, Log, TEXT("[LOD] Target LOD changed: L%d (d/R=%.2f, distance=%.0f km)"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD] Target LOD changed: L%d (d/R=%.2f, distance=%.0f km)"),
                 TargetLODLevel, dOverR, CameraDistance);
 
             // Trigger mesh rebuild at new LOD if different from current
@@ -933,7 +1079,7 @@ void FTectonicSimulationController::CacheLODMesh(int32 LODLevel, int32 TopologyV
     // Use Emplace() to handle potential race conditions (overwrites if key exists)
     LODCache.Emplace(LODLevel, MoveTemp(NewCache));
 
-    UE_LOG(LogTemp, Log, TEXT("[LOD Cache] Cached L%d: %d verts, %d tris (Topo:%d, Surface:%d)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD Cache] Cached L%d: %d verts, %d tris (Topo:%d, Surface:%d)"),
         LODLevel, VertexCount, TriangleCount, TopologyVersion, SurfaceDataVersion);
 }
 
@@ -942,7 +1088,7 @@ void FTectonicSimulationController::InvalidateLODCache()
     const int32 NumCached = LODCache.Num();
     LODCache.Empty();
 
-    UE_LOG(LogTemp, Warning, TEXT("[LOD Cache] Invalidated %d cached LOD meshes (topology changed)"), NumCached);
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[LOD Cache] Invalidated %d cached LOD meshes (topology changed)"), NumCached);
 }
 
 void FTectonicSimulationController::PreWarmNeighboringLODs()
@@ -981,17 +1127,17 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
     {
         if (IsLODCached(LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion))
         {
-            UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] L%d already cached, skipping pre-warm"), LODLevel);
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] L%d already cached, skipping pre-warm"), LODLevel);
             continue;
         }
 
         if (bAsyncMeshBuildInProgress.load())
         {
-            UE_LOG(LogTemp, Verbose, TEXT("[LOD Cache] Async build in progress, deferring pre-warm of L%d"), LODLevel);
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] Async build in progress, deferring pre-warm of L%d"), LODLevel);
             continue; // Don't queue multiple builds
         }
 
-        UE_LOG(LogTemp, Log, TEXT("[LOD Cache] Pre-warming L%d..."), LODLevel);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD Cache] Pre-warming L%d..."), LODLevel);
 
         // Trigger async build for this LOD
         const int32 PreviousRenderLevel = Service->GetParameters().RenderSubdivisionLevel;
@@ -1005,8 +1151,16 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
 
         // Kick off async build
         bAsyncMeshBuildInProgress.store(true);
-        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion]()
+        ActiveAsyncTasks.fetch_add(1, std::memory_order_relaxed);
+        AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion]() mutable
         {
+            if (bShutdownRequested.load(std::memory_order_relaxed))
+            {
+                ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
+                bAsyncMeshBuildInProgress.store(false);
+                return;
+            }
+
             RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
             int32 VertexCount = 0;
             int32 TriangleCount = 0;
@@ -1014,10 +1168,15 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
             BuildMeshFromSnapshot(Snapshot, StreamSet, VertexCount, TriangleCount);
 
             // Return to game thread to cache result
-            AsyncTask(ENamedThreads::GameThread, [this, Snapshot, VertexCount, TriangleCount, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion]()
+            AsyncTask(ENamedThreads::GameThread, [this, Snapshot, VertexCount, TriangleCount, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion]() mutable
             {
-                CacheLODMesh(LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount);
+                if (!bShutdownRequested.load(std::memory_order_relaxed))
+                {
+                    CacheLODMesh(LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount);
+                }
+
                 bAsyncMeshBuildInProgress.store(false);
+                ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
             });
         });
 

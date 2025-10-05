@@ -1,5 +1,6 @@
 // Milestone 4 Task 1.2: Plate Split & Merge Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -29,12 +30,12 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Plate Split & Merge Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Plate Split & Merge Test ==="));
 
     // Test 1: Plate Split Detection and Execution
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Plate Split (Rift-Driven)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Plate Split (Rift-Driven)"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 42;
@@ -50,7 +51,7 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
     const int32 InitialPlateCount = Service->GetPlates().Num();
     TestEqual(TEXT("Initial plate count"), InitialPlateCount, 20);
 
-    UE_LOG(LogTemp, Log, TEXT("  Initial plate count: %d"), InitialPlateCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Initial plate count: %d"), InitialPlateCount);
 
     // Advance simulation to accumulate divergent duration
     // With low velocity threshold, some divergent boundaries should trigger splits
@@ -59,7 +60,7 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
     const int32 PostStepPlateCount = Service->GetPlates().Num();
     const TArray<FPlateTopologyEvent>& Events = Service->GetTopologyEvents();
 
-    UE_LOG(LogTemp, Log, TEXT("  After 15 steps (30 My): %d plates, %d topology events"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After 15 steps (30 My): %d plates, %d topology events"),
         PostStepPlateCount, Events.Num());
 
     // Validate: expect at least one split if divergent boundary sustained
@@ -69,7 +70,7 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
         if (Event.EventType == EPlateTopologyEventType::Split)
         {
             SplitEventCount++;
-            UE_LOG(LogTemp, Log, TEXT("  ✓ Split event: Plate %d → Plate %d at %.2f My (stress=%.1f MPa, velocity=%.4f rad/My)"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Split event: Plate %d → Plate %d at %.2f My (stress=%.1f MPa, velocity=%.4f rad/My)"),
                 Event.PlateIDs[0], Event.PlateIDs[1], Event.TimestampMy, Event.StressAtEvent, Event.VelocityAtEvent);
         }
     }
@@ -78,16 +79,16 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
     {
         TestTrue(TEXT("Plate count increased after split"), PostStepPlateCount > InitialPlateCount);
         TestEqual(TEXT("Split event logged"), SplitEventCount >= 1, true);
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Split detection working: %d split(s) occurred"), SplitEventCount);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Split detection working: %d split(s) occurred"), SplitEventCount);
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No splits occurred (divergent boundaries may not have exceeded threshold)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No splits occurred (divergent boundaries may not have exceeded threshold)"));
     }
 
     // Test 2: Plate Merge Detection and Execution
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Plate Merge (Subduction-Driven)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Plate Merge (Subduction-Driven)"));
 
     // Reset with parameters that favor merging
     Params.Seed = 123; // Different seed for varied plate sizes
@@ -98,7 +99,7 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
     Service->SetParameters(Params);
 
     const int32 InitialPlateCountMerge = Service->GetPlates().Num();
-    UE_LOG(LogTemp, Log, TEXT("  Initial plate count: %d"), InitialPlateCountMerge);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Initial plate count: %d"), InitialPlateCountMerge);
 
     // Advance simulation to accumulate stress at convergent boundaries
     Service->AdvanceSteps(20); // 40 My total
@@ -106,7 +107,7 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
     const int32 PostMergePlateCount = Service->GetPlates().Num();
     const TArray<FPlateTopologyEvent>& MergeEvents = Service->GetTopologyEvents();
 
-    UE_LOG(LogTemp, Log, TEXT("  After 20 steps (40 My): %d plates, %d topology events"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After 20 steps (40 My): %d plates, %d topology events"),
         PostMergePlateCount, MergeEvents.Num());
 
     // Validate: expect at least one merge if convergent stress accumulated
@@ -116,7 +117,7 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
         if (Event.EventType == EPlateTopologyEventType::Merge)
         {
             MergeEventCount++;
-            UE_LOG(LogTemp, Log, TEXT("  ✓ Merge event: Plate %d consumed by Plate %d at %.2f My (stress=%.1f MPa)"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Merge event: Plate %d consumed by Plate %d at %.2f My (stress=%.1f MPa)"),
                 Event.PlateIDs[0], Event.PlateIDs[1], Event.TimestampMy, Event.StressAtEvent);
         }
     }
@@ -125,16 +126,16 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
     {
         TestTrue(TEXT("Plate count decreased after merge"), PostMergePlateCount < InitialPlateCountMerge);
         TestEqual(TEXT("Merge event logged"), MergeEventCount >= 1, true);
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Merge detection working: %d merge(s) occurred"), MergeEventCount);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Merge detection working: %d merge(s) occurred"), MergeEventCount);
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No merges occurred (convergent boundaries may not have exceeded stress threshold or area ratio)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No merges occurred (convergent boundaries may not have exceeded stress threshold or area ratio)"));
     }
 
     // Test 3: Topology Event Validation
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Topology Event Validation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Topology Event Validation"));
 
     // Verify all events have valid metadata
     for (const FPlateTopologyEvent& Event : MergeEvents)
@@ -146,21 +147,21 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
 
         if (Event.EventType == EPlateTopologyEventType::Split)
         {
-            UE_LOG(LogTemp, Verbose, TEXT("  Split: [%d → %d] at %.2f My"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Split: [%d → %d] at %.2f My"),
                 Event.PlateIDs[0], Event.PlateIDs[1], Event.TimestampMy);
         }
         else if (Event.EventType == EPlateTopologyEventType::Merge)
         {
-            UE_LOG(LogTemp, Verbose, TEXT("  Merge: [%d ← %d] at %.2f My"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Merge: [%d ← %d] at %.2f My"),
                 Event.PlateIDs[1], Event.PlateIDs[0], Event.TimestampMy);
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ All topology events have valid metadata"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ All topology events have valid metadata"));
 
     // Test 4: Determinism (same seed should produce same events)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Determinism Check"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Determinism Check"));
 
     // Run same simulation twice, compare event counts
     Params.Seed = 999;
@@ -177,15 +178,15 @@ bool FPlateSplitMergeTest::RunTest(const FString& Parameters)
     const int32 Run2EventCount = Service->GetTopologyEvents().Num();
 
     TestEqual(TEXT("Deterministic event count"), Run1EventCount, Run2EventCount);
-    UE_LOG(LogTemp, Log, TEXT("  Run 1: %d events, Run 2: %d events"), Run1EventCount, Run2EventCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Run 1: %d events, Run 2: %d events"), Run1EventCount, Run2EventCount);
 
     if (Run1EventCount == Run2EventCount)
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Determinism verified: same seed produces same topology events"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Determinism verified: same seed produces same topology events"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ Determinism warning: event counts differ (may be due to floating-point variance)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ Determinism warning: event counts differ (may be due to floating-point variance)"));
     }
 
     AddInfo(TEXT("✅ Plate split/merge test complete"));

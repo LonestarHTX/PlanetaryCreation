@@ -1,5 +1,6 @@
 // Milestone 6 Task 1.4: Terrane Edge Cases & Regression Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -34,9 +35,9 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Milestone 6 Task 1.4: Terrane Edge Cases Test ==="));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Milestone 6 Task 1.4: Terrane Edge Cases Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // Initialize simulation
     FTectonicSimulationParameters Params;
@@ -72,7 +73,7 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
     // ========================================
     // TEST 1: Small Terrane Rejection (< 100 km²)
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 1: Small Terrane Rejection ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 1: Small Terrane Rejection ---"));
 
     // Select only 2 vertices (guaranteed to be below 100 km² threshold)
     TArray<int32> SmallTerraneVertices;
@@ -87,7 +88,7 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Selected 2 vertices for small terrane"), SmallTerraneVertices.Num(), 2);
 
     const double SmallArea = Service->ComputeTerraneArea(SmallTerraneVertices);
-    UE_LOG(LogTemp, Log, TEXT("  Small terrane area: %.2f km² (threshold: 100 km²)"), SmallArea);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Small terrane area: %.2f km² (threshold: 100 km²)"), SmallArea);
 
     int32 SmallTerraneID = INDEX_NONE;
     const bool bSmallRejected = !Service->ExtractTerrane(ContinentalPlateID, SmallTerraneVertices, SmallTerraneID);
@@ -96,13 +97,13 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
     const TArray<FContinentalTerrane>& TerranesAfterSmall = Service->GetTerranes();
     TestEqual(TEXT("No terrane created for small extraction"), TerranesAfterSmall.Num(), 0);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Small terrane correctly rejected"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Small terrane correctly rejected"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 2: Non-Contiguous Vertex Rejection
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 2: Non-Contiguous Vertex Rejection ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 2: Non-Contiguous Vertex Rejection ---"));
 
     // Select vertices from different parts of the plate (non-contiguous)
     TArray<int32> NonContiguousVertices;
@@ -128,7 +129,7 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
         }
 
         const double NonContiguousArea = Service->ComputeTerraneArea(NonContiguousVertices);
-        UE_LOG(LogTemp, Log, TEXT("  Non-contiguous terrane area: %.2f km²"), NonContiguousArea);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Non-contiguous terrane area: %.2f km²"), NonContiguousArea);
 
         // Area calculation should return 0 for non-contiguous regions
         if (NonContiguousArea < 100.0)
@@ -136,24 +137,24 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
             int32 NonContiguousID = INDEX_NONE;
             const bool bNonContiguousRejected = !Service->ExtractTerrane(ContinentalPlateID, NonContiguousVertices, NonContiguousID);
             TestTrue(TEXT("Non-contiguous terrane rejected"), bNonContiguousRejected);
-            UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Non-contiguous terrane correctly rejected"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Non-contiguous terrane correctly rejected"));
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("  ⚠️ SKIP: Selected vertices happened to be contiguous, test inconclusive"));
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ SKIP: Selected vertices happened to be contiguous, test inconclusive"));
         }
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ SKIP: Insufficient plate vertices for non-contiguous test"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ SKIP: Insufficient plate vertices for non-contiguous test"));
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 3: Multiple Concurrent Terranes
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 3: Multiple Concurrent Terranes ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 3: Multiple Concurrent Terranes ---"));
 
     // Reset simulation
     Service->SetParameters(Params);
@@ -185,7 +186,7 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Extracting terranes from %d continental plates"), ContinentalPlateIDs.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Extracting terranes from %d continental plates"), ContinentalPlateIDs.Num());
 
     // Extract terrane from each plate
     int32 ExtractedCount = 0;
@@ -274,14 +275,14 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Multiple terranes extracted"), MultipleTorranes.Num(), ExtractedCount);
     TestTrue(TEXT("At least 2 terranes active"), MultipleTorranes.Num() >= 2);
 
-    UE_LOG(LogTemp, Log, TEXT("  Successfully extracted %d terranes"), ExtractedCount);
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Multiple concurrent terranes supported"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Successfully extracted %d terranes"), ExtractedCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Multiple concurrent terranes supported"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 4: Extraction After Simulation Steps
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 4: Extraction After Simulation Steps ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 4: Extraction After Simulation Steps ---"));
 
     // Reset simulation
     Params.bEnableDynamicRetessellation = false;
@@ -369,19 +370,19 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
         const bool bPostSimExtracted = Service->ExtractTerrane(ContinentalPlateID, PostSimVertices, PostSimTerraneID);
         TestTrue(TEXT("Extraction succeeds after simulation"), bPostSimExtracted);
 
-        UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Extraction works correctly after simulation steps"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Extraction works correctly after simulation steps"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ SKIP: Continental plate not found after simulation"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ SKIP: Continental plate not found after simulation"));
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // TEST 5: Performance Regression
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("--- Test 5: Performance Regression ---"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("--- Test 5: Performance Regression ---"));
 
     // Reset simulation
     Params.bEnableDynamicRetessellation = false;
@@ -393,7 +394,7 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
     const double BaselineTimeMs = (FPlatformTime::Seconds() - BaselineStartTime) * 1000.0;
     const double BaselinePerStepMs = BaselineTimeMs / 100.0;
 
-    UE_LOG(LogTemp, Log, TEXT("  Baseline: 100 steps without terranes: %.2f ms (%.3f ms/step)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Baseline: 100 steps without terranes: %.2f ms (%.3f ms/step)"),
         BaselineTimeMs, BaselinePerStepMs);
 
     // Reset and extract terrane
@@ -480,28 +481,28 @@ bool FTerraneEdgeCasesTest::RunTest(const FString& Parameters)
     const double WithTerraneTimeMs = (FPlatformTime::Seconds() - WithTerraneStartTime) * 1000.0;
     const double WithTerranePerStepMs = WithTerraneTimeMs / 100.0;
 
-    UE_LOG(LogTemp, Log, TEXT("  With terrane: 100 steps with active terrane: %.2f ms (%.3f ms/step)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  With terrane: 100 steps with active terrane: %.2f ms (%.3f ms/step)"),
         WithTerraneTimeMs, WithTerranePerStepMs);
 
     const double OverheadPercent = ((WithTerranePerStepMs - BaselinePerStepMs) / BaselinePerStepMs) * 100.0;
-    UE_LOG(LogTemp, Log, TEXT("  Overhead: %.1f%% (target: <10%%)"), OverheadPercent);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Overhead: %.1f%% (target: <10%%)"), OverheadPercent);
 
     TestTrue(TEXT("Performance overhead <10%"), OverheadPercent < 10.0);
 
-    UE_LOG(LogTemp, Log, TEXT("  ✅ PASS: Performance regression within acceptable limits"));
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ PASS: Performance regression within acceptable limits"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // Summary
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("=== Terrane Edge Cases Test Summary ==="));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Small terrane rejection: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Non-contiguous rejection: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Multiple concurrent terranes: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Extraction after simulation: PASS"));
-    UE_LOG(LogTemp, Log, TEXT("  ✅ Performance regression: PASS"));
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Terrane Edge Cases Test PASSED"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Terrane Edge Cases Test Summary ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Small terrane rejection: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Non-contiguous rejection: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Multiple concurrent terranes: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Extraction after simulation: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✅ Performance regression: PASS"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Terrane Edge Cases Test PASSED"));
 
     return true;
 }

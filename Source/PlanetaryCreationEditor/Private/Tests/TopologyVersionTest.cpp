@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -38,12 +39,12 @@ bool FTopologyVersionTest::RunTest(const FString& Parameters)
     Params.bEnablePlateTopologyChanges = false;  // Disable for Test 2
     Service->SetParameters(Params);
 
-    UE_LOG(LogTemp, Log, TEXT("=== Topology Version Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Topology Version Test ==="));
 
     // Test 1: Initial topology version should be 0
     int32 InitialVersion = Service->GetTopologyVersion();
     TestEqual(TEXT("Initial topology version is 0"), InitialVersion, 0);
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Initial version = %d"), InitialVersion);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Initial version = %d"), InitialVersion);
 
     // Test 2: Surface version should increment each step, but topology version should NOT
     Service->AdvanceSteps(5);
@@ -52,7 +53,7 @@ bool FTopologyVersionTest::RunTest(const FString& Parameters)
 
     TestEqual(TEXT("Topology version unchanged after steps (no topology change)"), VersionAfterSteps, InitialVersion);
     TestEqual(TEXT("Surface version incremented after 5 steps"), SurfaceVersionAfterSteps, 5);
-    UE_LOG(LogTemp, Log, TEXT("Test 2: After 5 steps - Topo:%d, Surface:%d"), VersionAfterSteps, SurfaceVersionAfterSteps);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: After 5 steps - Topo:%d, Surface:%d"), VersionAfterSteps, SurfaceVersionAfterSteps);
 
     // Test 3: Re-tessellation should increment topology version
     // Enable re-tessellation for this test
@@ -66,11 +67,11 @@ bool FTopologyVersionTest::RunTest(const FString& Parameters)
     {
         const int32 VersionAfterRetess = Service->GetTopologyVersion();
         TestTrue(TEXT("Topology version incremented after re-tessellation"), VersionAfterRetess > VersionAfterSteps);
-        UE_LOG(LogTemp, Log, TEXT("Test 3: After re-tessellation - Topo:%d (incremented from %d)"), VersionAfterRetess, VersionAfterSteps);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: After re-tessellation - Topo:%d (incremented from %d)"), VersionAfterRetess, VersionAfterSteps);
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Test 3: Re-tessellation did not trigger (plates didn't drift enough)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Test 3: Re-tessellation did not trigger (plates didn't drift enough)"));
     }
 
     // Test 4: Reset and test split/merge increments
@@ -82,7 +83,7 @@ bool FTopologyVersionTest::RunTest(const FString& Parameters)
 
     const int32 VersionAfterReset = Service->GetTopologyVersion();
     const int32 InitialPlateCount = Service->GetPlates().Num();
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Reset complete - Topo:%d, Plates:%d"), VersionAfterReset, InitialPlateCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Reset complete - Topo:%d, Plates:%d"), VersionAfterReset, InitialPlateCount);
 
     // Run simulation to potentially trigger splits/merges
     Service->AdvanceSteps(30);
@@ -91,7 +92,7 @@ bool FTopologyVersionTest::RunTest(const FString& Parameters)
     const int32 FinalPlateCount = Service->GetPlates().Num();
     const TArray<FPlateTopologyEvent>& Events = Service->GetTopologyEvents();
 
-    UE_LOG(LogTemp, Log, TEXT("Test 4: After 30 steps - Topo:%d, Plates:%d, Events:%d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: After 30 steps - Topo:%d, Plates:%d, Events:%d"),
         VersionAfterTopologyChanges, FinalPlateCount, Events.Num());
 
     // If splits or merges occurred, topology version should have incremented
@@ -109,7 +110,7 @@ bool FTopologyVersionTest::RunTest(const FString& Parameters)
             if (Event.EventType == EPlateTopologyEventType::Merge) MergeCount++;
         }
 
-        UE_LOG(LogTemp, Log, TEXT("  Events: %d splits, %d merges"), SplitCount, MergeCount);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  Events: %d splits, %d merges"), SplitCount, MergeCount);
 
         // Each topology event should increment version
         // Note: Re-tessellation may also occur, so version >= event count
@@ -118,14 +119,14 @@ bool FTopologyVersionTest::RunTest(const FString& Parameters)
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Test 4: No split/merge events occurred (may need longer simulation or different seed)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Test 4: No split/merge events occurred (may need longer simulation or different seed)"));
     }
 
     // Summary
-    UE_LOG(LogTemp, Log, TEXT("=== Topology Version Test Complete ==="));
-    UE_LOG(LogTemp, Log, TEXT("✓ Topology version correctly tracks geometry changes"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Surface version independently tracks per-step changes"));
-    UE_LOG(LogTemp, Log, TEXT("✓ LOD cache can use versions for invalidation"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Topology Version Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Topology version correctly tracks geometry changes"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Surface version independently tracks per-step changes"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ LOD cache can use versions for invalidation"));
 
     return true;
 }

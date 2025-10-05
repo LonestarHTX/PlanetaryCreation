@@ -1,5 +1,6 @@
 // Milestone 5 Task 3.1: Performance Regression Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -35,8 +36,8 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Performance Regression Test (M5 vs M4) ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Performance Regression Test (M5 vs M4) ==="));
 
     // Ship-critical LOD configuration (Level 3)
     FTectonicSimulationParameters Params;
@@ -65,16 +66,16 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
         }
     };
 
-    UE_LOG(LogTemp, Log, TEXT("Configuration:"));
-    UE_LOG(LogTemp, Log, TEXT("  LOD Level: 3 (ship-critical)"));
-    UE_LOG(LogTemp, Log, TEXT("  Plates: %d"), 80);
-    UE_LOG(LogTemp, Log, TEXT("  Faces: %d"), 1280);
-    UE_LOG(LogTemp, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Configuration:"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  LOD Level: 3 (ship-critical)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Plates: %d"), 80);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Faces: %d"), 1280);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
 
     // ========================================
     // Test 1: M4 Baseline (No M5 Features)
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT("Test 1: M4 Baseline (No Erosion/Sediment/Dampening)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: M4 Baseline (No Erosion/Sediment/Dampening)"));
 
     Params.bEnableContinentalErosion = false;
     Params.bEnableSedimentTransport = false;
@@ -105,14 +106,14 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
 
     const double BaselineAvgMs = BaselineTotalTime / BaselineSamples;
 
-    UE_LOG(LogTemp, Log, TEXT("  M4 Baseline: %.2f ms avg (min: %.2f, max: %.2f)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  M4 Baseline: %.2f ms avg (min: %.2f, max: %.2f)"),
         BaselineAvgMs, BaselineMinTime, BaselineMaxTime);
 
     // ========================================
     // Test 2: M5 with Continental Erosion Only
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: M5 with Continental Erosion"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: M5 with Continental Erosion"));
 
     Params.bEnableContinentalErosion = true;
     Params.bEnableSedimentTransport = false;
@@ -133,14 +134,14 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
     const double ErosionAvgMs = ErosionTotalTime / BaselineSamples;
     const double ErosionOverheadMs = ErosionAvgMs - BaselineAvgMs;
 
-    UE_LOG(LogTemp, Log, TEXT("  With Erosion: %.2f ms avg (overhead: %.2f ms)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  With Erosion: %.2f ms avg (overhead: %.2f ms)"),
         ErosionAvgMs, ErosionOverheadMs);
 
     // ========================================
     // Test 3: M5 with Sediment Transport Only
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: M5 with Sediment Transport"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: M5 with Sediment Transport"));
 
     Params.bEnableContinentalErosion = false;
     Params.bEnableSedimentTransport = true;
@@ -161,14 +162,14 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
     const double SedimentAvgMs = SedimentTotalTime / BaselineSamples;
     const double SedimentOverheadMs = SedimentAvgMs - BaselineAvgMs;
 
-    UE_LOG(LogTemp, Log, TEXT("  With Sediment: %.2f ms avg (overhead: %.2f ms)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  With Sediment: %.2f ms avg (overhead: %.2f ms)"),
         SedimentAvgMs, SedimentOverheadMs);
 
     // ========================================
     // Test 4: M5 with Oceanic Dampening Only
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: M5 with Oceanic Dampening"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: M5 with Oceanic Dampening"));
 
     Params.bEnableContinentalErosion = false;
     Params.bEnableSedimentTransport = false;
@@ -189,14 +190,14 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
     const double DampeningAvgMs = DampeningTotalTime / BaselineSamples;
     const double DampeningOverheadMs = DampeningAvgMs - BaselineAvgMs;
 
-    UE_LOG(LogTemp, Log, TEXT("  With Dampening: %.2f ms avg (overhead: %.2f ms)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  With Dampening: %.2f ms avg (overhead: %.2f ms)"),
         DampeningAvgMs, DampeningOverheadMs);
 
     // ========================================
     // Test 5: M5 with All Features Enabled
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: M5 with All Features (Erosion + Sediment + Dampening)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: M5 with All Features (Erosion + Sediment + Dampening)"));
 
     Params.bEnableContinentalErosion = true;
     Params.bEnableSedimentTransport = true;
@@ -224,21 +225,21 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
     const double FullM5AvgMs = FullM5TotalTime / BaselineSamples;
     const double TotalOverheadMs = FullM5AvgMs - BaselineAvgMs;
 
-    UE_LOG(LogTemp, Log, TEXT("  Full M5: %.2f ms avg (min: %.2f, max: %.2f)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Full M5: %.2f ms avg (min: %.2f, max: %.2f)"),
         FullM5AvgMs, FullM5MinTime, FullM5MaxTime);
-    UE_LOG(LogTemp, Log, TEXT("  Total Overhead: %.2f ms"), TotalOverheadMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total Overhead: %.2f ms"), TotalOverheadMs);
 
     // ========================================
     // Summary & Validation
     // ========================================
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Performance Summary:"));
-    UE_LOG(LogTemp, Log, TEXT("  M4 Baseline:       %.2f ms"), BaselineAvgMs);
-    UE_LOG(LogTemp, Log, TEXT("  Erosion Overhead:  %.2f ms (target: <5 ms)"), ErosionOverheadMs);
-    UE_LOG(LogTemp, Log, TEXT("  Sediment Overhead: %.2f ms (target: <4 ms)"), SedimentOverheadMs);
-    UE_LOG(LogTemp, Log, TEXT("  Dampening Overhead: %.2f ms (target: <3 ms)"), DampeningOverheadMs);
-    UE_LOG(LogTemp, Log, TEXT("  Total M5 Overhead: %.2f ms (target: <14 ms)"), TotalOverheadMs);
-    UE_LOG(LogTemp, Log, TEXT("  Full M5 Step Time: %.2f ms (target: <110 ms)"), FullM5AvgMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Performance Summary:"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  M4 Baseline:       %.2f ms"), BaselineAvgMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Erosion Overhead:  %.2f ms (target: <5 ms)"), ErosionOverheadMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Sediment Overhead: %.2f ms (target: <4 ms)"), SedimentOverheadMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Dampening Overhead: %.2f ms (target: <3 ms)"), DampeningOverheadMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total M5 Overhead: %.2f ms (target: <14 ms)"), TotalOverheadMs);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Full M5 Step Time: %.2f ms (target: <110 ms)"), FullM5AvgMs);
 
     // Validate targets
     const bool ErosionOK = ErosionOverheadMs < 6.0; // 5ms target + 1ms tolerance
@@ -247,13 +248,13 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
     const bool TotalOverheadOK = TotalOverheadMs < 16.0; // 14ms target + 2ms tolerance
     const bool FullM5OK = FullM5AvgMs < 115.0; // 110ms target + 5ms tolerance
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Target Validation:"));
-    UE_LOG(LogTemp, Log, TEXT("  Erosion: %s"), ErosionOK ? TEXT("PASS") : TEXT("FAIL"));
-    UE_LOG(LogTemp, Log, TEXT("  Sediment: %s"), SedimentOK ? TEXT("PASS") : TEXT("FAIL"));
-    UE_LOG(LogTemp, Log, TEXT("  Dampening: %s"), DampeningOK ? TEXT("PASS") : TEXT("FAIL"));
-    UE_LOG(LogTemp, Log, TEXT("  Total Overhead: %s"), TotalOverheadOK ? TEXT("PASS") : TEXT("FAIL"));
-    UE_LOG(LogTemp, Log, TEXT("  Full M5: %s"), FullM5OK ? TEXT("PASS") : TEXT("FAIL"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Target Validation:"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Erosion: %s"), ErosionOK ? TEXT("PASS") : TEXT("FAIL"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Sediment: %s"), SedimentOK ? TEXT("PASS") : TEXT("FAIL"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Dampening: %s"), DampeningOK ? TEXT("PASS") : TEXT("FAIL"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total Overhead: %s"), TotalOverheadOK ? TEXT("PASS") : TEXT("FAIL"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Full M5: %s"), FullM5OK ? TEXT("PASS") : TEXT("FAIL"));
 
     TestTrue(TEXT("Erosion overhead within budget"), ErosionOK);
     TestTrue(TEXT("Sediment overhead within budget"), SedimentOK);
@@ -261,8 +262,8 @@ bool FPerformanceRegressionTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Total M5 overhead within budget"), TotalOverheadOK);
     TestTrue(TEXT("Full M5 step time within budget"), FullM5OK);
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Performance Regression Test COMPLETE"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Performance Regression Test COMPLETE"));
 
     return true;
 }

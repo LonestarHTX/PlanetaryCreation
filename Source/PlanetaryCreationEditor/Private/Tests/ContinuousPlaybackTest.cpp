@@ -1,5 +1,6 @@
 // Copyright 2025 Michael Hall. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicPlaybackController.h"
 #include "TectonicSimulationController.h"
@@ -23,7 +24,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 {
-	UE_LOG(LogTemp, Log, TEXT("=== Starting Milestone 5 Task 1.1: Continuous Playback Test ==="));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Starting Milestone 5 Task 1.1: Continuous Playback Test ==="));
 
 	// Get simulation service
 	UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
@@ -52,21 +53,21 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("IsPlaying() should return false initially"), PlaybackController.IsPlaying());
 
 	// === Test 2: Play state transition ===
-	UE_LOG(LogTemp, Log, TEXT("Testing Play state transition..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing Play state transition..."));
 	PlaybackController.Play();
 	TestEqual(TEXT("Playback state should be Playing after Play()"),
 		PlaybackController.GetPlaybackState(), EPlaybackState::Playing);
 	TestTrue(TEXT("IsPlaying() should return true after Play()"), PlaybackController.IsPlaying());
 
 	// === Test 3: Pause state transition ===
-	UE_LOG(LogTemp, Log, TEXT("Testing Pause state transition..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing Pause state transition..."));
 	PlaybackController.Pause();
 	TestEqual(TEXT("Playback state should be Paused after Pause()"),
 		PlaybackController.GetPlaybackState(), EPlaybackState::Paused);
 	TestFalse(TEXT("IsPlaying() should return false after Pause()"), PlaybackController.IsPlaying());
 
 	// === Test 4: Resume from Pause ===
-	UE_LOG(LogTemp, Log, TEXT("Testing Resume from Pause..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing Resume from Pause..."));
 	const int32 StepCountBeforeResume = PlaybackController.GetStepCount();
 	PlaybackController.Play();
 	TestEqual(TEXT("Playback state should be Playing after resuming"),
@@ -75,7 +76,7 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 		PlaybackController.GetStepCount(), StepCountBeforeResume);
 
 	// === Test 5: Stop resets state ===
-	UE_LOG(LogTemp, Log, TEXT("Testing Stop resets state..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing Stop resets state..."));
 	PlaybackController.Stop();
 	TestEqual(TEXT("Playback state should be Stopped after Stop()"),
 		PlaybackController.GetPlaybackState(), EPlaybackState::Stopped);
@@ -83,7 +84,7 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 		PlaybackController.GetStepCount(), 0);
 
 	// === Test 6: Playback speed multiplier ===
-	UE_LOG(LogTemp, Log, TEXT("Testing playback speed multiplier..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing playback speed multiplier..."));
 	PlaybackController.SetPlaybackSpeed(2.0f);
 	TestEqual(TEXT("Playback speed should be 2.0×"), PlaybackController.GetPlaybackSpeed(), 2.0f);
 
@@ -98,7 +99,7 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Playback speed should clamp to 0.1×"), PlaybackController.GetPlaybackSpeed(), 0.1f);
 
 	// === Test 7: Step rate control ===
-	UE_LOG(LogTemp, Log, TEXT("Testing step rate control..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing step rate control..."));
 	PlaybackController.SetStepRate(2.0f);
 	TestEqual(TEXT("Step rate should be 2.0 steps/sec"), PlaybackController.GetStepRate(), 2.0f);
 
@@ -110,7 +111,7 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Step rate should clamp to 0.1 steps/sec"), PlaybackController.GetStepRate(), 0.1f);
 
 	// === Test 8: Manual step count reset ===
-	UE_LOG(LogTemp, Log, TEXT("Testing manual step count reset..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing manual step count reset..."));
 	PlaybackController.Play();
 	// Let it accumulate some steps (simulated)
 	PlaybackController.Stop();
@@ -118,7 +119,7 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Step count should be 0 after manual reset"), PlaybackController.GetStepCount(), 0);
 
 	// === Test 9: Multiple Play() calls should be idempotent ===
-	UE_LOG(LogTemp, Log, TEXT("Testing idempotent Play() calls..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing idempotent Play() calls..."));
 	PlaybackController.Play();
 	PlaybackController.Play();
 	PlaybackController.Play();
@@ -126,7 +127,7 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 		PlaybackController.GetPlaybackState(), EPlaybackState::Playing);
 
 	// === Test 10: Stop from Paused state ===
-	UE_LOG(LogTemp, Log, TEXT("Testing Stop from Paused state..."));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("Testing Stop from Paused state..."));
 	PlaybackController.Pause();
 	PlaybackController.Stop();
 	TestEqual(TEXT("Playback state should be Stopped"),
@@ -136,6 +137,6 @@ bool FContinuousPlaybackTest::RunTest(const FString& Parameters)
 	PlaybackController.Shutdown();
 	Controller->Shutdown();
 
-	UE_LOG(LogTemp, Log, TEXT("=== Milestone 5 Task 1.1: Continuous Playback Test PASSED ==="));
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Milestone 5 Task 1.1: Continuous Playback Test PASSED ==="));
 	return true;
 }

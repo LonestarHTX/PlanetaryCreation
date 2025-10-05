@@ -74,6 +74,10 @@ private:
     ECheckBoxState GetHeightmapVisualizationState() const;
     void OnHeightmapVisualizationChanged(ECheckBoxState NewState);
 
+    // Sea level emphasis toggle
+    ECheckBoxState GetSeaLevelHighlightState() const;
+    void OnSeaLevelHighlightChanged(ECheckBoxState NewState);
+
     // Milestone 5 Task 1.3: Undo/Redo controls
     FReply HandleUndoClicked();
     FReply HandleRedoClicked();

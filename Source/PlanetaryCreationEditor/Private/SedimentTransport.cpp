@@ -1,5 +1,6 @@
 // Copyright 2025 Michael Hall. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "Math/UnrealMathUtility.h"
 
@@ -233,7 +234,7 @@ void UTectonicSimulationService::ApplySedimentTransport(double DeltaTimeMy)
     if (TotalErodedMass > 0.0)
     {
         const double MassRatio = TotalDepositedMass / TotalErodedMass;
-        UE_LOG(LogTemp, VeryVerbose, TEXT("Sediment transport mass conservation: %.3f (eroded: %.2f m, deposited: %.2f m)"),
+        UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Sediment transport mass conservation: %.3f (eroded: %.2f m, deposited: %.2f m)"),
             MassRatio, TotalErodedMass, TotalDepositedMass);
     }
 }

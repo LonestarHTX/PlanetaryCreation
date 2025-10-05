@@ -1,5 +1,6 @@
 // Milestone 4 Task 2.2: Rift Propagation Model Test
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -29,12 +30,12 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("=== Rift Propagation Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== Rift Propagation Test ==="));
 
     // Test 1: Rift State Transition (Nascent → Rifting)
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 1: Rift State Transition (Divergent Boundaries Only)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 1: Rift State Transition (Divergent Boundaries Only)"));
 
     FTectonicSimulationParameters Params;
     Params.Seed = 42;
@@ -80,7 +81,7 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
             // Validate only divergent boundaries can rift
             TestEqual(TEXT("Rifting boundary is divergent"), Boundary.BoundaryType, EBoundaryType::Divergent);
 
-            UE_LOG(LogTemp, Log, TEXT("  Rift found: Boundary [%d-%d], width=%.0f m, age=%.2f My, velocity=%.4f rad/My"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Rift found: Boundary [%d-%d], width=%.0f m, age=%.2f My, velocity=%.4f rad/My"),
                 BoundaryPair.Key.Key, BoundaryPair.Key.Value,
                 Boundary.RiftWidthMeters,
                 Service->GetCurrentTimeMy() - Boundary.RiftFormationTimeMy,
@@ -88,18 +89,18 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Boundary types: %d divergent, %d convergent, %d transform"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Boundary types: %d divergent, %d convergent, %d transform"),
         DivergentCount, ConvergentCount, TransformCount);
-    UE_LOG(LogTemp, Log, TEXT("  Rifting boundaries: %d / %d divergent"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Rifting boundaries: %d / %d divergent"),
         RiftingCount, DivergentCount);
 
     // At least some divergent boundaries should enter rifting state
     TestTrue(TEXT("At least one rift formed"), RiftingCount > 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Rift state transition validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rift state transition validated"));
 
     // Test 2: Rift Widening Over Time
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 2: Rift Widening Over Time"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 2: Rift Widening Over Time"));
 
     Service->SetParameters(Params); // Reset
 
@@ -118,7 +119,7 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Initial rift count: %d"), InitialRiftWidths.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Initial rift count: %d"), InitialRiftWidths.Num());
 
     // Advance more time
     Service->AdvanceSteps(10); // Additional 20 My
@@ -139,19 +140,19 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
             if (CurrentWidth > InitialWidth)
             {
                 WidenedCount++;
-                UE_LOG(LogTemp, Verbose, TEXT("  Rift [%d-%d]: %.0f m → %.0f m (+%.0f m)"),
+                UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Rift [%d-%d]: %.0f m → %.0f m (+%.0f m)"),
                     Key.Key, Key.Value, InitialWidth, CurrentWidth, CurrentWidth - InitialWidth);
             }
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  %d / %d rifts widened over 20 My"), WidenedCount, RiftBoundaryKeys.Num());
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  %d / %d rifts widened over 20 My"), WidenedCount, RiftBoundaryKeys.Num());
     TestTrue(TEXT("Rifts widened over time"), WidenedCount > 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Rift widening validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rift widening validated"));
 
     // Test 3: Convergent/Transform Boundaries Never Rift
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 3: Convergent/Transform Boundaries Never Rift"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 3: Convergent/Transform Boundaries Never Rift"));
 
     Service->SetParameters(Params); // Reset
     Service->AdvanceSteps(20); // 40 My
@@ -167,7 +168,7 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
             if (Boundary.BoundaryType != EBoundaryType::Divergent)
             {
                 InvalidRiftCount++;
-                UE_LOG(LogTemp, Error, TEXT("  ✗ Invalid rift: Boundary [%d-%d] is %s but in rifting state"),
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("  ✗ Invalid rift: Boundary [%d-%d] is %s but in rifting state"),
                     BoundaryPair.Key.Key, BoundaryPair.Key.Value,
                     Boundary.BoundaryType == EBoundaryType::Convergent ? TEXT("Convergent") : TEXT("Transform"));
             }
@@ -175,11 +176,11 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
     }
 
     TestEqual(TEXT("No non-divergent boundaries rift"), InvalidRiftCount, 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Only divergent boundaries enter rifting state"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Only divergent boundaries enter rifting state"));
 
     // Test 4: Rift Width Threshold Detection
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 4: Rift Width Threshold Detection"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 4: Rift Width Threshold Detection"));
 
     // Use aggressive parameters to force wide rifts
     Params.RiftProgressionRate = 100000.0; // 100 km/My per rad/My (2x normal)
@@ -201,25 +202,25 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
             MatureRiftCount++;
             const double RiftAgeMy = Service->GetCurrentTimeMy() - Boundary.RiftFormationTimeMy;
 
-            UE_LOG(LogTemp, Log, TEXT("  Mature rift: Boundary [%d-%d], width=%.0f m (threshold: %.0f m), age=%.2f My"),
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Mature rift: Boundary [%d-%d], width=%.0f m (threshold: %.0f m), age=%.2f My"),
                 BoundaryPair.Key.Key, BoundaryPair.Key.Value,
                 Boundary.RiftWidthMeters, Params.RiftSplitThresholdMeters, RiftAgeMy);
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  %d rifts exceeded split threshold"), MatureRiftCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  %d rifts exceeded split threshold"), MatureRiftCount);
 
     // Note: Mature rifts depend on specific plate dynamics, velocity distribution, and time.
     // The important validation is that rifts CAN reach threshold (code path exists),
     // not that they ALWAYS reach it in every scenario. If 0 mature rifts, log warning but don't fail.
     if (MatureRiftCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("  ✓ Rift maturity detection validated (mature rifts found)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rift maturity detection validated (mature rifts found)"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("  ⚠️ No mature rifts in this run (depends on velocity distribution)"));
-        UE_LOG(LogTemp, Warning, TEXT("  Rift width threshold detection code path exists and is tracked"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ⚠️ No mature rifts in this run (depends on velocity distribution)"));
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("  Rift width threshold detection code path exists and is tracked"));
     }
 
     // Validate that at least SOME rifts have non-zero width (progression is working)
@@ -235,11 +236,11 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
         }
     }
     TestTrue(TEXT("Some rifts have non-zero width"), NonZeroWidthCount > 0);
-    UE_LOG(LogTemp, Log, TEXT("  Max rift width: %.0f m (threshold: %.0f m)"), MaxRiftWidth, Params.RiftSplitThresholdMeters);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max rift width: %.0f m (threshold: %.0f m)"), MaxRiftWidth, Params.RiftSplitThresholdMeters);
 
     // Test 5: Rift Formation Time Tracking
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 5: Rift Formation Time Tracking"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 5: Rift Formation Time Tracking"));
 
     Service->SetParameters(Params); // Reset
     Service->AdvanceSteps(10); // 20 My
@@ -254,16 +255,16 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
             TestTrue(TEXT("Rift formation time < current time"), Boundary.RiftFormationTimeMy <= Service->GetCurrentTimeMy());
 
             const double RiftAgeMy = Service->GetCurrentTimeMy() - Boundary.RiftFormationTimeMy;
-            UE_LOG(LogTemp, Verbose, TEXT("  Rift [%d-%d]: formed at %.2f My, age=%.2f My"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("  Rift [%d-%d]: formed at %.2f My, age=%.2f My"),
                 BoundaryPair.Key.Key, BoundaryPair.Key.Value, Boundary.RiftFormationTimeMy, RiftAgeMy);
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Rift formation time tracking validated"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rift formation time tracking validated"));
 
     // Test 6: Disabled Rift Propagation
-    UE_LOG(LogTemp, Log, TEXT(""));
-    UE_LOG(LogTemp, Log, TEXT("Test 6: Disabled Rift Propagation (bEnableRiftPropagation=false)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test 6: Disabled Rift Propagation (bEnableRiftPropagation=false)"));
 
     Params.bEnableRiftPropagation = false;
     Service->SetParameters(Params);
@@ -280,7 +281,7 @@ bool FRiftPropagationTest::RunTest(const FString& Parameters)
     }
 
     TestEqual(TEXT("No rifts when disabled"), DisabledRiftCount, 0);
-    UE_LOG(LogTemp, Log, TEXT("  ✓ Rift propagation disable flag respected"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  ✓ Rift propagation disable flag respected"));
 
     AddInfo(TEXT("✅ Rift propagation test complete"));
     AddInfo(FString::Printf(TEXT("Rifts formed: %d | Mature rifts: %d | Widening rate: %.0f m/My"),

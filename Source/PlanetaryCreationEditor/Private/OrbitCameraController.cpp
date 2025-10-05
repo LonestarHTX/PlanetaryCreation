@@ -1,6 +1,8 @@
 // Copyright 2025 Michael Hall. All Rights Reserved.
 
 #include "OrbitCameraController.h"
+
+#include "PlanetaryCreationLogging.h"
 #include "GameFramework/Actor.h"
 #include "Camera/CameraComponent.h"
 #include "Editor.h"
@@ -34,7 +36,7 @@ void FOrbitCameraController::Initialize(AActor* InTargetActor, double PlanetRadi
     TargetYaw = DefaultYaw;
     TargetPitch = DefaultPitch;
 
-    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::Initialize() - Camera initialized (Radius=%.0f cm, Default=%.0f cm, Min=%.0f cm, Max=%.0f cm)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("FOrbitCameraController::Initialize() - Camera initialized (Radius=%.0f cm, Default=%.0f cm, Min=%.0f cm, Max=%.0f cm)"),
         PlanetRadiusUE, CurrentDistance, MinDistance, MaxDistance);
 }
 
@@ -47,7 +49,7 @@ void FOrbitCameraController::SetPlanetRadius(double PlanetRadiusMeters)
     CurrentDistance = FMath::Clamp(CurrentDistance, MinDistance, MaxDistance);
     TargetDistance = FMath::Clamp(TargetDistance, MinDistance, MaxDistance);
 
-    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::SetPlanetRadius() - Updated radius to %.0f cm (Min=%.0f, Max=%.0f)"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("FOrbitCameraController::SetPlanetRadius() - Updated radius to %.0f cm (Min=%.0f, Max=%.0f)"),
         PlanetRadiusUE, MinDistance, MaxDistance);
 }
 
@@ -144,7 +146,7 @@ void FOrbitCameraController::ResetToDefault()
     // Default distance: 2× planet radius for comfortable orbital view
     TargetDistance = PlanetRadiusUE * 2.0f;
 
-    UE_LOG(LogTemp, Log, TEXT("FOrbitCameraController::ResetToDefault() - Camera reset to default view (Distance=%.0f cm)"), TargetDistance);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("FOrbitCameraController::ResetToDefault() - Camera reset to default view (Distance=%.0f cm)"), TargetDistance);
 }
 
 FVector FOrbitCameraController::CalculateDesiredPosition() const

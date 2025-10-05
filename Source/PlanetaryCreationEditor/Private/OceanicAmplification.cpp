@@ -4,6 +4,7 @@
 // using the recorded parameters r_c, i.e. the local direction parallel to the ridge, and
 // oceanic crust age a_o to accentuate the faults where the crust is young."
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "Misc/AutomationTest.h"
 
@@ -147,7 +148,7 @@ double ComputeOceanicAmplification(
             static int32 DebugContinentalLog = 0;
             if (DebugContinentalLog < 3 && !bIsOceanic)
             {
-                UE_LOG(LogTemp, Log, TEXT("Debug: Continental vertex with PlateID=%d, returning BaseElevation=%.3f m"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("Debug: Continental vertex with PlateID=%d, returning BaseElevation=%.3f m"),
                     PlateID, BaseElevation_m);
                 DebugContinentalLog++;
             }
@@ -211,7 +212,7 @@ double ComputeOceanicAmplification(
     static int32 DebugLogCount = 0;
     if (DebugLogCount < 5 && CrustAge_My < 10.0)
     {
-        UE_LOG(LogTemp, Log, TEXT("Debug OceanicAmp [%d]: Age=%.2f My, Base=%.1f m, Fault=%.1f m (GaborNoise=%.3f), Fine=%.1f m, Total=%.1f m, Diff=%.1f m"),
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Debug OceanicAmp [%d]: Age=%.2f My, Base=%.1f m, Fault=%.1f m (GaborNoise=%.3f), Fine=%.1f m, Total=%.1f m, Diff=%.1f m"),
             DebugLogCount, CrustAge_My, BaseElevation_m, FaultDetail_m, GaborNoise, FineDetail_m, AmplifiedElevation, AmplifiedElevation - BaseElevation_m);
         DebugLogCount++;
     }

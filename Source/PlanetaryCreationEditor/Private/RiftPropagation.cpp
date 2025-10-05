@@ -1,5 +1,6 @@
 // Milestone 4 Task 2.2: Rift Propagation Model (Paper Section 4.2)
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 
 void UTectonicSimulationService::UpdateRiftProgression(double DeltaTimeMy)
@@ -36,7 +37,7 @@ void UTectonicSimulationService::UpdateRiftProgression(double DeltaTimeMy)
                 Boundary.RiftFormationTimeMy = CurrentTimeMy;
                 Boundary.StateTransitionTimeMy = CurrentTimeMy;
 
-                UE_LOG(LogTemp, Log, TEXT("[Rift] Boundary [%d-%d] entered rifting state at %.2f My (velocity=%.4f rad/My)"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[Rift] Boundary [%d-%d] entered rifting state at %.2f My (velocity=%.4f rad/My)"),
                     BoundaryPair.Key.Key, BoundaryPair.Key.Value, CurrentTimeMy, Boundary.RelativeVelocity);
             }
         }
@@ -52,13 +53,13 @@ void UTectonicSimulationService::UpdateRiftProgression(double DeltaTimeMy)
 
             const double RiftAgeMy = CurrentTimeMy - Boundary.RiftFormationTimeMy;
 
-            UE_LOG(LogTemp, Verbose, TEXT("[Rift] Boundary [%d-%d]: width=%.0f m, age=%.2f My, velocity=%.4f rad/My"),
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[Rift] Boundary [%d-%d]: width=%.0f m, age=%.2f My, velocity=%.4f rad/My"),
                 BoundaryPair.Key.Key, BoundaryPair.Key.Value, Boundary.RiftWidthMeters, RiftAgeMy, Boundary.RelativeVelocity);
 
             // Check if rift has reached split threshold
             if (Boundary.RiftWidthMeters > Parameters.RiftSplitThresholdMeters)
             {
-                UE_LOG(LogTemp, Log, TEXT("[Rift] Boundary [%d-%d] exceeded split threshold (width=%.0f m > %.0f m) at %.2f My"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[Rift] Boundary [%d-%d] exceeded split threshold (width=%.0f m > %.0f m) at %.2f My"),
                     BoundaryPair.Key.Key, BoundaryPair.Key.Value, Boundary.RiftWidthMeters, Parameters.RiftSplitThresholdMeters, CurrentTimeMy);
 
                 // Note: Actual split will be triggered by DetectAndExecutePlateSplits()
@@ -68,7 +69,7 @@ void UTectonicSimulationService::UpdateRiftProgression(double DeltaTimeMy)
             // Transition back to Active if velocity drops below threshold (rift dormancy)
             if (Boundary.RelativeVelocity < Parameters.SplitVelocityThreshold * 0.5) // Hysteresis
             {
-                UE_LOG(LogTemp, Log, TEXT("[Rift] Boundary [%d-%d] became dormant (velocity dropped to %.4f rad/My)"),
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[Rift] Boundary [%d-%d] became dormant (velocity dropped to %.4f rad/My)"),
                     BoundaryPair.Key.Key, BoundaryPair.Key.Value, Boundary.RelativeVelocity);
 
                 Boundary.BoundaryState = EBoundaryState::Active;

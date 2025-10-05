@@ -1,12 +1,14 @@
 // Milestone 6: Heightmap Visualization Exporter
 // Generates color-coded PNG showing elevation gradient from min to max
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Modules/ModuleManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 
 #include "HeightmapColorPalette.h"
@@ -17,8 +19,8 @@
 static FVector2D VertexToEquirectangularUV(const FVector3d& Position)
 {
 	const FVector3d N = Position.GetSafeNormal();
-	const double U = 0.5 + (FMath::Atan2(N.Y, N.X) / (2.0 * PI));
-	const double V = 0.5 - (FMath::Asin(FMath::Clamp(N.Z, -1.0, 1.0)) / PI);
+	const float U = 0.5f + static_cast<float>(FMath::Atan2(N.Y, N.X) / (2.0 * PI));
+	const float V = 0.5f - static_cast<float>(FMath::Asin(FMath::Clamp(N.Z, -1.0, 1.0)) / PI);
 	return FVector2D(U, V);
 }
 
@@ -28,11 +30,25 @@ static FVector2D VertexToEquirectangularUV(const FVector3d& Position)
  */
 FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidth, int32 ImageHeight)
 {
-	if (RenderVertices.Num() == 0 || VertexAmplifiedElevation.Num() == 0)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Cannot export heightmap: No render data available"));
-		return FString();
-	}
+    if (ImageWidth <= 0 || ImageHeight <= 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: Invalid dimensions %dx%d"), ImageWidth, ImageHeight);
+        return FString();
+    }
+
+    if (RenderVertices.Num() == 0 || VertexAmplifiedElevation.Num() == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: No render data available"));
+        return FString();
+    }
+
+#if WITH_AUTOMATION_TESTS
+    if (bForceHeightmapModuleFailure)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: Image wrapper module forced offline (test override)"));
+        return FString();
+    }
+#endif
 
 	// Find min/max elevation
 	double MinElevation = TNumericLimits<double>::Max();
@@ -44,7 +60,7 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 		MaxElevation = FMath::Max(MaxElevation, Elevation);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Heightmap range: %.1f m to %.1f m"), MinElevation, MaxElevation);
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Heightmap range: %.1f m to %.1f m"), MinElevation, MaxElevation);
 
 	// Create image buffer (RGBA8)
 	TArray<FColor> ImageData;
@@ -75,18 +91,18 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 		ImageData[PixelIdx] = ElevColor;
 
 		// Debug: Log first few samples
-		if (DebugSampleCount < 5)
-		{
-			UE_LOG(LogTemp, Log, TEXT("Vertex %d: Pos=(%.2f,%.2f,%.2f) Elev=%.1f Norm=%.3f UV=(%.3f,%.3f) Pixel=(%d,%d) Color=(%d,%d,%d)"),
-				VertexIdx, Position.X, Position.Y, Position.Z, Elevation, NormalizedHeight,
-				UV.X, UV.Y, X, Y, ElevColor.R, ElevColor.G, ElevColor.B);
-			DebugSampleCount++;
-		}
-	}
+        if (DebugSampleCount < 5)
+        {
+            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Vertex %d: Pos=(%.2f,%.2f,%.2f) Elev=%.1f Norm=%.3f UV=(%.3f,%.3f) Pixel=(%d,%d) Color=(%d,%d,%d)"),
+                VertexIdx, Position.X, Position.Y, Position.Z, Elevation, NormalizedHeight,
+                UV.X, UV.Y, X, Y, ElevColor.R, ElevColor.G, ElevColor.B);
+            DebugSampleCount++;
+        }
+    }
 
-	// Fill gaps (pixels that had no vertex mapped to them)
-	// Multi-pass dilation to fill large gaps between sparse vertices
-	const int32 MaxDilationPasses = 50; // Fill up to 50-pixel gaps
+    // Fill gaps (pixels that had no vertex mapped to them)
+    // Multi-pass dilation to fill large gaps between sparse vertices
+    constexpr int32 MaxDilationPasses = 50; // Fill up to 50-pixel gaps
 	int32 BlackPixelCount = 0;
 
 	// Count initial unfilled pixels (alpha=0, since SetNumZeroed gives us 0,0,0,0)
@@ -96,8 +112,8 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 			BlackPixelCount++;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Heightmap dilation: %d/%d pixels are unfilled (%.1f%%)"),
-		BlackPixelCount, ImageData.Num(), 100.0 * BlackPixelCount / ImageData.Num());
+    UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Heightmap dilation: %d/%d pixels are unfilled (%.1f%%)"),
+        BlackPixelCount, ImageData.Num(), 100.0 * BlackPixelCount / ImageData.Num());
 
 	// Multi-pass dilation
 	for (int32 Pass = 0; Pass < MaxDilationPasses; ++Pass)
@@ -143,22 +159,41 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 			}
 		}
 
-		if (PixelsFilledThisPass == 0)
-		{
-			UE_LOG(LogTemp, Log, TEXT("Heightmap dilation converged after %d passes"), Pass + 1);
-			break;
-		}
-	}
+        if (PixelsFilledThisPass == 0)
+        {
+            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Heightmap dilation converged after %d passes"), Pass + 1);
+            break;
+        }
+    }
+
+    // Mirror seam columns to avoid filtering artifacts at U≈0/1
+    for (int32 Y = 0; Y < ImageHeight; ++Y)
+    {
+        const int32 LeftIndex = Y * ImageWidth;
+        const int32 RightIndex = LeftIndex + (ImageWidth - 1);
+
+        FColor& LeftPixel = ImageData[LeftIndex];
+        FColor& RightPixel = ImageData[RightIndex];
+
+        if (LeftPixel.A == 0 && RightPixel.A > 0)
+        {
+            LeftPixel = RightPixel;
+        }
+        else if (RightPixel.A == 0 && LeftPixel.A > 0)
+        {
+            RightPixel = LeftPixel;
+        }
+    }
 
 	// Encode as PNG
 	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
 	TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
 
-	if (!ImageWrapper.IsValid())
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create PNG image wrapper"));
-		return FString();
-	}
+    if (!ImageWrapper.IsValid())
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to create PNG image wrapper"));
+        return FString();
+    }
 
 	// Convert FColor array to raw RGBA8 bytes
 	TArray<uint8> RawData;
@@ -171,29 +206,65 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 		RawData[i * 4 + 3] = 255; // Full opacity
 	}
 
-	if (!ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), ImageWidth, ImageHeight, ERGBFormat::RGBA, 8))
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to set raw image data for PNG encoding"));
-		return FString();
-	}
+    if (!ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), ImageWidth, ImageHeight, ERGBFormat::RGBA, 8))
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to set raw image data for PNG encoding"));
+        return FString();
+    }
 
-	const TArray64<uint8>& CompressedData = ImageWrapper->GetCompressed();
-	if (CompressedData.Num() == 0)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to compress PNG image"));
-		return FString();
-	}
+    const TArray64<uint8>& CompressedData = ImageWrapper->GetCompressed();
+    if (CompressedData.Num() == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to compress PNG image"));
+        return FString();
+    }
 
-	// Write to file in project root
-	const FString OutputPath = FPaths::ProjectDir() / TEXT("Heightmap_Visualization.png");
-	if (!FFileHelper::SaveArrayToFile(CompressedData, *OutputPath))
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to write PNG to: %s"), *OutputPath);
-		return FString();
-	}
+    FString OutputDirectory = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PlanetaryCreation/Heightmaps"));
+#if WITH_AUTOMATION_TESTS
+    if (!HeightmapExportOverrideDirectory.IsEmpty())
+    {
+        OutputDirectory = HeightmapExportOverrideDirectory;
+    }
+#endif
 
-	UE_LOG(LogTemp, Log, TEXT("✅ Exported heightmap visualization (%dx%d): %s"), ImageWidth, ImageHeight, *OutputPath);
-	UE_LOG(LogTemp, Log, TEXT("   Elevation range: %.1f m (blue) to %.1f m (red)"), MinElevation, MaxElevation);
+    if (!IFileManager::Get().MakeDirectory(*OutputDirectory, true))
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to create output directory: %s"), *OutputDirectory);
+        return FString();
+    }
 
-	return OutputPath;
+    const FString OutputPath = FPaths::Combine(OutputDirectory, TEXT("Heightmap_Visualization.png"));
+
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (PlatformFile.FileExists(*OutputPath))
+    {
+        PlatformFile.SetReadOnly(*OutputPath, false);
+        PlatformFile.DeleteFile(*OutputPath);
+    }
+
+    if (bForceHeightmapWriteFailure)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Forced heightmap write failure (test override)"));
+        return FString();
+    }
+
+    if (!FFileHelper::SaveArrayToFile(CompressedData, *OutputPath))
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to write PNG to: %s"), *OutputPath);
+        return FString();
+    }
+
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Exported heightmap visualization (%dx%d): %s"), ImageWidth, ImageHeight, *OutputPath);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Elevation range: %.1f m (blue) to %.1f m (red)"), MinElevation, MaxElevation);
+
+    return OutputPath;
 }
+
+#if WITH_AUTOMATION_TESTS
+void UTectonicSimulationService::SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure, const FString& InOverrideOutputDirectory)
+{
+    bForceHeightmapModuleFailure = bInForceModuleFailure;
+    bForceHeightmapWriteFailure = bInForceWriteFailure;
+    HeightmapExportOverrideDirectory = InOverrideOutputDirectory;
+}
+#endif

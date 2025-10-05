@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
@@ -42,11 +43,11 @@ bool FLODRegressionTest::RunTest(const FString& Parameters)
     Params.bEnableDynamicRetessellation = true;
     Service->SetParameters(Params);
 
-    UE_LOG(LogTemp, Log, TEXT("=== LOD Regression Test ==="));
-    UE_LOG(LogTemp, Log, TEXT("Test: Verify LOD changes preserve simulation state"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== LOD Regression Test ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Test: Verify LOD changes preserve simulation state"));
 
     // Step 1: Advance simulation to build up state
-    UE_LOG(LogTemp, Log, TEXT("Step 1: Advancing simulation 10 steps to accumulate state..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Step 1: Advancing simulation 10 steps to accumulate state..."));
     Service->AdvanceSteps(10);
 
     // Capture baseline state BEFORE LOD change
@@ -69,11 +70,11 @@ bool FLODRegressionTest::RunTest(const FString& Parameters)
         StressBefore.Add(BoundaryPair.Value.AccumulatedStress);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("  Baseline: %d plates, %.2f My, %d render verts, %d tris, L%d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Baseline: %d plates, %.2f My, %d render verts, %d tris, L%d"),
         PlateCountBefore, CurrentTimeBefore, RenderVerticesBefore, RenderTrianglesBefore, Params.RenderSubdivisionLevel);
 
     // Step 2: Change LOD using non-destructive method
-    UE_LOG(LogTemp, Log, TEXT("Step 2: Changing LOD from L2 → L4 using SetRenderSubdivisionLevel()..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Step 2: Changing LOD from L2 → L4 using SetRenderSubdivisionLevel()..."));
     Service->SetRenderSubdivisionLevel(4);
 
     // Capture state AFTER LOD change
@@ -84,11 +85,11 @@ bool FLODRegressionTest::RunTest(const FString& Parameters)
     const int32 RenderVerticesAfter = Service->GetRenderVertices().Num();
     const int32 RenderTrianglesAfter = Service->GetRenderTriangles().Num() / 3;
 
-    UE_LOG(LogTemp, Log, TEXT("  After LOD: %d plates, %.2f My, %d render verts, %d tris, L%d"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  After LOD: %d plates, %.2f My, %d render verts, %d tris, L%d"),
         PlateCountAfter, CurrentTimeAfter, RenderVerticesAfter, RenderTrianglesAfter, 4);
 
     // Step 3: Validate simulation state preservation
-    UE_LOG(LogTemp, Log, TEXT("Step 3: Validating state preservation..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Step 3: Validating state preservation..."));
 
     // Test 3.1: Plate count unchanged
     TestEqual(TEXT("Plate count preserved"), PlateCountAfter, PlateCountBefore);
@@ -128,7 +129,7 @@ bool FLODRegressionTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Boundary stress preserved"), bStressMatch);
 
     // Step 4: Validate render mesh regeneration
-    UE_LOG(LogTemp, Log, TEXT("Step 4: Validating render mesh regeneration..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Step 4: Validating render mesh regeneration..."));
 
     // Test 4.1: Render mesh changed (expected - we're at different LOD)
     TestNotEqual(TEXT("Render vertex count changed (expected)"), RenderVerticesAfter, RenderVerticesBefore);
@@ -152,7 +153,7 @@ bool FLODRegressionTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Voronoi mapping complete after LOD change"), bAllAssigned);
 
     // Step 5: Advance simulation after LOD change to verify it continues correctly
-    UE_LOG(LogTemp, Log, TEXT("Step 5: Advancing 5 more steps to verify simulation continues..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Step 5: Advancing 5 more steps to verify simulation continues..."));
     Service->AdvanceSteps(5);
 
     const double CurrentTimeFinal = Service->GetCurrentTimeMy();
@@ -160,7 +161,7 @@ bool FLODRegressionTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Simulation continues after LOD change"), CurrentTimeFinal, ExpectedTimeFinal);
 
     // Step 6: Test LOD change in opposite direction (L4 → L2)
-    UE_LOG(LogTemp, Log, TEXT("Step 6: Testing reverse LOD change (L4 → L2)..."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("Step 6: Testing reverse LOD change (L4 → L2)..."));
     Service->SetRenderSubdivisionLevel(2);
 
     const int32 RenderVerticesReversed = Service->GetRenderVertices().Num();
@@ -170,15 +171,15 @@ bool FLODRegressionTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Reverse LOD: Plate count still preserved"), PlateCountReversed, PlateCountBefore);
     TestEqual(TEXT("Reverse LOD: Back to L2 triangle count"), RenderTrianglesReversed, RenderTrianglesBefore);
 
-    UE_LOG(LogTemp, Log, TEXT("  Reversed to L2: %d plates, %d verts, %d tris"),
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Reversed to L2: %d plates, %d verts, %d tris"),
         PlateCountReversed, RenderVerticesReversed, RenderTrianglesReversed);
 
     // Summary
-    UE_LOG(LogTemp, Log, TEXT("=== LOD Regression Test Complete ==="));
-    UE_LOG(LogTemp, Log, TEXT("✓ Simulation state preserved across LOD changes"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Plates, stress, and time remain intact"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Render mesh regenerates correctly"));
-    UE_LOG(LogTemp, Log, TEXT("✓ Simulation continues properly after LOD switch"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("=== LOD Regression Test Complete ==="));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Simulation state preserved across LOD changes"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Plates, stress, and time remain intact"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Render mesh regenerates correctly"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("✓ Simulation continues properly after LOD switch"));
 
     return true;
 }

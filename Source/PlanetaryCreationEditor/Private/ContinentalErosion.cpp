@@ -1,5 +1,6 @@
 // Copyright 2025 Michael Hall. All Rights Reserved.
 
+#include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "Math/UnrealMathUtility.h"
 
@@ -65,7 +66,7 @@ void UTectonicSimulationService::ApplyContinentalErosion(double DeltaTimeMy)
         // M5 Phase 3 fix: Treat INDEX_NONE vertices as oceanic (skip erosion and log warning)
         if (PlateIdx == INDEX_NONE)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Vertex %d has no plate assignment (INDEX_NONE) - skipping erosion. This may indicate a Voronoi assignment bug."), VertexIdx);
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("Vertex %d has no plate assignment (INDEX_NONE) - skipping erosion. This may indicate a Voronoi assignment bug."), VertexIdx);
             VertexErosionRates[VertexIdx] = 0.0;
             continue;
         }
