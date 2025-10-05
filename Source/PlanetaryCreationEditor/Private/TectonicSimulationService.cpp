@@ -250,9 +250,10 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         }
 
         // Milestone 5 Task 1.3: Capture history snapshot after each individual step for undo/redo
-        // Increment surface version immediately beforehand so cached heightmap surfaces refresh on rebuild.
-        SurfaceDataVersion++;
         CaptureHistorySnapshot();
+
+        // Bump surface data version after the snapshot so caches and history stay in sync.
+        SurfaceDataVersion++;
     }
 
     // Milestone 3 Task 4.5: Record step time for UI display
@@ -987,13 +988,6 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     CSVLines.Add(TEXT("")); // Empty line
     CSVLines.Add(TEXT("VertexIndex,PositionX,PositionY,PositionZ,PlateID,VelocityX,VelocityY,VelocityZ,VelocityMagnitude,StressMPa,ElevationMeters,TemperatureK"));
 
-    /**
-     * M5 Phase 3: Stress-to-elevation conversion (cosmetic visualization, not physically accurate).
-     * CompressionModulus = 100.0 means "1 MPa stress → 100 m elevation" (legacy visualization scale).
-     * This matches TectonicSimulationController.cpp rendering logic.
-     */
-    constexpr double CompressionModulus = 100.0; // 1 MPa = 100 m elevation (cosmetic)
-
     const int32 MaxVerticesToExport = FMath::Min(RenderVertices.Num(), 1000); // Limit to first 1000 vertices for CSV size
     for (int32 i = 0; i < MaxVerticesToExport; ++i)
     {
@@ -1002,7 +996,9 @@ void UTectonicSimulationService::ExportMetricsToCSV()
         const FVector3d& Velocity = VertexVelocities.IsValidIndex(i) ? VertexVelocities[i] : FVector3d::ZeroVector;
         const double VelocityMag = Velocity.Length();
         const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
-        const double ElevationMeters = (StressMPa / CompressionModulus) * Parameters.ElevationScale;
+        const double ElevationMeters = VertexElevationValues.IsValidIndex(i)
+            ? VertexElevationValues[i]
+            : 0.0;
         const double TemperatureK = VertexTemperatureValues.IsValidIndex(i) ? VertexTemperatureValues[i] : 0.0; // Milestone 4 Task 2.3
 
         CSVLines.Add(FString::Printf(TEXT("%d,%.8f,%.8f,%.8f,%d,%.8f,%.8f,%.8f,%.8f,%.2f,%.2f,%.1f"),
