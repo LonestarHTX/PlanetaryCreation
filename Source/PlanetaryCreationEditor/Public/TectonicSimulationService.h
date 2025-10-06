@@ -897,14 +897,25 @@ public:
         const TArray<float>*& OutPositionZ,
         const TArray<float>*& OutNormalX,
         const TArray<float>*& OutNormalY,
-        const TArray<float>*& OutNormalZ) const;
+        const TArray<float>*& OutNormalZ,
+        const TArray<float>*& OutTangentX,
+        const TArray<float>*& OutTangentY,
+        const TArray<float>*& OutTangentZ) const;
 
     /** Access cached float inputs required by the oceanic amplification GPU path. */
     void GetOceanicAmplificationFloatInputs(
         const TArray<float>*& OutBaselineElevation,
         const TArray<FVector4f>*& OutRidgeDirections,
         const TArray<float>*& OutCrustAge,
-        const TArray<FVector3f>*& OutRenderPositions) const;
+        const TArray<FVector3f>*& OutRenderPositions,
+        const TArray<uint32>*& OutOceanicMask) const;
+
+    /** Pump pending GPU readbacks; optionally block until all are ready. */
+    void ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete = false);
+
+#if WITH_EDITOR
+    void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount);
+#endif
 
     /**
      * Milestone 6 Task 1.2: Assign extracted terrane to nearest oceanic carrier plate.
@@ -1141,6 +1152,9 @@ private:
         TArray<float> NormalX;
         TArray<float> NormalY;
         TArray<float> NormalZ;
+        TArray<float> TangentX;
+        TArray<float> TangentY;
+        TArray<float> TangentZ;
     };
 
     /** Cached float inputs shared by the oceanic amplification GPU path. */
@@ -1150,6 +1164,7 @@ private:
         TArray<float> CrustAge;
         TArray<FVector4f> RidgeDirections;
         TArray<FVector3f> RenderPositions;
+        TArray<uint32> OceanicMask;
         uint64 CachedDataSerial = 0;
     };
 
@@ -1160,7 +1175,20 @@ private:
     /** Monotonic serial tracking modifications to amplification inputs. */
     uint64 OceanicAmplificationDataSerial = 1;
 
+#if WITH_EDITOR
+    struct FOceanicGPUAsyncJob
+    {
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
+        int32 VertexCount = 0;
+    };
+
+    TArray<FOceanicGPUAsyncJob> PendingOceanicGPUJobs;
+#endif
+
     void RefreshRenderVertexFloatSoA() const;
     void RefreshOceanicAmplificationFloatInputs() const;
     void BumpOceanicAmplificationSerial();
 };
+#if WITH_EDITOR
+class FRHIGPUBufferReadback;
+#endif

@@ -11,6 +11,7 @@ StructuredBuffer<float> InBaseline;
 StructuredBuffer<float4> InRidgeDirection;
 StructuredBuffer<float> InCrustAge;
 StructuredBuffer<float3> InRenderPosition;
+StructuredBuffer<uint> InOceanicMask;
 RWStructuredBuffer<float> OutAmplified;
 
 static const int Permutation[512] = {
@@ -126,6 +127,13 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     }
 
     const float Baseline = InBaseline[Index];
+
+    if (InOceanicMask[Index] == 0u)
+    {
+        OutAmplified[Index] = Baseline;
+        return;
+    }
+
     const float CrustAge = InCrustAge[Index];
     float3 RidgeDir = normalize(InRidgeDirection[Index].xyz);
     float3 Position = InRenderPosition[Index];

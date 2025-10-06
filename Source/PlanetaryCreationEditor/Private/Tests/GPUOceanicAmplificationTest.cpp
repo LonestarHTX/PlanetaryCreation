@@ -57,6 +57,8 @@ bool FGPUOceanicAmplificationTest::RunTest(const FString& Parameters)
         // Capture CPU-generated amplified elevation
         Service->AdvanceSteps(1);  // One more step with CPU amplification
 
+        Service->ProcessPendingOceanicGPUReadbacks(true);
+
         const double CPUTime_ms = (FPlatformTime::Seconds() - CPUStartTime) * 1000.0;
 
         const TArray<double>& CPUAmplifiedElevation = Service->GetVertexAmplifiedElevation();
@@ -69,6 +71,7 @@ bool FGPUOceanicAmplificationTest::RunTest(const FString& Parameters)
         // ============================================================================
 
         // Reset to same state (undo the single step)
+        Service->ProcessPendingOceanicGPUReadbacks(true);
         Service->Undo();
 
         // Enable GPU path
@@ -80,6 +83,8 @@ bool FGPUOceanicAmplificationTest::RunTest(const FString& Parameters)
 
         // Run same step with GPU amplification
         Service->AdvanceSteps(1);
+
+        Service->ProcessPendingOceanicGPUReadbacks(true);
 
         const double GPUTime_ms = (FPlatformTime::Seconds() - GPUStartTime) * 1000.0;
 

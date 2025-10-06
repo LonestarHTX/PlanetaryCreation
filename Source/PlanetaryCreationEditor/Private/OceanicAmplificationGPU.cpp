@@ -34,12 +34,13 @@ namespace PlanetaryCreation::GPU
                 SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector4f>, InRidgeDirection)
                 SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float>, InCrustAge)
                 SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector3f>, InRenderPosition)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint32>, InOceanicMask)
                 SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float>, OutAmplified)
             END_SHADER_PARAMETER_STRUCT()
 
             static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
             {
-                return true;
+                return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
             }
         };
 
@@ -74,10 +75,11 @@ namespace PlanetaryCreation::GPU
         const TArray<FVector4f>* RidgeDirFloatPtr = nullptr;
         const TArray<float>* CrustAgeFloatPtr = nullptr;
         const TArray<FVector3f>* PositionFloatPtr = nullptr;
+        const TArray<uint32>* OceanicMaskPtr = nullptr;
 
-        Service.GetOceanicAmplificationFloatInputs(BaselineFloatPtr, RidgeDirFloatPtr, CrustAgeFloatPtr, PositionFloatPtr);
+        Service.GetOceanicAmplificationFloatInputs(BaselineFloatPtr, RidgeDirFloatPtr, CrustAgeFloatPtr, PositionFloatPtr, OceanicMaskPtr);
 
-        if (!BaselineFloatPtr || !RidgeDirFloatPtr || !CrustAgeFloatPtr || !PositionFloatPtr)
+        if (!BaselineFloatPtr || !RidgeDirFloatPtr || !CrustAgeFloatPtr || !PositionFloatPtr || !OceanicMaskPtr)
         {
             UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Float cache unavailable"));
             return false;
@@ -87,12 +89,13 @@ namespace PlanetaryCreation::GPU
         const TArray<FVector4f>& RidgeDirFloat = *RidgeDirFloatPtr;
         const TArray<float>& CrustAgeFloat = *CrustAgeFloatPtr;
         const TArray<FVector3f>& PositionFloat = *PositionFloatPtr;
+        const TArray<uint32>& OceanicMask = *OceanicMaskPtr;
 
         if (BaselineFloat.Num() != VertexCount || RidgeDirFloat.Num() != VertexCount ||
-            CrustAgeFloat.Num() != VertexCount || PositionFloat.Num() != VertexCount)
+            CrustAgeFloat.Num() != VertexCount || PositionFloat.Num() != VertexCount || OceanicMask.Num() != VertexCount)
         {
-            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Float cache size mismatch (baseline=%d ridge=%d age=%d pos=%d expected=%d)"),
-                BaselineFloat.Num(), RidgeDirFloat.Num(), CrustAgeFloat.Num(), PositionFloat.Num(), VertexCount);
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Float cache size mismatch (baseline=%d ridge=%d age=%d pos=%d mask=%d expected=%d)"),
+                BaselineFloat.Num(), RidgeDirFloat.Num(), CrustAgeFloat.Num(), PositionFloat.Num(), OceanicMask.Num(), VertexCount);
             return false;
         }
 
@@ -100,16 +103,15 @@ namespace PlanetaryCreation::GPU
         const TArray<FVector4f>* RidgeArray = RidgeDirFloatPtr;
         const TArray<float>* CrustArray = CrustAgeFloatPtr;
         const TArray<FVector3f>* PositionArray = PositionFloatPtr;
-
-        // Allocate output array for readback
-        TArray<float> GPUResults;
-        GPUResults.SetNumUninitialized(VertexCount);
+        const TArray<uint32>* MaskArray = OceanicMaskPtr;
 
         const FTectonicSimulationParameters SimParams = Service.GetParameters();
 
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("PlanetaryCreation.OceanicGPU.Readback"));
+
         // Execute GPU compute on render thread
         ENQUEUE_RENDER_COMMAND(OceanicAmplificationGPU)(
-            [BaselineArray, RidgeArray, CrustArray, PositionArray, VertexCount, &GPUResults, SimParams](FRHICommandListImmediate& RHICmdList)
+            [BaselineArray, RidgeArray, CrustArray, PositionArray, MaskArray, Readback, VertexCount, SimParams](FRHICommandListImmediate& RHICmdList)
             {
                 FRDGBuilder GraphBuilder(RHICmdList);
 
@@ -117,6 +119,7 @@ namespace PlanetaryCreation::GPU
                 FRDGBufferRef RidgeBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPU.Ridge"), *RidgeArray);
                 FRDGBufferRef AgeBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPU.Age"), *CrustArray);
                 FRDGBufferRef PositionBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPU.Position"), *PositionArray);
+                FRDGBufferRef MaskBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPU.OceanicMask"), *MaskArray);
                 FRDGBufferRef OutputBuffer = GraphBuilder.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(sizeof(float), VertexCount), TEXT("PlanetaryCreation.OceanicGPU.Output"));
 
                 FOceanicAmplificationCS::FParameters* Parameters = GraphBuilder.AllocParameters<FOceanicAmplificationCS::FParameters>();
@@ -128,6 +131,7 @@ namespace PlanetaryCreation::GPU
                 Parameters->InRidgeDirection = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(RidgeBuffer));
                 Parameters->InCrustAge = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(AgeBuffer));
                 Parameters->InRenderPosition = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(PositionBuffer));
+                Parameters->InOceanicMask = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(MaskBuffer));
                 Parameters->OutAmplified = GraphBuilder.CreateUAV(FRDGBufferUAVDesc(OutputBuffer));
 
                 const int32 GroupCountX = FMath::DivideAndRoundUp(VertexCount, 64);
@@ -153,8 +157,6 @@ namespace PlanetaryCreation::GPU
                     return;
                 }
 
-                RHICmdList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
-
                 FRHIBuffer* OutputRHI = OutputPooledBuffer->GetRHI();
                 if (!OutputRHI)
                 {
@@ -162,33 +164,13 @@ namespace PlanetaryCreation::GPU
                     return;
                 }
 
-                // Perform GPU readback (blocking)
-                FRHIGPUBufferReadback Readback(TEXT("PlanetaryCreation.OceanicGPU.Readback"));
-                Readback.EnqueueCopy(RHICmdList, OutputRHI, VertexCount * sizeof(float));
-                RHICmdList.BlockUntilGPUIdle();
-
-                const float* ReadData = static_cast<const float*>(Readback.Lock(VertexCount * sizeof(float)));
-                if (!ReadData)
+                if (Readback.IsValid())
                 {
-                    Readback.Unlock();
-                    UE_LOG(LogPlanetaryCreation, Error, TEXT("[OceanicGPU] Readback lock failed"));
-                    return;
+                    Readback->EnqueueCopy(RHICmdList, OutputRHI, VertexCount * sizeof(float));
                 }
-
-                // Copy results to output array
-                FMemory::Memcpy(GPUResults.GetData(), ReadData, VertexCount * sizeof(float));
-                Readback.Unlock();
             });
 
-        // Wait for render thread to complete
-        FlushRenderingCommands();
-
-        TArray<double>& Amplified = Service.GetMutableVertexAmplifiedElevation();
-        Amplified.SetNum(VertexCount);
-        for (int32 Index = 0; Index < VertexCount; ++Index)
-        {
-            Amplified[Index] = static_cast<double>(GPUResults[Index]);
-        }
+        Service.EnqueueOceanicGPUJob(Readback, VertexCount);
 
         return true;
     }

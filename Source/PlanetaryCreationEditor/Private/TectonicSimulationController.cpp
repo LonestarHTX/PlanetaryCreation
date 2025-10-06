@@ -419,16 +419,25 @@ const FTectonicSimulationController::FStaticLODData& FTectonicSimulationControll
         const TArray<float>* CachedNormalX = nullptr;
         const TArray<float>* CachedNormalY = nullptr;
         const TArray<float>* CachedNormalZ = nullptr;
+        const TArray<float>* CachedTangentXSoA = nullptr;
+        const TArray<float>* CachedTangentYSoA = nullptr;
+        const TArray<float>* CachedTangentZSoA = nullptr;
 
         if (const UTectonicSimulationService* Service = GetService())
         {
-            Service->GetRenderVertexFloatSoA(CachedPosX, CachedPosY, CachedPosZ, CachedNormalX, CachedNormalY, CachedNormalZ);
+            Service->GetRenderVertexFloatSoA(CachedPosX, CachedPosY, CachedPosZ,
+                CachedNormalX, CachedNormalY, CachedNormalZ,
+                CachedTangentXSoA, CachedTangentYSoA, CachedTangentZSoA);
         }
 
         const bool bUseCachedNormals = CachedNormalX && CachedNormalY && CachedNormalZ &&
             CachedNormalX->Num() == VertexCount &&
             CachedNormalY->Num() == VertexCount &&
             CachedNormalZ->Num() == VertexCount;
+        const bool bUseCachedTangents = CachedTangentXSoA && CachedTangentYSoA && CachedTangentZSoA &&
+            CachedTangentXSoA->Num() == VertexCount &&
+            CachedTangentYSoA->Num() == VertexCount &&
+            CachedTangentZSoA->Num() == VertexCount;
 
         for (int32 Index = 0; Index < VertexCount; ++Index)
         {
@@ -841,6 +850,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     const FStaticLODData& StaticData = GetOrBuildStaticLODData(LODLevel, TopologyVersion, RenderVertices);
     const TArray<FVector2f>& CachedUVs = StaticData.UVs;
     const TArray<FVector3f>& CachedTangents = StaticData.TangentX;
+    const TArray<FVector3f>& CachedNormals = StaticData.UnitNormals;
 
     auto GetPlateColor = [](int32 PlateID) -> FColor
     {
@@ -945,18 +955,73 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     const bool bHighlightSeaLevel = Snapshot.bHighlightSeaLevel;
     const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
 
+    const TArray<float>* SoANormalX = nullptr;
+    const TArray<float>* SoANormalY = nullptr;
+    const TArray<float>* SoANormalZ = nullptr;
+    const TArray<float>* SoATangentX = nullptr;
+    const TArray<float>* SoATangentY = nullptr;
+    const TArray<float>* SoATangentZ = nullptr;
+
+    if (const UTectonicSimulationService* Service = GetService())
+    {
+        const TArray<float>* DummyPosX = nullptr;
+        const TArray<float>* DummyPosY = nullptr;
+        const TArray<float>* DummyPosZ = nullptr;
+        Service->GetRenderVertexFloatSoA(DummyPosX, DummyPosY, DummyPosZ,
+            SoANormalX, SoANormalY, SoANormalZ,
+            SoATangentX, SoATangentY, SoATangentZ);
+    }
+
+    const bool bUseSoANormals = SoANormalX && SoANormalY && SoANormalZ &&
+        SoANormalX->Num() == SourceVertexCount &&
+        SoANormalY->Num() == SourceVertexCount &&
+        SoANormalZ->Num() == SourceVertexCount;
+    const bool bUseSoATangents = SoATangentX && SoATangentY && SoATangentZ &&
+        SoATangentX->Num() == SourceVertexCount &&
+        SoATangentY->Num() == SourceVertexCount &&
+        SoATangentZ->Num() == SourceVertexCount;
+
     ParallelFor(SourceVertexCount, [&](int32 Index)
     {
         FPreviewMeshVertex& VertexOut = PreviewVertices[Index];
         VertexOut.PrimaryIndex = INDEX_NONE;
         VertexOut.SeamWrappedIndex = INDEX_NONE;
 
-        const FVector3d& Vertex = RenderVertices[Index];
-        FVector3f Position = FVector3f(Vertex * RadiusUE);
-        FVector3f Normal = Position.GetSafeNormal();
+        FVector3f UnitNormal;
+        if (bUseSoANormals && SoANormalX->IsValidIndex(Index) && SoANormalY->IsValidIndex(Index) && SoANormalZ->IsValidIndex(Index))
+        {
+            UnitNormal = FVector3f((*SoANormalX)[Index], (*SoANormalY)[Index], (*SoANormalZ)[Index]);
+        }
+        else if (CachedNormals.IsValidIndex(Index))
+        {
+            UnitNormal = CachedNormals[Index];
+        }
+        else
+        {
+            UnitNormal = FVector3f(RenderVertices[Index].GetSafeNormal());
+        }
+        if (UnitNormal.IsNearlyZero())
+        {
+            UnitNormal = FVector3f::ZAxisVector;
+        }
+
+        FVector3f Position = UnitNormal * RadiusUE;
+        FVector3f Normal = UnitNormal;
 
         const FVector2f UV = CachedUVs.IsValidIndex(Index) ? CachedUVs[Index] : FVector2f::ZeroVector;
-        const FVector3f Tangent = CachedTangents.IsValidIndex(Index) ? CachedTangents[Index] : FVector3f::XAxisVector;
+        FVector3f Tangent;
+        if (bUseSoATangents && SoATangentX->IsValidIndex(Index) && SoATangentY->IsValidIndex(Index) && SoATangentZ->IsValidIndex(Index))
+        {
+            Tangent = FVector3f((*SoATangentX)[Index], (*SoATangentY)[Index], (*SoATangentZ)[Index]);
+        }
+        else if (CachedTangents.IsValidIndex(Index))
+        {
+            Tangent = CachedTangents[Index];
+        }
+        else
+        {
+            Tangent = FVector3f::XAxisVector;
+        }
 
         double ElevationMeters = 0.0;
         if (Snapshot.bUseAmplifiedElevation && Snapshot.VertexAmplifiedElevation.IsValidIndex(Index))

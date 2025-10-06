@@ -11,6 +11,7 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "SphericalKDTree.h"
 #include "Trace/Trace.h"
 #include "RHI.h"
+#include "RHIGPUReadback.h"
 #include "OceanicAmplificationGPU.h"
 #include "ExemplarTextureArray.h"
 
@@ -48,6 +49,10 @@ void UTectonicSimulationService::Deinitialize()
 void UTectonicSimulationService::ResetSimulation()
 {
     CurrentTimeMy = 0.0;
+
+#if WITH_EDITOR
+    PendingOceanicGPUJobs.Empty();
+#endif
 
     // Milestone 5: Clear all per-vertex arrays for deterministic resets
     VertexElevationValues.Empty();
@@ -189,8 +194,13 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     constexpr double StepDurationMy = 2.0; // Paper defines delta t = 2 My per iteration
     constexpr double StageBBudgetSeconds = 2.0; // Soft budget for Stage B passes at high LOD
 
+    ProcessPendingOceanicGPUReadbacks(false);
+
     for (int32 Step = 0; Step < StepCount; ++Step)
     {
+#if WITH_EDITOR
+        ProcessPendingOceanicGPUReadbacks(false);
+#endif
         TRACE_CPUPROFILER_EVENT_SCOPE(TectonicStep);
         const double StepLoopStart = FPlatformTime::Seconds();
 
@@ -277,6 +287,13 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Must run before topology changes to ensure valid vertex indices
         if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
         {
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirectionsStageB);
+                const double BlockStart = FPlatformTime::Seconds();
+                ComputeRidgeDirections();
+                RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
+            }
+
             bool bUsedGPU = false;
 #if WITH_EDITOR
             if (ShouldUseGPUAmplification())
@@ -295,13 +312,6 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 #endif
             if (!bUsedGPU)
             {
-                {
-                    TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirections);
-                    const double BlockStart = FPlatformTime::Seconds();
-                    ComputeRidgeDirections();
-                    RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
-                }
-
                 {
                     TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
                     const double BlockStart = FPlatformTime::Seconds();
@@ -386,6 +396,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     // Milestone 3 Task 4.5: Record step time for UI display
     const double EndTime = FPlatformTime::Seconds();
     LastStepTimeMs = (EndTime - StartTime) * 1000.0;
+
+    ProcessPendingOceanicGPUReadbacks(false);
 }
 
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
@@ -2971,7 +2983,10 @@ void UTectonicSimulationService::GetRenderVertexFloatSoA(
     const TArray<float>*& OutPositionZ,
     const TArray<float>*& OutNormalX,
     const TArray<float>*& OutNormalY,
-    const TArray<float>*& OutNormalZ) const
+    const TArray<float>*& OutNormalZ,
+    const TArray<float>*& OutTangentX,
+    const TArray<float>*& OutTangentY,
+    const TArray<float>*& OutTangentZ) const
 {
     RefreshRenderVertexFloatSoA();
 
@@ -2981,13 +2996,17 @@ void UTectonicSimulationService::GetRenderVertexFloatSoA(
     OutNormalX = &RenderVertexFloatSoA.NormalX;
     OutNormalY = &RenderVertexFloatSoA.NormalY;
     OutNormalZ = &RenderVertexFloatSoA.NormalZ;
+    OutTangentX = &RenderVertexFloatSoA.TangentX;
+    OutTangentY = &RenderVertexFloatSoA.TangentY;
+    OutTangentZ = &RenderVertexFloatSoA.TangentZ;
 }
 
 void UTectonicSimulationService::GetOceanicAmplificationFloatInputs(
     const TArray<float>*& OutBaselineElevation,
     const TArray<FVector4f>*& OutRidgeDirections,
     const TArray<float>*& OutCrustAge,
-    const TArray<FVector3f>*& OutRenderPositions) const
+    const TArray<FVector3f>*& OutRenderPositions,
+    const TArray<uint32>*& OutOceanicMask) const
 {
     RefreshOceanicAmplificationFloatInputs();
 
@@ -2995,7 +3014,78 @@ void UTectonicSimulationService::GetOceanicAmplificationFloatInputs(
     OutRidgeDirections = &OceanicAmplificationFloatInputs.RidgeDirections;
     OutCrustAge = &OceanicAmplificationFloatInputs.CrustAge;
     OutRenderPositions = &OceanicAmplificationFloatInputs.RenderPositions;
+    OutOceanicMask = &OceanicAmplificationFloatInputs.OceanicMask;
 }
+
+#if WITH_EDITOR
+void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount)
+{
+    if (!Readback.IsValid() || VertexCount <= 0)
+    {
+        return;
+    }
+
+    FOceanicGPUAsyncJob& Job = PendingOceanicGPUJobs.AddDefaulted_GetRef();
+    Job.Readback = MoveTemp(Readback);
+    Job.VertexCount = VertexCount;
+}
+
+void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete)
+{
+    for (int32 JobIndex = PendingOceanicGPUJobs.Num() - 1; JobIndex >= 0; --JobIndex)
+    {
+        FOceanicGPUAsyncJob& Job = PendingOceanicGPUJobs[JobIndex];
+        if (!Job.Readback.IsValid())
+        {
+            PendingOceanicGPUJobs.RemoveAt(JobIndex);
+            continue;
+        }
+
+        if (!Job.Readback->IsReady())
+        {
+            if (bBlockUntilComplete)
+            {
+                while (!Job.Readback->IsReady())
+                {
+                    FPlatformProcess::Sleep(0.001f);
+                }
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        const int32 NumFloats = Job.VertexCount;
+        const int32 NumBytes = NumFloats * sizeof(float);
+        const float* GPUData = static_cast<const float*>(Job.Readback->Lock(NumBytes));
+        if (!GPUData)
+        {
+            Job.Readback->Unlock();
+            PendingOceanicGPUJobs.RemoveAt(JobIndex);
+            continue;
+        }
+
+        TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
+        Amplified.SetNum(NumFloats);
+
+        for (int32 Index = 0; Index < NumFloats; ++Index)
+        {
+            Amplified[Index] = static_cast<double>(GPUData[Index]);
+        }
+
+        Job.Readback->Unlock();
+        PendingOceanicGPUJobs.RemoveAt(JobIndex);
+
+        BumpOceanicAmplificationSerial();
+    }
+}
+#else
+void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete)
+{
+    (void)bBlockUntilComplete;
+}
+#endif
 
 void UTectonicSimulationService::RefreshRenderVertexFloatSoA() const
 {
@@ -3010,6 +3100,9 @@ void UTectonicSimulationService::RefreshRenderVertexFloatSoA() const
         Cache.NormalX.Reset();
         Cache.NormalY.Reset();
         Cache.NormalZ.Reset();
+        Cache.TangentX.Reset();
+        Cache.TangentY.Reset();
+        Cache.TangentZ.Reset();
         return;
     }
 
@@ -3019,6 +3112,9 @@ void UTectonicSimulationService::RefreshRenderVertexFloatSoA() const
     Cache.NormalX.SetNum(VertexCount);
     Cache.NormalY.SetNum(VertexCount);
     Cache.NormalZ.SetNum(VertexCount);
+    Cache.TangentX.SetNum(VertexCount);
+    Cache.TangentY.SetNum(VertexCount);
+    Cache.TangentZ.SetNum(VertexCount);
 
     for (int32 Index = 0; Index < VertexCount; ++Index)
     {
@@ -3031,6 +3127,17 @@ void UTectonicSimulationService::RefreshRenderVertexFloatSoA() const
         Cache.NormalX[Index] = static_cast<float>(SafeNormal.X);
         Cache.NormalY[Index] = static_cast<float>(SafeNormal.Y);
         Cache.NormalZ[Index] = static_cast<float>(SafeNormal.Z);
+
+        const FVector3d UpVector = (FMath::Abs(SafeNormal.Z) > 0.99) ? FVector3d(1.0, 0.0, 0.0) : FVector3d(0.0, 0.0, 1.0);
+        FVector3d Tangent = FVector3d::CrossProduct(SafeNormal, UpVector).GetSafeNormal();
+        if (Tangent.IsNearlyZero())
+        {
+            Tangent = FVector3d(1.0, 0.0, 0.0);
+        }
+
+        Cache.TangentX[Index] = static_cast<float>(Tangent.X);
+        Cache.TangentY[Index] = static_cast<float>(Tangent.Y);
+        Cache.TangentZ[Index] = static_cast<float>(Tangent.Z);
     }
 }
 
@@ -3048,7 +3155,8 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
     const bool bHasValidData = VertexCount > 0 &&
         VertexCrustAge.Num() == VertexCount &&
         VertexRidgeDirections.Num() == VertexCount &&
-        RenderVertices.Num() == VertexCount;
+        RenderVertices.Num() == VertexCount &&
+        VertexPlateAssignments.Num() == VertexCount;
 
     if (!bHasValidData)
     {
@@ -3056,6 +3164,7 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
         Cache.CrustAge.Reset();
         Cache.RidgeDirections.Reset();
         Cache.RenderPositions.Reset();
+        Cache.OceanicMask.Reset();
         Cache.CachedDataSerial = OceanicAmplificationDataSerial;
         return;
     }
@@ -3064,6 +3173,7 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
     Cache.CrustAge.SetNum(VertexCount);
     Cache.RidgeDirections.SetNum(VertexCount);
     Cache.RenderPositions.SetNum(VertexCount);
+    Cache.OceanicMask.SetNum(VertexCount);
 
     for (int32 Index = 0; Index < VertexCount; ++Index)
     {
@@ -3082,6 +3192,14 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
             static_cast<float>(Position.X),
             static_cast<float>(Position.Y),
             static_cast<float>(Position.Z));
+
+        uint32 bIsOceanic = 0;
+        const int32 PlateId = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
+        if (PlateId != INDEX_NONE && Plates.IsValidIndex(PlateId) && Plates[PlateId].CrustType == ECrustType::Oceanic)
+        {
+            bIsOceanic = 1;
+        }
+        Cache.OceanicMask[Index] = bIsOceanic;
     }
 
     Cache.CachedDataSerial = OceanicAmplificationDataSerial;
