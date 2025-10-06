@@ -23,6 +23,16 @@
 - Run targeted tests headless: `"<UE5>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" PlanetaryCreation.uproject -ExecCmds="Automation RunTests PlanetaryCreation" -TestExit="Automation Test Queue Empty"`.
 - Inspect logs with `powershell -Command "Get-Content 'Saved/Logs/PlanetaryCreation.log' | Select-String 'Result={Success}'"`.
 - If automation appears to hang, check for stale `UnrealEditor-Cmd.exe` processes holding DLL locks and terminate them before rebuilding (see troubleshooting below).
+- GPU compute suites (e.g., Milestone 6 preview/parity) must run with a real graphics RHI. Launch them from Windows PowerShell, for example:
+  ```powershell
+  & 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' \
+    'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' \
+    -ExecCmds "Automation RunTests PlanetaryCreation.Milestone6.GPU.PreviewVertexParity; Quit" \
+    -unattended -nop4 -nosplash
+  ```
+  Running the Windows binary directly inside WSL fails with `UtilBindVsockAnyPort`; always shell out through PowerShell or `cmd.exe` on Windows when you need GPU automation.
+- Guard GPU-reliant automation with a NullRHI check so tests auto-skip when `GDynamicRHI` reports `NullDrv`.
+- After GPU preview runs, verify the log for `[OceanicGPUPreview] ... seam mirrors=` and the parity test summaries (`Seam column 2047 coverage`) to confirm height-map coverage.
 
 ## Build Expectations
 - After **any** change to Unreal C++ or Slate, run the WSL-friendly build command from `CLAUDE.md` (see below).

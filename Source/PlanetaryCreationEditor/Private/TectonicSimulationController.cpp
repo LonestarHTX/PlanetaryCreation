@@ -202,6 +202,12 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         return;
     }
 
+    if (bUseGPUPreviewMode)
+    {
+        UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Skipping mesh rebuild (GPU WPO active)"));
+        return;
+    }
+
     EnsurePreviewActor();
 
     const int32 RenderLevel = Service->GetParameters().RenderSubdivisionLevel;
@@ -210,6 +216,28 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
 
     // Milestone 4 Phase 4.2: Check cache first
     const FCachedLODMesh* CachedMesh = GetCachedLOD(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion);
+
+    if (bUseGPUPreviewMode && !CachedMesh)
+    {
+        if (const TUniquePtr<FCachedLODMesh>* CachedEntry = LODCache.Find(RenderLevel))
+        {
+            CachedMesh = CachedEntry->Get();
+            if (CachedMesh)
+            {
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] Reusing cached L%d geometry (Topo:%d Surface:%d -> requested Surface:%d)"),
+                    RenderLevel, CachedMesh->TopologyVersion, CachedMesh->SurfaceDataVersion, CurrentSurfaceVersion);
+            }
+        }
+
+        if (!CachedMesh)
+        {
+            if (RefreshPreviewColors())
+            {
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] Refreshed preview colors without geometry rebuild (Surface:%d)"), CurrentSurfaceVersion);
+                return;
+            }
+        }
+    }
     if (CachedMesh)
     {
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD Cache] Using cached L%d: %d verts, %d tris (cache hit)"),
@@ -588,6 +616,8 @@ void FTectonicSimulationController::SetGPUPreviewMode(bool bEnabled)
 
         if (UTectonicSimulationService* Service = GetService())
         {
+            Service->SetSkipCPUAmplification(bEnabled);
+
             if (bEnabled && !Service->GetParameters().bEnableHeightmapVisualization)
             {
                 Service->SetHeightmapVisualizationEnabled(true);

@@ -80,6 +80,50 @@ namespace PlanetaryCreation::GPU
             return IsFeatureLevelSupported(GMaxRHIShaderPlatform, ERHIFeatureLevel::SM5);
         }
 
+        static void ComputeSeamCoverageMetrics(const TArray<FVector3f>& Positions, int32 TextureWidth, int32& OutLeftCoverage, int32& OutRightCoverage)
+        {
+            OutLeftCoverage = 0;
+            OutRightCoverage = 0;
+
+            if (TextureWidth <= 1)
+            {
+                return;
+            }
+
+            const int32 LastColumn = TextureWidth - 1;
+
+            for (const FVector3f& Position : Positions)
+            {
+                const FVector3f Unit = Position.GetSafeNormal();
+                if (Unit.IsNearlyZero())
+                {
+                    continue;
+                }
+
+                const float Longitude = FMath::Atan2(Unit.Y, Unit.X);
+                float U = 0.5f + Longitude / (2.0f * PI);
+                U = FMath::Fmod(U, 1.0f);
+                if (U < 0.0f)
+                {
+                    U += 1.0f;
+                }
+
+                const float PixelPosition = U * static_cast<float>(TextureWidth);
+                const int32 PixelX = FMath::Clamp(FMath::FloorToInt(PixelPosition), 0, LastColumn);
+
+                if (PixelX <= 1)
+                {
+                    ++OutLeftCoverage;
+                    ++OutRightCoverage;
+                }
+                else if (PixelX >= (LastColumn - 1))
+                {
+                    ++OutRightCoverage;
+                    ++OutLeftCoverage;
+                }
+            }
+        }
+
     }
 
     bool ApplyOceanicAmplificationGPU(UTectonicSimulationService& Service)
@@ -332,8 +376,15 @@ namespace PlanetaryCreation::GPU
 
         FlushRenderingCommands();
 
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[OceanicGPUPreview] Height texture written (%dx%d, %d vertices)"),
-            TextureSize.X, TextureSize.Y, VertexCount);
+        int32 LeftSeamCoverage = 0;
+        int32 RightSeamCoverage = 0;
+        if (PositionArray)
+        {
+            ComputeSeamCoverageMetrics(*PositionArray, TextureSize.X, LeftSeamCoverage, RightSeamCoverage);
+        }
+
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[OceanicGPUPreview] Height texture written (%dx%d, %d vertices, %d seam mirrors, %d edge wraps)"),
+            TextureSize.X, TextureSize.Y, VertexCount, LeftSeamCoverage, RightSeamCoverage);
 
         return true;
     }

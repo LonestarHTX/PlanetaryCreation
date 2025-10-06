@@ -698,6 +698,10 @@ public:
     /** Accessor for render mesh triangle indices (Milestone 3). */
     const TArray<int32>& GetRenderTriangles() const { return RenderTriangles; }
 
+    /** Skip CPU Stage B amplification passes when GPU preview handles displacement. */
+    void SetSkipCPUAmplification(bool bInSkip);
+    bool IsSkippingCPUAmplification() const { return Parameters.bSkipCPUAmplification; }
+
     /** Accessor for vertex-to-plate assignments (Milestone 3 Phase 2). */
     const TArray<int32>& GetVertexPlateAssignments() const { return VertexPlateAssignments; }
 
@@ -890,6 +894,8 @@ public:
 
     /** Rebuild cached render adjacency after topology or LOD changes. */
     void BuildRenderVertexAdjacency();
+    void BuildRenderVertexReverseAdjacency();
+    void UpdateConvergentNeighborFlags();
 
     /** Milestone 5 Task 1.3: Full simulation history snapshot for undo/redo. */
     struct FSimulationHistorySnapshot
@@ -1213,6 +1219,8 @@ private:
     TArray<int32> RenderVertexAdjacencyOffsets;
     TArray<int32> RenderVertexAdjacency;
     TArray<float> RenderVertexAdjacencyWeights;
+    TArray<int32> RenderVertexReverseAdjacency;
+    TArray<uint8> ConvergentNeighborFlags;
 
     /** Pending seeds for crust age reset near divergent boundaries. */
     TArray<int32> PendingCrustAgeResetSeeds;
@@ -1254,9 +1262,6 @@ private:
 #if WITH_AUTOMATION_TESTS
 public:
     void SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure = false, const FString& InOverrideOutputDirectory = FString());
-
-    void SetSkipCPUAmplification(bool bInSkip) { Parameters.bSkipCPUAmplification = bInSkip; }
-    bool IsSkippingCPUAmplification() const { return Parameters.bSkipCPUAmplification; }
 
     void ForceRidgeRecomputeForTest() { ComputeRidgeDirections(); }
 

@@ -725,6 +725,11 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     ProcessPendingOceanicGPUReadbacks(false);
 }
 
+void UTectonicSimulationService::SetSkipCPUAmplification(bool bInSkip)
+{
+    Parameters.bSkipCPUAmplification = bInSkip;
+}
+
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
 {
     if (Parameters.bEnableHeightmapVisualization != NewParams.bEnableHeightmapVisualization)
@@ -1878,6 +1883,93 @@ void UTectonicSimulationService::BuildRenderVertexAdjacency()
             }
 
             RenderVertexAdjacencyWeights[Start + LocalIdx] = static_cast<float>(Weight);
+        }
+    }
+
+    BuildRenderVertexReverseAdjacency();
+    UpdateConvergentNeighborFlags();
+}
+
+void UTectonicSimulationService::BuildRenderVertexReverseAdjacency()
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
+    {
+        RenderVertexReverseAdjacency.Reset();
+        return;
+    }
+
+    RenderVertexReverseAdjacency.SetNum(RenderVertexAdjacency.Num());
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 StartOffset = RenderVertexAdjacencyOffsets[VertexIdx];
+        const int32 EndOffset = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+
+        for (int32 Offset = StartOffset; Offset < EndOffset; ++Offset)
+        {
+            const int32 NeighborIdx = RenderVertexAdjacency[Offset];
+            int32 ReverseIndex = INDEX_NONE;
+
+            const int32 NeighborStart = RenderVertexAdjacencyOffsets[NeighborIdx];
+            const int32 NeighborEnd = RenderVertexAdjacencyOffsets[NeighborIdx + 1];
+            for (int32 NeighborOffset = NeighborStart; NeighborOffset < NeighborEnd; ++NeighborOffset)
+            {
+                if (RenderVertexAdjacency[NeighborOffset] == VertexIdx)
+                {
+                    ReverseIndex = NeighborOffset;
+                    break;
+                }
+            }
+
+            RenderVertexReverseAdjacency[Offset] = ReverseIndex;
+        }
+    }
+}
+
+void UTectonicSimulationService::UpdateConvergentNeighborFlags()
+{
+    const int32 VertexCount = RenderVertices.Num();
+    ConvergentNeighborFlags.SetNumZeroed(VertexCount);
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 PlateA = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        if (PlateA == INDEX_NONE)
+        {
+            continue;
+        }
+
+        const int32 StartOffset = RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx) ? RenderVertexAdjacencyOffsets[VertexIdx] : INDEX_NONE;
+        const int32 EndOffset = RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1) ? RenderVertexAdjacencyOffsets[VertexIdx + 1] : INDEX_NONE;
+
+        if (!RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1))
+        {
+            continue;
+        }
+
+        for (int32 Offset = StartOffset; Offset < EndOffset; ++Offset)
+        {
+            const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
+            const int32 PlateB = VertexPlateAssignments.IsValidIndex(NeighborIdx) ? VertexPlateAssignments[NeighborIdx] : INDEX_NONE;
+
+            if (PlateB == INDEX_NONE || PlateA == PlateB)
+            {
+                continue;
+            }
+
+            const TPair<int32, int32> BoundaryKey = (PlateA < PlateB)
+                ? TPair<int32, int32>(PlateA, PlateB)
+                : TPair<int32, int32>(PlateB, PlateA);
+
+            if (const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey))
+            {
+                if (Boundary->BoundaryType == EBoundaryType::Convergent)
+                {
+                    ConvergentNeighborFlags[VertexIdx] = 1;
+                    break;
+                }
+            }
         }
     }
 }

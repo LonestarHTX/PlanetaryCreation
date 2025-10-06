@@ -2,6 +2,7 @@
 #include "TectonicSimulationService.h"
 #include "TectonicSimulationController.h"
 #include "PlanetaryCreationLogging.h"
+#include "RHI.h"
 
 /**
  * Milestone 6 GPU Preview Diagnostic Test
@@ -11,9 +12,8 @@
  * Tests:
  * 1. CPU path baseline (GPU preview OFF)
  * 2. GPU path diagnostics (GPU preview ON)
- * 3. Kinematics verification (time advances, plates move)
- * 4. Snapshot state logging (heightmap viz, velocity field)
- * 5. Vertex color override test (material sampling check)
+ * 3. Snapshot state logging (heightmap viz, velocity field)
+ * 4. Plate movement verification (kinematics)
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FGPUPreviewDiagnosticTest,
@@ -22,6 +22,12 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
 {
+    if (!GDynamicRHI || FCString::Stricmp(GDynamicRHI->GetName(), TEXT("NullDrv")) == 0)
+    {
+        AddInfo(TEXT("Skipping GPU preview diagnostic test (NullRHI detected)."));
+        return true;
+    }
+
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("=== GPU Preview Diagnostic Test START ==="));
 
     // Get service
@@ -134,22 +140,9 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
         Snapshot.RenderVertices.Num(), Snapshot.VertexPlateAssignments.Num());
 
     // ========================================================================
-    // TEST 4: Vertex Color Override Test
+    // TEST 4: Plate Movement Verification
     // ========================================================================
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n[TEST 4] Vertex Color Override (Red Override Active)"));
-
-    // The red override is currently active in BuildMeshFromSnapshot (line 1270)
-    // We can't call BuildMeshFromSnapshot directly (it's private), but the override
-    // will be visible when the controller builds the mesh internally.
-    // This diagnostic confirms the override is in the code.
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Vertex Colors] Red override is active in TectonicSimulationController.cpp:1270"));
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Vertex Colors] All vertex colors should render as RED in editor"));
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Vertex Colors] If mesh is NOT red, material is not sampling vertex colors"));
-
-    // ========================================================================
-    // TEST 5: Plate Movement Verification
-    // ========================================================================
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n[TEST 5] Plate Movement Verification"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n[TEST 4] Plate Movement Verification"));
 
     // Get first plate centroid before and after step
     if (Service->GetPlates().Num() > 0)
@@ -188,7 +181,7 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
         Snapshot.Parameters.bEnableHeightmapVisualization ? TEXT("ENABLED") : TEXT("DISABLED"));
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("Velocity Field: %s"),
         Snapshot.bShowVelocityField ? TEXT("ENABLED") : TEXT("DISABLED"));
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("Vertex Color Override: ACTIVE (see line 1270)"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("GPU Preview Material: Vertex colors remain active (no forced overrides)"));
 
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n=== GPU Preview Diagnostic Test COMPLETE ==="));
 

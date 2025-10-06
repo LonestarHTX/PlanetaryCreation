@@ -195,5 +195,29 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     }
 
     const float FineDetail = 20.0f * GradientNoise;
-    OutHeightTexture[PixelCoord] = Baseline + FaultDetail + FineDetail;
+    const float HeightValue = Baseline + FaultDetail + FineDetail;
+
+    OutHeightTexture[PixelCoord] = HeightValue;
+
+    if (TextureSize.x > 1u)
+    {
+        const uint LastColumn = TextureSize.x - 1u;
+        const bool bIsLeftSeam = (PixelCoord.x <= 1u);
+        const bool bIsRightSeam = (PixelCoord.x >= (LastColumn - 1u));
+
+        if (bIsLeftSeam)
+        {
+            const uint2 LeftCoord = uint2(0u, PixelCoord.y);
+            const uint2 RightCoord = uint2(LastColumn, PixelCoord.y);
+            OutHeightTexture[LeftCoord] = HeightValue;
+            OutHeightTexture[RightCoord] = HeightValue;
+        }
+        else if (bIsRightSeam)
+        {
+            const uint2 RightCoord = uint2(LastColumn, PixelCoord.y);
+            const uint2 LeftCoord = uint2(0u, PixelCoord.y);
+            OutHeightTexture[RightCoord] = HeightValue;
+            OutHeightTexture[LeftCoord] = HeightValue;
+        }
+    }
 }

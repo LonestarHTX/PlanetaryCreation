@@ -36,7 +36,8 @@
       "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.GPU.PreviewDiagnostic; Quit\" -unattended -nop4 -nosplash -log)",
       "Bash(if [ -f /tmp/gpu_diagnostic_test.log ])",
       "Bash(then tail -300 /tmp/gpu_diagnostic_test.log)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(then tail -100 /tmp/gpu_preview_test.log)"
     ],
     "deny": [],
     "ask": []

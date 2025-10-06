@@ -2,6 +2,7 @@
 
 #include "TectonicSimulationService.h"
 #include "Math/UnrealMathUtility.h"
+#include "Async/ParallelFor.h"
 
 /**
  * Milestone 5 Task 2.3: Oceanic Dampening
@@ -40,77 +41,65 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
         VertexSedimentThickness.SetNumZeroed(VertexCount);
     }
 
-    // Apply dampening to vertices below sea level
+    TArray<uint8> OceanicMask;
+    OceanicMask.SetNumZeroed(VertexCount);
+
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
-        if (!VertexElevationValues.IsValidIndex(VertexIdx))
-        {
-            continue;
-        }
-
-        const double Elevation_m = VertexElevationValues[VertexIdx]; // Elevation in METERS
-
-        // Only dampen seafloor (elevation < sea level, both in meters)
-        if (Elevation_m >= Parameters.SeaLevel)
-        {
-            continue;
-        }
-
-        // Determine if this vertex is oceanic crust (only age oceanic plates)
         const int32 PlateIdx = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
-        const bool bIsOceanic = (PlateIdx != INDEX_NONE && Plates.IsValidIndex(PlateIdx))
+        const bool bIsOceanicPlate = (PlateIdx != INDEX_NONE && Plates.IsValidIndex(PlateIdx))
             ? (Plates[PlateIdx].CrustType == ECrustType::Oceanic)
             : false;
 
-        if (!bIsOceanic)
+        if (bIsOceanicPlate && VertexElevationValues.IsValidIndex(VertexIdx) && VertexElevationValues[VertexIdx] < Parameters.SeaLevel)
         {
-            continue; // Only dampen oceanic crust
+            OceanicMask[VertexIdx] = 1;
+        }
+    }
+
+    TArray<double> NextElevation;
+    NextElevation.SetNumUninitialized(VertexCount);
+    TArray<double> NextCrustAge;
+    NextCrustAge.SetNumUninitialized(VertexCount);
+
+    const double RidgeDepth = PaperElevationConstants::OceanicRidgeDepth_m;
+    const double AbyssalDepth = PaperElevationConstants::AbyssalPlainDepth_m;
+    const double DampFactor = FMath::Clamp(Parameters.OceanicDampeningConstant * DeltaTimeMy, 0.0, 1.0);
+    const double AgePullScale = 0.01 * DeltaTimeMy;
+
+    ParallelFor(VertexCount, [this, &OceanicMask, &NextElevation, &NextCrustAge, DampFactor, AgePullScale, RidgeDepth, AbyssalDepth, DeltaTimeMy](int32 VertexIdx)
+    {
+        const double CurrentElevation = VertexElevationValues.IsValidIndex(VertexIdx) ? VertexElevationValues[VertexIdx] : 0.0;
+        const double CurrentAge = VertexCrustAge.IsValidIndex(VertexIdx) ? VertexCrustAge[VertexIdx] : 0.0;
+
+        if (!OceanicMask[VertexIdx])
+        {
+            NextElevation[VertexIdx] = CurrentElevation;
+            NextCrustAge[VertexIdx] = CurrentAge;
+            return;
         }
 
-        // Increment crust age for oceanic crust
-        VertexCrustAge[VertexIdx] += DeltaTimeMy;
+        const double UpdatedAge = CurrentAge + DeltaTimeMy;
 
-        /**
-         * Age-subsidence formula (paper-compliant):
-         * New oceanic crust forms at ridges (~-1000m depth, zᵀ from Appendix A).
-         * As crust ages and moves away from ridge, it cools, densifies, and subsides toward abyssal depth.
-         * Target asymptote: -6000m (zᵇ from Appendix A).
-         *
-         * Formula: depth(t) = RidgeDepth - SubsidenceCoeff × sqrt(age)
-         * Clamped to never exceed abyssal depth.
-         */
-        const double RidgeDepth_m = PaperElevationConstants::OceanicRidgeDepth_m; // -1000m (zᵀ)
-        const double AgeSubsidence_m = Parameters.OceanicAgeSubsidenceCoeff * FMath::Sqrt(VertexCrustAge[VertexIdx]); // meters
-        const double TargetDepth_m = FMath::Max(
-            RidgeDepth_m - AgeSubsidence_m,
-            PaperElevationConstants::AbyssalPlainDepth_m  // Never deeper than -6000m
-        );
+        const double AgeSubsidence = Parameters.OceanicAgeSubsidenceCoeff * FMath::Sqrt(UpdatedAge);
+        const double TargetDepth = FMath::Max(RidgeDepth - AgeSubsidence, AbyssalDepth);
 
-        // Gaussian smoothing: average with neighbors (dampens roughness)
-        if (!RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx) || !RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1))
+        double WeightedSum = 0.0;
+        double WeightTotal = 0.0;
+
+        const int32 StartOffset = RenderVertexAdjacencyOffsets[VertexIdx];
+        const int32 EndOffset = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+
+        for (int32 Offset = StartOffset; Offset < EndOffset; ++Offset)
         {
-            const double AgeSubsidencePull = (TargetDepth_m - Elevation_m) * 0.01 * DeltaTimeMy;
-            VertexElevationValues[VertexIdx] = FMath::Min(Elevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
-            continue;
-        }
-
-        const int32 NeighborStart = RenderVertexAdjacencyOffsets[VertexIdx];
-        const int32 NeighborEnd = RenderVertexAdjacencyOffsets[VertexIdx + 1];
-
-        double SmoothedElevation = Elevation_m;
-        double WeightSum = 1.0;
-
-        for (int32 NeighborOffset = NeighborStart; NeighborOffset < NeighborEnd; ++NeighborOffset)
-        {
-            const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(NeighborOffset) ? RenderVertexAdjacency[NeighborOffset] : INDEX_NONE;
+            const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
             if (!VertexElevationValues.IsValidIndex(NeighborIdx))
             {
                 continue;
             }
 
-            const double NeighborElevation = VertexElevationValues[NeighborIdx];
-            const double Weight = RenderVertexAdjacencyWeights.IsValidIndex(NeighborOffset)
-                ? RenderVertexAdjacencyWeights[NeighborOffset]
+            const double Weight = RenderVertexAdjacencyWeights.IsValidIndex(Offset)
+                ? RenderVertexAdjacencyWeights[Offset]
                 : 0.0f;
 
             if (Weight <= 0.0)
@@ -118,24 +107,28 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
                 continue;
             }
 
-            SmoothedElevation += NeighborElevation * Weight;
-            WeightSum += Weight;
+            WeightedSum += Weight * VertexElevationValues[NeighborIdx];
+            WeightTotal += Weight;
         }
 
-        if (WeightSum > 1.0)
+        double SmoothedElevation = CurrentElevation;
+        if (WeightTotal > UE_DOUBLE_SMALL_NUMBER)
         {
-            SmoothedElevation /= WeightSum;
+            SmoothedElevation = (CurrentElevation + WeightedSum) / (1.0 + WeightTotal);
         }
 
-        // Dampen toward smoothed elevation (slow subsidence rate)
-        const double DampenRate = Parameters.OceanicDampeningConstant * DeltaTimeMy;
-        const double NewElevation_m = FMath::Lerp(Elevation_m, SmoothedElevation, FMath::Min(1.0, DampenRate));
+        const double DampedElevation = FMath::Lerp(CurrentElevation, SmoothedElevation, DampFactor);
+        const double AgePull = (TargetDepth - DampedElevation) * AgePullScale;
+        const double ClampedElevation = FMath::Min(DampedElevation + AgePull, Parameters.SeaLevel - 1.0);
 
-        // Also pull toward age-subsidence target depth (all in meters)
-        const double AgeSubsidencePull = (TargetDepth_m - NewElevation_m) * 0.01 * DeltaTimeMy; // 1% per My pull
+        NextElevation[VertexIdx] = ClampedElevation;
+        NextCrustAge[VertexIdx] = UpdatedAge;
+    });
 
-        // M5 Phase 3 fix: Clamp oceanic elevations below sea level (prevent stress from lifting them)
-        VertexElevationValues[VertexIdx] = FMath::Min(NewElevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        VertexElevationValues[VertexIdx] = NextElevation[VertexIdx];
+        VertexCrustAge[VertexIdx] = NextCrustAge[VertexIdx];
     }
 
     BumpOceanicAmplificationSerial();
