@@ -170,6 +170,8 @@ namespace PlanetaryCreation::GPU
                 }
             });
 
+        FlushRenderingCommands();
+
         Service.EnqueueOceanicGPUJob(Readback, VertexCount);
 
         return true;

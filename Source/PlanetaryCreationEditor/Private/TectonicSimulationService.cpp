@@ -307,6 +307,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 if (bUsedGPU)
                 {
                     OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                    ProcessPendingOceanicGPUReadbacks(true);
                 }
             }
 #endif
@@ -3028,6 +3029,8 @@ void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferRe
     FOceanicGPUAsyncJob& Job = PendingOceanicGPUJobs.AddDefaulted_GetRef();
     Job.Readback = MoveTemp(Readback);
     Job.VertexCount = VertexCount;
+    Job.NumBytes = VertexCount * sizeof(float);
+    Job.DispatchFence.BeginFence();
 }
 
 void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete)
@@ -3041,13 +3044,30 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
             continue;
         }
 
+        if (!Job.DispatchFence.IsFenceComplete())
+        {
+            if (bBlockUntilComplete)
+            {
+                Job.DispatchFence.Wait();
+            }
+            else
+            {
+                continue;
+            }
+        }
+
         if (!Job.Readback->IsReady())
         {
             if (bBlockUntilComplete)
             {
-                while (!Job.Readback->IsReady())
+                const double Deadline = FPlatformTime::Seconds() + 30.0;
+                while (!Job.Readback->IsReady() && FPlatformTime::Seconds() < Deadline)
                 {
-                    FPlatformProcess::Sleep(0.001f);
+                    FPlatformProcess::SleepNoStats(0.001f);
+                }
+                if (!Job.Readback->IsReady())
+                {
+                    continue;
                 }
             }
             else
@@ -3057,26 +3077,39 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
         }
 
         const int32 NumFloats = Job.VertexCount;
-        const int32 NumBytes = NumFloats * sizeof(float);
-        const float* GPUData = static_cast<const float*>(Job.Readback->Lock(NumBytes));
-        if (!GPUData)
-        {
-            Job.Readback->Unlock();
-            PendingOceanicGPUJobs.RemoveAt(JobIndex);
-            continue;
-        }
+
+        TSharedRef<TArray<float>, ESPMode::ThreadSafe> TempData = MakeShared<TArray<float>, ESPMode::ThreadSafe>();
+        TempData->SetNum(NumFloats);
+
+        FRenderCommandFence CopyFence;
+
+        ENQUEUE_RENDER_COMMAND(CopyOceanicGPUReadback)(
+            [Readback = Job.Readback, NumBytes = Job.NumBytes, TempData](FRHICommandListImmediate& RHICmdList)
+            {
+                if (!Readback.IsValid())
+                {
+                    return;
+                }
+
+                const float* GPUData = static_cast<const float*>(Readback->Lock(NumBytes));
+                if (GPUData)
+                {
+                    FMemory::Memcpy(TempData->GetData(), GPUData, NumBytes);
+                }
+                Readback->Unlock();
+            });
+
+        CopyFence.BeginFence();
+        CopyFence.Wait();
 
         TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
         Amplified.SetNum(NumFloats);
-
         for (int32 Index = 0; Index < NumFloats; ++Index)
         {
-            Amplified[Index] = static_cast<double>(GPUData[Index]);
+            Amplified[Index] = static_cast<double>((*TempData)[Index]);
         }
 
-        Job.Readback->Unlock();
         PendingOceanicGPUJobs.RemoveAt(JobIndex);
-
         BumpOceanicAmplificationSerial();
     }
 }

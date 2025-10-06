@@ -1179,6 +1179,8 @@ private:
     struct FOceanicGPUAsyncJob
     {
         TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
+        FRenderCommandFence DispatchFence;
+        int32 NumBytes = 0;
         int32 VertexCount = 0;
     };
 

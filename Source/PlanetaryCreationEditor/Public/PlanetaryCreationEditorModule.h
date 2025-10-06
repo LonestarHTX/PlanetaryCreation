@@ -10,10 +10,12 @@ public:
     virtual void ShutdownModule() override;
 
 private:
+    void HandlePostEngineInit();
     void RegisterMenus();
     void UnregisterMenus();
     void BindCommands();
     void ExtendToolbar(FToolBarBuilder& Builder);
+    void HandleLevelEditorReady();
 
     TSharedRef<class SDockTab> HandleSpawnTectonicTab(const class FSpawnTabArgs& Args);
     void HandleOpenTectonicTool() const;
@@ -22,4 +24,5 @@ private:
     TSharedPtr<class FUICommandList> CommandList;
     TSharedPtr<class FTectonicSimulationController> SimulationController;
     TSharedPtr<class FExtender> LevelEditorToolbarExtender;
+    FDelegateHandle OnPostEngineInitHandle;
 };

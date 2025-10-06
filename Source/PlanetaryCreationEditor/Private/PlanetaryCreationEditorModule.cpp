@@ -42,27 +42,13 @@ void FPlanetaryCreationEditorModule::StartupModule()
         return; // Skip editor-only UI registration for commandlets/automation runs
     }
 
-    SimulationController = MakeShared<FTectonicSimulationController>();
-    SimulationController->Initialize();
-
-    FPlanetaryCreationEditorCommands::Register();
-    CommandList = MakeShared<FUICommandList>();
-    BindCommands();
-
-    const IWorkspaceMenuStructure& MenuStructure = WorkspaceMenu::GetMenuStructure();
-
-    FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
-        TectonicToolTabName,
-        FOnSpawnTab::CreateRaw(this, &FPlanetaryCreationEditorModule::HandleSpawnTectonicTab))
-        .SetDisplayName(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTitle", "Tectonic Tool"))
-        .SetTooltipText(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTooltip", "Control the procedural tectonic simulation."))
-        .SetGroup(MenuStructure.GetLevelEditorCategory());
-
-    RegisterMenus();
+    OnPostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddRaw(this, &FPlanetaryCreationEditorModule::HandlePostEngineInit);
 }
 
 void FPlanetaryCreationEditorModule::ShutdownModule()
 {
+    FCoreDelegates::OnPostEngineInit.Remove(OnPostEngineInitHandle);
+
     const FString CmdLine(FCommandLine::Get());
     const bool bAutomationOrCmdlet = IsRunningCommandlet()
         || FApp::IsUnattended()
@@ -90,6 +76,30 @@ void FPlanetaryCreationEditorModule::ShutdownModule()
     FPlanetaryCreationEditorCommands::Unregister();
 }
 
+void FPlanetaryCreationEditorModule::HandlePostEngineInit()
+{
+    SimulationController = MakeShared<FTectonicSimulationController>();
+    SimulationController->Initialize();
+
+    FPlanetaryCreationEditorCommands::Register();
+    CommandList = MakeShared<FUICommandList>();
+    BindCommands();
+
+    FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
+        TectonicToolTabName,
+        FOnSpawnTab::CreateRaw(this, &FPlanetaryCreationEditorModule::HandleSpawnTectonicTab))
+        .SetDisplayName(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTitle", "Tectonic Tool"))
+        .SetTooltipText(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTooltip", "Control the procedural tectonic simulation."));
+
+    RegisterMenus();
+
+    if (LevelEditorToolbarExtender.IsValid() && FModuleManager::Get().IsModuleLoaded("LevelEditor"))
+    {
+        FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>("LevelEditor");
+        LevelEditorModule.GetToolBarExtensibilityManager()->AddExtender(LevelEditorToolbarExtender);
+    }
+}
+
 void FPlanetaryCreationEditorModule::RegisterMenus()
 {
     if (!CommandList.IsValid())
@@ -97,32 +107,23 @@ void FPlanetaryCreationEditorModule::RegisterMenus()
         return;
     }
 
-    FLevelEditorModule& LevelEditorModule = FModuleManager::LoadModuleChecked<FLevelEditorModule>("LevelEditor");
-
     LevelEditorToolbarExtender = MakeShared<FExtender>();
     LevelEditorToolbarExtender->AddToolBarExtension(
         "Settings",
         EExtensionHook::After,
         CommandList,
         FToolBarExtensionDelegate::CreateRaw(this, &FPlanetaryCreationEditorModule::ExtendToolbar));
-
-    LevelEditorModule.GetToolBarExtensibilityManager()->AddExtender(LevelEditorToolbarExtender);
-
-    // Note: Tab auto-invoke removed - user opens via Window → Tectonic Tool or toolbar button
 }
 
 void FPlanetaryCreationEditorModule::UnregisterMenus()
 {
-    if (LevelEditorToolbarExtender.IsValid())
+    if (LevelEditorToolbarExtender.IsValid() && FModuleManager::Get().IsModuleLoaded("LevelEditor"))
     {
-        if (FModuleManager::Get().IsModuleLoaded("LevelEditor"))
-        {
-            FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>("LevelEditor");
-            LevelEditorModule.GetToolBarExtensibilityManager()->RemoveExtender(LevelEditorToolbarExtender);
-        }
-
-        LevelEditorToolbarExtender.Reset();
+        FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>("LevelEditor");
+        LevelEditorModule.GetToolBarExtensibilityManager()->RemoveExtender(LevelEditorToolbarExtender);
     }
+
+    LevelEditorToolbarExtender.Reset();
 }
 
 void FPlanetaryCreationEditorModule::BindCommands()
