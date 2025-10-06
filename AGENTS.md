@@ -23,6 +23,16 @@
 - Run targeted tests headless: `"<UE5>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" PlanetaryCreation.uproject -ExecCmds="Automation RunTests PlanetaryCreation" -TestExit="Automation Test Queue Empty"`.
 - Inspect logs with `powershell -Command "Get-Content 'Saved/Logs/PlanetaryCreation.log' | Select-String 'Result={Success}'"`.
 
+## Build Expectations
+- After **any** change to Unreal C++ or Slate, run the WSL-friendly build command from `CLAUDE.md`:
+  ```bash
+  "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe" \
+    PlanetaryCreationEditor Win64 Development \
+    -project="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
+    -WaitMutex -FromMsBuild
+  ```
+- Do not skip this step; if the build cannot run, state the reason explicitly in your final summary.
+
 ## Commit & Pull Request Guidelines
 - Write concise, imperative commit subjects ≤72 chars (e.g., `Add plate hotspot sampling`); include rationale/test notes in the body when helpful.
 - PRs should link Jira/Trello tasks, outline tectonic simulation impact, list validation steps (editor launch, automation, perf captures), and attach before/after renders for visual changes.

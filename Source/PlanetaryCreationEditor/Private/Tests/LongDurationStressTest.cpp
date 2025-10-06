@@ -4,6 +4,7 @@
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "Editor.h"
+#include "HAL/PlatformMemory.h"
 
 /**
  * Milestone 5 Task 3.1: Long-Duration Stress Test
@@ -88,7 +89,9 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
     // Track metrics throughout
     int32 InitialVertexCount = Service->GetRenderVertices().Num();
     int32 InitialPlateCount = Plates.Num();
-    double InitialMemoryMB = 0.0; // TODO: Track actual memory usage
+
+    const FPlatformMemoryStats InitialMemStats = FPlatformMemory::GetStats();
+    const double InitialMemoryMB = InitialMemStats.UsedPhysical / (1024.0 * 1024.0);
 
     // Checkpoints every 50 steps (10 checkpoints total)
     const int32 TotalSteps = 500;
@@ -136,10 +139,15 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT(""));
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Stress Test Complete:"));
+    const FPlatformMemoryStats FinalMemStats = FPlatformMemory::GetStats();
+    const double FinalMemoryMB = FinalMemStats.UsedPhysical / (1024.0 * 1024.0);
+    const double MemoryDeltaMB = FinalMemoryMB - InitialMemoryMB;
+
     UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Step: %d"), CurrentStep);
     UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Plates: %d (started with %d)"), FinalPlateCount, InitialPlateCount);
     UE_LOG(LogPlanetaryCreation, Log, TEXT("  Final Vertices: %d (started with %d)"), FinalVertexCount, InitialVertexCount);
     UE_LOG(LogPlanetaryCreation, Log, TEXT("  Topology Events: %d"), TopologyEventCount);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("  Memory Delta: %.2f MB"), MemoryDeltaMB);
 
     // Validate completion
     TestEqual(TEXT("Completed 500 steps"), CurrentStep, TotalSteps);
@@ -147,6 +155,8 @@ bool FLongDurationStressTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Plate count within bounds"), FinalPlateCount >= 5 && FinalPlateCount <= 150);
     TestTrue(TEXT("Vertex count stable"), FMath::Abs(FinalVertexCount - InitialVertexCount) < InitialVertexCount * 0.5);
     TestTrue(TEXT("Some topology activity occurred"), TopologyEventCount > 0);
+    constexpr double MemoryBudgetMB = 64.0;
+    TestTrue(TEXT("Memory usage stable"), FMath::Abs(MemoryDeltaMB) < MemoryBudgetMB);
 
     // Test determinism by running first checkpoint twice (50 steps each)
     UE_LOG(LogPlanetaryCreation, Log, TEXT(""));

@@ -2,8 +2,10 @@
 
 #include "Widgets/SCompoundWidget.h"
 #include "TectonicPlaybackController.h"
+#include "Templates/Function.h"
 
 class FTectonicSimulationController;
+struct FTectonicSimulationParameters;
 
 /** Editor Slate panel exposing tectonic simulation controls. */
 class SPTectonicToolPanel : public SCompoundWidget
@@ -77,6 +79,24 @@ private:
     // Sea level emphasis toggle
     ECheckBoxState GetSeaLevelHighlightState() const;
     void OnSeaLevelHighlightChanged(ECheckBoxState NewState);
+
+    // Surface process toggles (Milestone 6 Stage B)
+    ECheckBoxState GetContinentalErosionState() const;
+    void OnContinentalErosionChanged(ECheckBoxState NewState);
+
+    ECheckBoxState GetSedimentTransportState() const;
+    void OnSedimentTransportChanged(ECheckBoxState NewState);
+
+    ECheckBoxState GetOceanicDampeningState() const;
+    void OnOceanicDampeningChanged(ECheckBoxState NewState);
+
+    ECheckBoxState GetOceanicAmplificationState() const;
+    void OnOceanicAmplificationChanged(ECheckBoxState NewState);
+
+    ECheckBoxState GetContinentalAmplificationState() const;
+    void OnContinentalAmplificationChanged(ECheckBoxState NewState);
+
+    void ApplySurfaceProcessMutation(TFunctionRef<bool(FTectonicSimulationParameters&)> Mutator, const TCHAR* ChangeLabel) const;
 
     // Milestone 5 Task 1.3: Undo/Redo controls
     FReply HandleUndoClicked();

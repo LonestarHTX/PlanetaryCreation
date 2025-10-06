@@ -436,7 +436,7 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 [
                     SNew(STextBlock)
                     .Text(NSLOCTEXT("PlanetaryCreation", "ElevationModeLabel", "Displaced Elevation"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ElevationModeTooltip", "Enable geometric displacement from stress field (green=0 MPa → red=100 MPa). Unchecked = flat color-only mode."))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ElevationModeTooltip", "Enable geometric displacement from elevation data. Elevation gradient colors are shown in both modes (blue=low → red=high). Unchecked = flat sphere with color gradient only."))
                 ]
             ]
 
@@ -484,7 +484,7 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 [
                     SNew(STextBlock)
                     .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationLabel", "Heightmap Visualization"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationTooltip", "Color vertices by elevation using a Turbo-inspired ramp: abyssal (-6 km) → coast (0 km) → alpine (+2 km)."))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationTooltip", "Color vertices by elevation (deep ocean blue → alpine red), scaled to the current elevation range."))
                 ]
             ]
 
@@ -510,6 +510,91 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                     SNew(STextBlock)
                     .Text(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightLabel", "Emphasize Sea Level"))
                     .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightTooltip", "Render a thin white isoline near 0 m to highlight coastlines."))
+                ]
+            ]
+
+            // Surface process toggles (reset simulation on change)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 12.0f, 0.0f, 0.0f)
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "SurfaceProcessHeader", "Surface Processes (resets simulation)"))
+                .ColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f)))
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetContinentalErosionState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnContinentalErosionChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "ErosionToggleLabel", "Enable continental erosion"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ErosionToggleTooltip", "Apply continental erosion each step. Changing this resets the simulation."))
+                ]
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetSedimentTransportState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnSedimentTransportChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "SedimentToggleLabel", "Enable sediment transport"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SedimentToggleTooltip", "Redistribute eroded material to neighbours. Changing this resets the simulation."))
+                ]
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetOceanicDampeningState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnOceanicDampeningChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "OceanicDampeningToggleLabel", "Enable oceanic dampening"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "OceanicDampeningToggleTooltip", "Activate age-based subsidence and smoothing for oceanic crust. Changing this resets the simulation."))
+                ]
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetOceanicAmplificationState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnOceanicAmplificationChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "OceanicAmplificationToggleLabel", "Enable oceanic amplification"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "OceanicAmplificationToggleTooltip", "Adds Stage B oceanic detail (transform faults, fine detail). Changing this resets the simulation."))
+                ]
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetContinentalAmplificationState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnContinentalAmplificationChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "ContinentalAmplificationToggleLabel", "Enable continental amplification"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ContinentalAmplificationToggleTooltip", "Blend exemplar heightfields for continental Stage B detail. Changing this resets the simulation."))
                 ]
             ]
 
@@ -545,7 +630,7 @@ FReply SPTectonicToolPanel::HandleRegenerateClicked()
             Service->SetParameters(NewParams);
 
             // Refresh preview mesh without advancing time
-            Controller->RebuildPreview();
+            Controller->RebuildPreview(); // warm preview mesh after reset
 
             UE_LOG(LogPlanetaryCreation, Log, TEXT("Regenerated plates with seed %d"), CachedSeed);
         }
@@ -646,7 +731,7 @@ void SPTectonicToolPanel::OnSubdivisionValueCommitted(int32 NewValue, ETextCommi
             Service->SetParameters(NewParams);
 
             // Refresh preview mesh
-            Controller->RebuildPreview();
+            Controller->RebuildPreview(); // warm preview mesh after reset
 
             UE_LOG(LogPlanetaryCreation, Log, TEXT("Updated render subdivision level to %d"), CachedSubdivisionLevel);
         }
@@ -760,8 +845,169 @@ void SPTectonicToolPanel::OnHeightmapVisualizationChanged(ECheckBoxState NewStat
             // Trigger mesh refresh to apply new coloring immediately
             if (!Controller->RefreshPreviewColors())
             {
-                Controller->RebuildPreview();
+                Controller->RebuildPreview(); // warm preview mesh after reset
             }
+        }
+    }
+}
+
+ECheckBoxState SPTectonicToolPanel::GetContinentalErosionState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (const UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableContinentalErosion ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnContinentalErosionChanged(ECheckBoxState NewState)
+{
+    const bool bEnabled = (NewState == ECheckBoxState::Checked);
+    ApplySurfaceProcessMutation(
+        [bEnabled](FTectonicSimulationParameters& Params)
+        {
+            if (Params.bEnableContinentalErosion == bEnabled)
+            {
+                return false;
+            }
+            Params.bEnableContinentalErosion = bEnabled;
+            return true;
+        },
+        TEXT("Continental erosion"));
+}
+
+ECheckBoxState SPTectonicToolPanel::GetSedimentTransportState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (const UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableSedimentTransport ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnSedimentTransportChanged(ECheckBoxState NewState)
+{
+    const bool bEnabled = (NewState == ECheckBoxState::Checked);
+    ApplySurfaceProcessMutation(
+        [bEnabled](FTectonicSimulationParameters& Params)
+        {
+            if (Params.bEnableSedimentTransport == bEnabled)
+            {
+                return false;
+            }
+            Params.bEnableSedimentTransport = bEnabled;
+            return true;
+        },
+        TEXT("Sediment transport"));
+}
+
+ECheckBoxState SPTectonicToolPanel::GetOceanicDampeningState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (const UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableOceanicDampening ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnOceanicDampeningChanged(ECheckBoxState NewState)
+{
+    const bool bEnabled = (NewState == ECheckBoxState::Checked);
+    ApplySurfaceProcessMutation(
+        [bEnabled](FTectonicSimulationParameters& Params)
+        {
+            if (Params.bEnableOceanicDampening == bEnabled)
+            {
+                return false;
+            }
+            Params.bEnableOceanicDampening = bEnabled;
+            return true;
+        },
+        TEXT("Oceanic dampening"));
+}
+
+ECheckBoxState SPTectonicToolPanel::GetOceanicAmplificationState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (const UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableOceanicAmplification ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnOceanicAmplificationChanged(ECheckBoxState NewState)
+{
+    const bool bEnabled = (NewState == ECheckBoxState::Checked);
+    ApplySurfaceProcessMutation(
+        [bEnabled](FTectonicSimulationParameters& Params)
+        {
+            if (Params.bEnableOceanicAmplification == bEnabled)
+            {
+                return false;
+            }
+            Params.bEnableOceanicAmplification = bEnabled;
+            return true;
+        },
+        TEXT("Oceanic amplification"));
+}
+
+ECheckBoxState SPTectonicToolPanel::GetContinentalAmplificationState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (const UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableContinentalAmplification ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnContinentalAmplificationChanged(ECheckBoxState NewState)
+{
+    const bool bEnabled = (NewState == ECheckBoxState::Checked);
+    ApplySurfaceProcessMutation(
+        [bEnabled](FTectonicSimulationParameters& Params)
+        {
+            if (Params.bEnableContinentalAmplification == bEnabled)
+            {
+                return false;
+            }
+            Params.bEnableContinentalAmplification = bEnabled;
+            return true;
+        },
+        TEXT("Continental amplification"));
+}
+
+void SPTectonicToolPanel::ApplySurfaceProcessMutation(TFunctionRef<bool(FTectonicSimulationParameters&)> Mutator, const TCHAR* ChangeLabel) const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            FTectonicSimulationParameters Params = Service->GetParameters();
+            if (!Mutator(Params))
+            {
+                return;
+            }
+
+            Service->SetParameters(Params);
+
+            Controller->RebuildPreview(); // warm preview mesh after reset
+
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("%s toggled, simulation reset."), ChangeLabel);
         }
     }
 }
@@ -865,7 +1111,7 @@ void SPTectonicToolPanel::OnTimelineScrubbed(float NewValue)
             if (Service->JumpToHistoryIndex(TargetIndex))
             {
                 // Rebuild mesh to reflect the jumped-to state
-                Controller->RebuildPreview();
+                Controller->RebuildPreview(); // warm preview mesh after reset
                 UE_LOG(LogPlanetaryCreation, Log, TEXT("Timeline scrubbed to step %d (%.1f My)"),
                     TargetIndex, Service->GetCurrentTimeMy());
             }
@@ -932,7 +1178,7 @@ FReply SPTectonicToolPanel::HandleUndoClicked()
             if (Service->Undo())
             {
                 // Rebuild mesh to reflect restored state
-                Controller->RebuildPreview();
+                Controller->RebuildPreview(); // warm preview mesh after reset
                 UE_LOG(LogPlanetaryCreation, Log, TEXT("Undo successful, mesh rebuilt"));
             }
         }
@@ -949,7 +1195,7 @@ FReply SPTectonicToolPanel::HandleRedoClicked()
             if (Service->Redo())
             {
                 // Rebuild mesh to reflect restored state
-                Controller->RebuildPreview();
+                Controller->RebuildPreview(); // warm preview mesh after reset
                 UE_LOG(LogPlanetaryCreation, Log, TEXT("Redo successful, mesh rebuilt"));
             }
         }
@@ -1119,7 +1365,7 @@ void SPTectonicToolPanel::OnSeaLevelHighlightChanged(ECheckBoxState NewState)
 
             if (!Controller->RefreshPreviewColors())
             {
-                Controller->RebuildPreview();
+                Controller->RebuildPreview(); // warm preview mesh after reset
             }
         }
     }

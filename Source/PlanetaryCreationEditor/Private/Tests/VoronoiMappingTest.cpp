@@ -30,6 +30,9 @@ bool FVoronoiMappingCoverageTest::RunTest(const FString& Parameters)
     FTectonicSimulationParameters Params;
     Params.Seed = 42;
     Params.RenderSubdivisionLevel = 6;
+    Params.bEnableVoronoiWarping = false;
+    Params.VoronoiWarpingAmplitude = 0.0;
+    Params.VoronoiWarpingFrequency = 0.0;
     Service->SetParameters(Params);
 
     const TArray<FVector3d>& RenderVertices = Service->GetRenderVertices();

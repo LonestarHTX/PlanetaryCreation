@@ -500,6 +500,28 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 
 ---
 
+#### Task 2.3.1: Stage B Performance Profiling & Guard Rails *(new)*
+**Owner:** Performance Engineer, Rendering Engineer  
+**Effort:** 3 days  
+**Rationale:** L7 preview with surface processes enabled shows ~28s step times. We need hard telemetry and guard rails before moving to GPU/UX polish.
+
+**Deliverables:**
+- Instrument oceanic/continental amplification, erosion, and dampening with trace scopes (`TRACE_CPUPROFILER_EVENT_SCOPE`, `QUICK_SCOPE_CYCLE_COUNTER`).
+- Add stats bucket output (log + Insights markers) so step timing captures per-pass cost.
+- Detect when amplification exceeds budget (e.g., >2s) and emit warnings in the log panel.
+- Cache exemplar sampling prep (pre-load PNG16 heightfields, consider UV tiling cache) to eliminate per-step disk loads.
+
+**Validation:**
+- Logs show per-pass timings; Insights profile highlights hot loops.
+- Subsequent L7 steps after warm-up remain within ≤1s CPU budget.
+- Warning triggers when Stage B exceeds budget in debug builds.
+
+**Dependencies:** Stage B amplification implemented (Task 2.1/2.2), surface toggles available in panel.
+
+**Next Step:** Additional milestone if we push Stage B to GPU (move to M7 or M8 once CPU gets under control).
+
+---
+
 #### Task 2.3: Amplification Integration & LOD
 **Owner:** Rendering Engineer
 **Effort:** 3 days

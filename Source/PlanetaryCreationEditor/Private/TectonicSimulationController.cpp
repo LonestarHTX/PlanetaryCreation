@@ -720,38 +720,70 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
         return RGB.ToFColor(false);
     };
 
-    // Helper to map elevation to color (M6 Task 2.3: Heightmap visualization mode)
-    // Uses paper-compliant elevation range: -6000m (abyssal plains) to ~1000m+ (mountains)
-    static const FLinearColor TurboStops[] = {
-        FLinearColor(0.18995f, 0.07176f, 0.23217f),
-        FLinearColor(0.25107f, 0.25237f, 0.63374f),
-        FLinearColor(0.27628f, 0.47750f, 0.96100f),
-        FLinearColor(0.29768f, 0.71187f, 0.98323f),
-        FLinearColor(0.43579f, 0.86843f, 0.78214f),
-        FLinearColor(0.70195f, 0.88660f, 0.37626f),
-        FLinearColor(0.94863f, 0.76827f, 0.08182f),
-        FLinearColor(0.98826f, 0.52222f, 0.13959f)
-    };
-    static constexpr int32 TurboStopCount = UE_ARRAY_COUNT(TurboStops);
-    static constexpr double SeaLevelBiasGamma = 0.9; // Slight compression around sea level for emphasis
-
-    auto GetElevationColor = [](double ElevationMeters) -> FColor
+    // Precompute the elevation range we actually have in this snapshot so color coverage stretches across the data.
+    const TArray<double>* EffectiveElevations = nullptr;
+    if (Snapshot.bUseAmplifiedElevation && Snapshot.VertexAmplifiedElevation.Num() == RenderVertices.Num())
     {
-        // Normalize elevation from paper range: -6000m (blue) to +2000m (red)
-        const double NormalizedHeight = FMath::Clamp(
-            (ElevationMeters - PaperElevationConstants::AbyssalPlainDepth_m) /
-            (2000.0 - PaperElevationConstants::AbyssalPlainDepth_m),
-            0.0, 1.0
-        );
+        EffectiveElevations = &Snapshot.VertexAmplifiedElevation;
+    }
+    else if (Snapshot.VertexElevationValues.Num() == RenderVertices.Num())
+    {
+        EffectiveElevations = &Snapshot.VertexElevationValues;
+    }
 
-        // Bias around sea level to give isoline more contrast
+    double MinElevationMeters = TNumericLimits<double>::Max();
+    double MaxSampleElevationMeters = TNumericLimits<double>::Lowest();
+
+    if (EffectiveElevations)
+    {
+        for (double Elevation : *EffectiveElevations)
+        {
+            if (!FMath::IsFinite(Elevation))
+            {
+                continue;
+            }
+
+            MinElevationMeters = FMath::Min(MinElevationMeters, Elevation);
+            MaxSampleElevationMeters = FMath::Max(MaxSampleElevationMeters, Elevation);
+        }
+    }
+
+    if (MinElevationMeters > MaxSampleElevationMeters)
+    {
+        // Fallback to paper defaults if we failed to detect a valid range.
+        MinElevationMeters = PaperElevationConstants::AbyssalPlainDepth_m;
+        MaxSampleElevationMeters = 2000.0;
+    }
+
+    double ElevationRangeMeters = MaxSampleElevationMeters - MinElevationMeters;
+    if (ElevationRangeMeters < KINDA_SMALL_NUMBER)
+    {
+        ElevationRangeMeters = 1.0; // Avoid division by zero when the planet is perfectly flat.
+    }
+
+    // Helper to map elevation to color (M6 Task 2.3: Heightmap visualization mode)
+    // Uses a perceptual blue→red ramp scaled to the current elevation spread.
+    static const FLinearColor HeightGradientStops[] = {
+        FLinearColor(0.015f, 0.118f, 0.341f), // Deep ocean blue
+        FLinearColor(0.000f, 0.392f, 0.729f), // Mid-ocean cyan
+        FLinearColor(0.137f, 0.702f, 0.467f), // Coastal green
+        FLinearColor(0.933f, 0.894f, 0.298f), // Highland yellow
+        FLinearColor(0.957f, 0.545f, 0.118f), // Plateau orange
+        FLinearColor(0.741f, 0.000f, 0.000f)  // Alpine red
+    };
+    static constexpr int32 HeightGradientStopCount = UE_ARRAY_COUNT(HeightGradientStops);
+
+    auto GetElevationColor = [MinElevationMeters, ElevationRangeMeters](double ElevationMeters) -> FColor
+    {
+        constexpr double SeaLevelBiasGamma = 0.9; // Slight compression around sea level for emphasis
+        const double NormalizedHeight = FMath::Clamp((ElevationMeters - MinElevationMeters) / ElevationRangeMeters, 0.0, 1.0);
         const double BiasedHeight = FMath::Pow(NormalizedHeight, SeaLevelBiasGamma);
 
-        const double Scaled = BiasedHeight * (TurboStopCount - 1);
-        const int32 Index = FMath::Clamp(static_cast<int32>(Scaled), 0, TurboStopCount - 2);
+        const double Scaled = BiasedHeight * (HeightGradientStopCount - 1);
+        const int32 Index = FMath::Clamp(static_cast<int32>(Scaled), 0, HeightGradientStopCount - 2);
         const double Fraction = Scaled - static_cast<double>(Index);
 
-        const FLinearColor Color = FMath::Lerp(TurboStops[Index], TurboStops[Index + 1], static_cast<float>(Fraction));
+        const FLinearColor Color = FMath::Lerp(HeightGradientStops[Index], HeightGradientStops[Index + 1], static_cast<float>(Fraction));
         return Color.ToFColor(false);
     };
 
@@ -792,12 +824,21 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
         const int32 PlateID = VertexPlateAssignments[i];
         const double StressMPa = VertexStressValues.IsValidIndex(i) ? VertexStressValues[i] : 0.0;
 
-        // Choose color based on visualization mode
+        // Choose color based on visualization mode priority:
+        // 1. Heightmap toggle (explicit user request for elevation viz)
+        // 2. Velocity field toggle
+        // 3. Default: elevation gradient if available, else plate colors
         FColor VertexColor;
-        if (Snapshot.Parameters.bEnableHeightmapVisualization)
+
+        if (Snapshot.bShowVelocityField && VertexVelocities.IsValidIndex(i))
         {
-            // M6 Task 2.3: Heightmap visualization mode (elevation-based coloring)
-            // Use amplified elevation if available, otherwise base elevation
+            // Priority 1: Velocity field visualization
+            VertexColor = GetVelocityColor(VertexVelocities[i]);
+        }
+        else if (Snapshot.Parameters.bEnableHeightmapVisualization || Snapshot.VertexElevationValues.Num() > 0)
+        {
+            // Priority 2: Heightmap mode OR default mode with elevation data available
+            // UX enhancement: Show elevation gradient even in Flat mode (decouples color from displacement)
             double ElevationMeters = 0.0;
             if (Snapshot.bUseAmplifiedElevation && Snapshot.VertexAmplifiedElevation.IsValidIndex(i))
             {
@@ -819,17 +860,10 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(const FMeshBuildSnapsh
                 }
             }
         }
-        else if (Snapshot.bShowVelocityField && VertexVelocities.IsValidIndex(i))
-        {
-            VertexColor = GetVelocityColor(VertexVelocities[i]);
-        }
-        else if (Snapshot.ElevationMode != EElevationMode::Flat)
-        {
-            VertexColor = GetStressColor(StressMPa); // Stress heatmap in elevation mode
-        }
         else
         {
-            VertexColor = GetPlateColor(PlateID); // Default plate colors
+            // Priority 3: Fallback to plate colors (only if no elevation data at all)
+            VertexColor = GetPlateColor(PlateID);
         }
 
         // Base position on sphere (convert meters → UE centimeters)
@@ -1068,6 +1102,12 @@ const FCachedLODMesh* FTectonicSimulationController::GetCachedLOD(int32 LODLevel
 void FTectonicSimulationController::CacheLODMesh(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion,
     const FMeshBuildSnapshot& Snapshot, int32 VertexCount, int32 TriangleCount)
 {
+    if (bShutdownRequested.load())
+    {
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] Skipping cache update for L%d (controller shutting down)"), LODLevel);
+        return;
+    }
+
     TUniquePtr<FCachedLODMesh> NewCache = MakeUnique<FCachedLODMesh>();
     NewCache->Snapshot = Snapshot;
     NewCache->VertexCount = VertexCount;

@@ -3,46 +3,59 @@
 #include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
+#include "RealtimeMeshComponent/Public/RealtimeMeshSimple.h"
+#include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshBuilder.h"
+#include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshSectionConfig.h"
+#include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshStreamRange.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Components/LineBatchComponent.h"
 
+using namespace RealtimeMesh;
+
 void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
 {
 #if WITH_EDITOR
-    if (!GEditor)
+    // Clear legacy batched lines so stale overlays from older builds disappear
+    if (GEditor)
+    {
+        if (UWorld* World = GEditor->GetEditorWorldContext().World())
+        {
+            if (ULineBatchComponent* LineBatcher = World->PersistentLineBatcher ? World->PersistentLineBatcher : World->LineBatcher)
+            {
+                constexpr uint32 HighResBoundaryBatchId = 0x48524253; // 'HRBS'
+                LineBatcher->ClearBatch(HighResBoundaryBatchId);
+            }
+        }
+    }
+
+    if (!PreviewMesh.IsValid())
     {
         return;
     }
 
-    UWorld* World = GEditor->GetEditorWorldContext().World();
-    if (!World)
-    {
-        return;
-    }
+    URealtimeMeshSimple* Mesh = PreviewMesh.Get();
+    const FRealtimeMeshSectionGroupKey OverlayGroupKey = FRealtimeMeshSectionGroupKey::Create(0, FName(TEXT("PlateBoundaries")));
+    const FRealtimeMeshSectionKey OverlaySectionKey = FRealtimeMeshSectionKey::CreateForPolyGroup(OverlayGroupKey, 0);
 
-    ULineBatchComponent* LineBatcher = World->PersistentLineBatcher;
-    if (!LineBatcher)
+    auto HideOverlaySection = [&]()
     {
-        LineBatcher = World->LineBatcher;
-    }
-    if (!LineBatcher)
-    {
-        return;
-    }
-
-    // Clear existing boundary lines BEFORE early return
-    constexpr uint32 HighResBoundaryBatchId = 0x48524253; // 'HRBS' (High-Res Boundary Seam)
-    LineBatcher->ClearBatch(HighResBoundaryBatchId);
+        if (bBoundaryOverlayInitialized)
+        {
+            Mesh->SetSectionVisibility(OverlaySectionKey, false);
+        }
+    };
 
     if (!bShowBoundaries)
     {
-        return; // Boundaries hidden - lines cleared, nothing more to draw
+        HideOverlaySection();
+        return;
     }
 
     UTectonicSimulationService* Service = GetService();
     if (!Service)
     {
+        HideOverlaySection();
         return;
     }
 
@@ -51,30 +64,28 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
     const TArray<int32>& VertexPlateAssignments = Service->GetVertexPlateAssignments();
     const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries = Service->GetBoundaries();
 
-    if (RenderVertices.Num() == 0 || RenderTriangles.Num() == 0)
+    if (RenderVertices.Num() == 0 || RenderTriangles.Num() == 0 || VertexPlateAssignments.Num() != RenderVertices.Num())
     {
+        HideOverlaySection();
         return;
     }
 
-    // Milestone 4 Task 3.1: Trace render triangle edges where plate IDs transition
-    // Build set of boundary edges (edges connecting vertices with different plate IDs)
-
     struct FBoundaryEdge
     {
-        int32 V0;
-        int32 V1;
-        int32 PlateA;
-        int32 PlateB;
-        EBoundaryType BoundaryType;
-        EBoundaryState BoundaryState;
-        double Stress;
-        double RiftWidth;
+        int32 V0 = INDEX_NONE;
+        int32 V1 = INDEX_NONE;
+        EBoundaryType BoundaryType = EBoundaryType::Transform;
+        EBoundaryState BoundaryState = EBoundaryState::Nascent;
+        double Stress = 0.0;
+        double RiftWidth = 0.0;
     };
 
     TArray<FBoundaryEdge> BoundaryEdges;
-    TSet<TPair<int32, int32>> ProcessedEdges; // Avoid duplicate edges
+    BoundaryEdges.Reserve(RenderTriangles.Num() / 2); // Rough upper bound
 
-    // Scan all triangles and find edges with plate transitions
+    TSet<TPair<int32, int32>> ProcessedEdges;
+    ProcessedEdges.Reserve(RenderTriangles.Num());
+
     for (int32 TriIdx = 0; TriIdx < RenderTriangles.Num(); TriIdx += 3)
     {
         const int32 V0 = RenderTriangles[TriIdx];
@@ -92,28 +103,27 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
         const int32 Plate1 = VertexPlateAssignments[V1];
         const int32 Plate2 = VertexPlateAssignments[V2];
 
-        auto AddBoundaryEdge = [&](int32 VA, int32 VB, int32 PA, int32 PB)
+        auto TryAddEdge = [&](int32 VA, int32 VB, int32 PlateA, int32 PlateB)
         {
-            if (PA == PB || PA == INDEX_NONE || PB == INDEX_NONE)
-                return; // Same plate or unassigned
+            if (PlateA == PlateB || PlateA == INDEX_NONE || PlateB == INDEX_NONE)
+            {
+                return;
+            }
 
-            // Canonical edge key (sorted)
             const TPair<int32, int32> EdgeKey(FMath::Min(VA, VB), FMath::Max(VA, VB));
-
             if (ProcessedEdges.Contains(EdgeKey))
-                return; // Already processed
+            {
+                return;
+            }
 
             ProcessedEdges.Add(EdgeKey);
 
-            // Look up boundary data
-            const TPair<int32, int32> BoundaryKey(FMath::Min(PA, PB), FMath::Max(PA, PB));
+            const TPair<int32, int32> BoundaryKey(FMath::Min(PlateA, PlateB), FMath::Max(PlateA, PlateB));
             const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey);
 
             FBoundaryEdge Edge;
             Edge.V0 = VA;
             Edge.V1 = VB;
-            Edge.PlateA = PA;
-            Edge.PlateB = PB;
             Edge.BoundaryType = Boundary ? Boundary->BoundaryType : EBoundaryType::Transform;
             Edge.BoundaryState = Boundary ? Boundary->BoundaryState : EBoundaryState::Nascent;
             Edge.Stress = Boundary ? Boundary->AccumulatedStress : 0.0;
@@ -122,24 +132,35 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
             BoundaryEdges.Add(Edge);
         };
 
-        // Check all three edges of the triangle
-        AddBoundaryEdge(V0, V1, Plate0, Plate1);
-        AddBoundaryEdge(V1, V2, Plate1, Plate2);
-        AddBoundaryEdge(V2, V0, Plate2, Plate0);
+        TryAddEdge(V0, V1, Plate0, Plate1);
+        TryAddEdge(V1, V2, Plate1, Plate2);
+        TryAddEdge(V2, V0, Plate2, Plate0);
     }
 
-    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Found %d boundary edges from %d triangles"),
-        BoundaryEdges.Num(), RenderTriangles.Num() / 3);
+    if (BoundaryEdges.Num() == 0)
+    {
+        HideOverlaySection();
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] No plate boundary edges detected for current mesh"));
+        return;
+    }
 
-    // Draw boundary edges with color/width modulation
-    constexpr float RadiusUnits = 6370.0f; // Match mesh scale (1 unit = 1 km)
-    constexpr float LineDuration = 0.0f; // Persistent
+    const FTectonicSimulationParameters& Parameters = Service->GetParameters();
+    const float RadiusUE = MetersToUE(Parameters.PlanetRadius);
+    if (RadiusUE <= KINDA_SMALL_NUMBER)
+    {
+        HideOverlaySection();
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[HighResBoundary] Planet radius invalid (%.3f UE) - skipping overlay"), RadiusUE);
+        return;
+    }
 
-    // (HighResBoundaryBatchId and ClearBatch moved to top of function before early returns)
+    constexpr double OverlayOffsetMeters = 12000.0; // Lift ~12 km to clear displaced peaks
+    constexpr double BaseHalfWidthMeters = 2500.0;   // ~5 km wide ribbons
+
+    const float OverlayOffsetUE = MetersToUE(OverlayOffsetMeters);
+    const float BaseHalfWidthUE = MetersToUE(BaseHalfWidthMeters);
 
     auto GetBoundaryColor = [](EBoundaryType Type, EBoundaryState State, double Stress) -> FColor
     {
-        // Base color by type
         FColor BaseColor;
         switch (Type)
         {
@@ -149,14 +170,13 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
             default:                         BaseColor = FColor::White; break;
         }
 
-        // Modulate intensity by state
         float Intensity = 1.0f;
         switch (State)
         {
             case EBoundaryState::Nascent: Intensity = 0.5f; break;
             case EBoundaryState::Active:  Intensity = 1.0f; break;
             case EBoundaryState::Dormant: Intensity = 0.3f; break;
-            case EBoundaryState::Rifting: return FColor::Cyan; // Special color for rifting
+            case EBoundaryState::Rifting: return FColor::Cyan; // Highlight active rifts
         }
 
         return FColor(
@@ -167,56 +187,131 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
         );
     };
 
-    auto GetLineThickness = [](double Stress, double RiftWidth) -> float
+    auto ComputeHalfWidthUE = [&](double Stress, double RiftWidth) -> float
     {
-        // Base thickness
-        float Thickness = 15.0f;
-
-        // Increase thickness for high-stress boundaries
-        if (Stress > 75.0)
+        double WidthMeters = BaseHalfWidthMeters + FMath::Clamp(Stress, 0.0, 120.0) * 20.0; // up to +2.4 km from stress
+        if (RiftWidth > 10000.0)
         {
-            Thickness = 30.0f; // Extra thick for imminent events
+            WidthMeters += FMath::Clamp(RiftWidth * 0.02, 0.0, 10000.0); // widen rifts proportionally (max +10 km)
         }
-        else if (Stress > 50.0)
-        {
-            Thickness = 22.0f;
-        }
-
-        // Increase thickness for active rifts
-        if (RiftWidth > 100000.0) // > 100 km
-        {
-            Thickness += 10.0f;
-        }
-
-        return Thickness;
+        return MetersToUE(WidthMeters);
     };
+
+    RealtimeMesh::FRealtimeMeshStreamSet OverlayStreams;
+    TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(OverlayStreams);
+    Builder.EnableTangents();
+    Builder.EnableTexCoords();
+    Builder.EnableColors();
+
+    int32 VertexCount = 0;
+    int32 TriangleCount = 0;
 
     for (const FBoundaryEdge& Edge : BoundaryEdges)
     {
         if (!RenderVertices.IsValidIndex(Edge.V0) || !RenderVertices.IsValidIndex(Edge.V1))
+        {
             continue;
+        }
 
         const FVector3d& Pos0 = RenderVertices[Edge.V0];
         const FVector3d& Pos1 = RenderVertices[Edge.V1];
 
-        // Scale to world space
-        const FVector WorldPos0 = FVector(Pos0 * RadiusUnits);
-        const FVector WorldPos1 = FVector(Pos1 * RadiusUnits);
+        if (Pos0.IsNearlyZero() || Pos1.IsNearlyZero())
+        {
+            continue;
+        }
 
-        const FColor LineColor = GetBoundaryColor(Edge.BoundaryType, Edge.BoundaryState, Edge.Stress);
-        const float LineThickness = GetLineThickness(Edge.Stress, Edge.RiftWidth);
+        const FVector3d EdgeDirection = (Pos1 - Pos0).GetSafeNormal();
+        if (EdgeDirection.IsNearlyZero())
+        {
+            continue;
+        }
 
-        LineBatcher->DrawLine(
-            WorldPos0,
-            WorldPos1,
-            LineColor,
-            SDPG_World,
-            LineThickness,
-            LineDuration,
-            HighResBoundaryBatchId
-        );
+        const FVector3d FaceNormal = ((Pos0 + Pos1) * 0.5).GetSafeNormal();
+        if (FaceNormal.IsNearlyZero())
+        {
+            continue;
+        }
+
+        FVector3d RibbonRight = FVector3d::CrossProduct(FaceNormal, EdgeDirection).GetSafeNormal();
+        if (RibbonRight.IsNearlyZero())
+        {
+            continue;
+        }
+
+        const float HalfWidthUE = FMath::Max(ComputeHalfWidthUE(Edge.Stress, Edge.RiftWidth), BaseHalfWidthUE);
+
+        const FVector3d Base0 = Pos0 * static_cast<double>(RadiusUE);
+        const FVector3d Base1 = Pos1 * static_cast<double>(RadiusUE);
+        const FVector3d NormalOffset = FaceNormal * static_cast<double>(OverlayOffsetUE);
+        const FVector3d WidthOffset = RibbonRight * static_cast<double>(HalfWidthUE);
+
+        const FVector3d P0 = Base0 + NormalOffset + WidthOffset;
+        const FVector3d P1 = Base0 + NormalOffset - WidthOffset;
+        const FVector3d P2 = Base1 + NormalOffset + WidthOffset;
+        const FVector3d P3 = Base1 + NormalOffset - WidthOffset;
+
+        const FVector3f Normal = FVector3f(FaceNormal);
+        const FVector3f Tangent = FVector3f(EdgeDirection);
+        const FColor OverlayColor = GetBoundaryColor(Edge.BoundaryType, Edge.BoundaryState, Edge.Stress);
+
+        const int32 V0Index = Builder.AddVertex(FVector3f(P0))
+            .SetNormalAndTangent(Normal, Tangent)
+            .SetColor(OverlayColor)
+            .SetTexCoord(FVector2f(0.0f, 0.0f));
+
+        const int32 V1Index = Builder.AddVertex(FVector3f(P1))
+            .SetNormalAndTangent(Normal, Tangent)
+            .SetColor(OverlayColor)
+            .SetTexCoord(FVector2f(0.0f, 1.0f));
+
+        const int32 V2Index = Builder.AddVertex(FVector3f(P2))
+            .SetNormalAndTangent(Normal, Tangent)
+            .SetColor(OverlayColor)
+            .SetTexCoord(FVector2f(1.0f, 0.0f));
+
+        const int32 V3Index = Builder.AddVertex(FVector3f(P3))
+            .SetNormalAndTangent(Normal, Tangent)
+            .SetColor(OverlayColor)
+            .SetTexCoord(FVector2f(1.0f, 1.0f));
+
+        Builder.AddTriangle(V0Index, V2Index, V1Index);
+        Builder.AddTriangle(V0Index, V3Index, V2Index);
+
+        VertexCount += 4;
+        TriangleCount += 2;
     }
 
-    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Drew %d boundary edges"), BoundaryEdges.Num());
+    if (VertexCount == 0 || TriangleCount == 0)
+    {
+        HideOverlaySection();
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Generated overlay produced no geometry (filtered degenerate edges)"));
+        return;
+    }
+
+    if (!bBoundaryOverlayInitialized)
+    {
+        Mesh->CreateSectionGroup(OverlayGroupKey, MoveTemp(OverlayStreams));
+
+        FRealtimeMeshSectionConfig OverlayConfig(0);
+        OverlayConfig.bCastsShadow = false;
+        OverlayConfig.bIsMainPassRenderable = true;
+        OverlayConfig.bForceOpaque = false;
+
+        Mesh->UpdateSectionConfig(OverlaySectionKey, OverlayConfig);
+        Mesh->SetSectionCastShadow(OverlaySectionKey, false);
+
+        bBoundaryOverlayInitialized = true;
+    }
+    else
+    {
+        Mesh->UpdateSectionGroup(OverlayGroupKey, MoveTemp(OverlayStreams));
+    }
+
+    const FRealtimeMeshStreamRange Range(0, VertexCount, 0, TriangleCount * 3);
+    Mesh->UpdateSectionRange(OverlaySectionKey, Range);
+    Mesh->SetSectionVisibility(OverlaySectionKey, true);
+
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Drew %d ribbons (%d verts, %d tris)"), BoundaryEdges.Num(), VertexCount, TriangleCount);
 #endif
 }

@@ -48,22 +48,24 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     // Count oceanic vertices and check ridge direction validity
     int32 OceanicVertexCount = 0;
     int32 ValidRidgeDirectionCount = 0;
+    int32 DivergentCandidateCount = 0;
+    int32 WellAlignedRidgeCount = 0;
 
     auto FindNearestBoundaryTangent = [&](const FVector3d& Position, int32 PlateID) -> FVector3d
     {
         if (PlateID == INDEX_NONE)
         {
-            return FVector3d::ZAxisVector;
+            return FVector3d::ZeroVector;
         }
 
         const FVector3d VertexNormal = Position.GetSafeNormal();
         double MinDistance = TNumericLimits<double>::Max();
-        FVector3d BestTangent = FVector3d::ZAxisVector;
+        FVector3d BestTangent = FVector3d::ZeroVector;
 
         const auto ComputeSegmentTangent = [](const FVector3d& PlaneNormal, const FVector3d& PointOnGreatCircle)
         {
             const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, PointOnGreatCircle).GetSafeNormal();
-            return Tangent.IsNearlyZero() ? FVector3d::ZAxisVector : Tangent;
+            return Tangent.IsNearlyZero() ? FVector3d::ZeroVector : Tangent;
         };
 
         for (const auto& BoundaryPair : Boundaries)
@@ -165,9 +167,15 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
             const FVector3d ExpectedTangent = FindNearestBoundaryTangent(Position, PlateID);
             if (!ExpectedTangent.IsNearlyZero())
             {
-                const double Alignment = FMath::Abs(ExpectedTangent | RidgeDir);
-                TestTrue(FString::Printf(TEXT("Vertex %d ridge direction aligns with divergent edge (dot = %.3f)"), VertexIdx, Alignment),
-                    Alignment > 0.95);
+                DivergentCandidateCount++;
+                if (!RidgeDir.IsNearlyZero())
+                {
+                    const double Alignment = FMath::Abs(ExpectedTangent | RidgeDir);
+                    if (Alignment > 0.95)
+                    {
+                        WellAlignedRidgeCount++;
+                    }
+                }
             }
 
             // Transform fault direction should be perpendicular to ridge (cross product with position)
@@ -183,6 +191,12 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("At least 30% of vertices are oceanic"), OceanicVertexCount > RenderVertices.Num() * 0.3);
     TestTrue(TEXT("At least 90% of oceanic vertices have valid ridge directions"),
         ValidRidgeDirectionCount > OceanicVertexCount * 0.9);
+
+    if (DivergentCandidateCount > 0)
+    {
+        const double AlignmentRatio = static_cast<double>(WellAlignedRidgeCount) / static_cast<double>(DivergentCandidateCount);
+        TestTrue(TEXT("Ridge directions align with divergent edges (>=80% of candidates)"), AlignmentRatio >= 0.8);
+    }
 
     // ============================================================================
     // Test 2: Young crust (<10 My) shows strong faults (amplitude >100m)

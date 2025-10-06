@@ -81,6 +81,8 @@
 - **Risks:** Amplification instability, GPU integration complexity; mitigate with staged rollouts and regression tests.
 - **Validation:** Side-by-side parity screenshots vs paper, Level 7 performance within budget (<120 ms), amplification regression suite.
 
+- **New:** M6 Task 2.3.1 (Stage B Perf Profiling) instruments amplification loops to get us under 1s per step at L7; required before we flip Stage B on by default. Once CPU cost is under control, revisit GPU offload and UI polish in M7.
+
 ### Milestone 7 – Presentation & UX (Weeks 11–13)
 - **Owners:** Tools Engineer, Rendering Engineer, UX Designer
 - **Tasks:**

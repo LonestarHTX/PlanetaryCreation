@@ -13,7 +13,12 @@
       "Bash(fi)",
       "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.HeightmapVisualization; Quit\" -unattended -nop4 -nosplash -log)",
       "Bash(tee:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(then tail -50 /tmp/continental_amplification_test.log)",
+      "Bash(else echo \"Log file not found yet\")",
+      "WebSearch",
+      "WebFetch(domain:dev.epicgames.com)",
+      "Read(//mnt/c/Program Files/Epic Games/UE_5.5/Engine/Shaders/**)"
     ],
     "deny": [],
     "ask": []

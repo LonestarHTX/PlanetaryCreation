@@ -146,6 +146,7 @@ private:
     mutable TWeakObjectPtr<class ARealtimeMeshActor> PreviewActor;
     mutable TWeakObjectPtr<class URealtimeMeshSimple> PreviewMesh;
     mutable bool bPreviewInitialized = false;
+    mutable bool bBoundaryOverlayInitialized = false;
 
     /** Milestone 3 Task 2.2: Visualization mode toggle. */
     bool bShowVelocityField = false;

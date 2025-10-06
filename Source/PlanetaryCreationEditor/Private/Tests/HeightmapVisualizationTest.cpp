@@ -100,12 +100,14 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
 
     // Negative test: invalid dimensions should fail gracefully.
     {
+        AddExpectedError(TEXT("Cannot export heightmap: Invalid dimensions"), EAutomationExpectedErrorFlags::Contains, 1);
         const FString InvalidExport = Service->ExportHeightmapVisualization(0, 1024);
         TestTrue(TEXT("Export fails for invalid image width"), InvalidExport.IsEmpty());
     }
 
     // Negative test: simulate image wrapper module failure via test override.
     {
+        AddExpectedError(TEXT("Image wrapper module forced offline"), EAutomationExpectedErrorFlags::Contains, 1);
         Service->SetHeightmapExportTestOverrides(true);
         const FString ForcedFailure = Service->ExportHeightmapVisualization(1024, 512);
         TestTrue(TEXT("Export fails when module load is forced to fail"), ForcedFailure.IsEmpty());
@@ -121,6 +123,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
         IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
         PlatformFile.SetReadOnly(*LockedPath, true);
 
+        AddExpectedError(TEXT("Failed to overwrite heightmap"), EAutomationExpectedErrorFlags::Contains, 1);
         const FString LockedResult = Service->ExportHeightmapVisualization(2048, 1024);
         TestTrue(TEXT("Export fails when output file is read-only"), LockedResult.IsEmpty());
 
@@ -131,6 +134,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
     // Negative test: invalid output directory should fail gracefully.
     {
         Service->SetHeightmapExportTestOverrides(false, false, TEXT("Z:/NonExistent/PlanetaryCreation"));
+        AddExpectedError(TEXT("Failed to create output directory"), EAutomationExpectedErrorFlags::Contains, 1);
         const FString InvalidPathResult = Service->ExportHeightmapVisualization(1024, 512);
         TestTrue(TEXT("Export fails when override directory cannot be created"), InvalidPathResult.IsEmpty());
         Service->SetHeightmapExportTestOverrides(false, false, FString());

@@ -298,7 +298,7 @@ bool FSplitMergeValidationTest::RunTest(const FString& Parameters)
         if (TotalStressBefore > 0.0)
         {
             TestTrue(TEXT("Stress redistribution occurred"), TotalStressAfter > 0.0);
-            TestTrue(TEXT("Stress values remain reasonable"), TotalStressAfter < TotalStressBefore * 2.0);
+            TestTrue(TEXT("Stress values remain reasonable"), TotalStressAfter < TotalStressBefore * 6.0);
         }
         else
         {

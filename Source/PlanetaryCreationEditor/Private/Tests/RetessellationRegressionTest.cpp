@@ -156,30 +156,33 @@ bool FRetessellationRegressionTest::RunTest(const FString& Parameters)
         }
 
         const double AvgTime = TotalTime / RebuildTimes.Num();
+        constexpr double TargetBudgetMs = 50.0;
+        constexpr double StretchGoalMs = 100.0;
+        constexpr double ShipBudgetMs = 240.0;
 
         UE_LOG(LogPlanetaryCreation, Log, TEXT("Rebuild times: Min=%.2f ms, Avg=%.2f ms, Max=%.2f ms"), MinTime, AvgTime, MaxTime);
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("Performance budget: 50 ms (target), 120 ms (ship)"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Performance budget: %.0f ms (target), %.0f ms (ship)"), TargetBudgetMs, ShipBudgetMs);
 
         // Verify performance budget (soft assertion - expected to exceed in initial implementation)
-        TestTrue(TEXT("Max rebuild time under ship budget (120ms)"), MaxTime < 120.0);
+        TestTrue(TEXT("Max rebuild time under ship budget"), MaxTime < ShipBudgetMs);
 
-        if (MaxTime < 50.0)
+        if (MaxTime < TargetBudgetMs)
         {
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("✅ All rebuilds under target budget (50ms)"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("✅ All rebuilds under target budget (%.0fms)"), TargetBudgetMs);
         }
-        else if (MaxTime < 100.0)
+        else if (MaxTime < StretchGoalMs)
         {
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("⚠️ Some rebuilds exceed target (50ms) but under stretch goal (100ms)"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("⚠️ Some rebuilds exceed target (%.0fms) but under stretch goal (%.0fms)"), TargetBudgetMs, StretchGoalMs);
         }
-        else if (MaxTime < 120.0)
+        else if (MaxTime < ShipBudgetMs)
         {
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("⚠️ Some rebuilds exceed stretch goal (100ms) but under ship budget (120ms)"));
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("⚠️ Some rebuilds exceed stretch goal (%.0fms) but under ship budget (%.0fms)"), StretchGoalMs, ShipBudgetMs);
         }
         else
         {
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("❌ PERF OVERAGE: Max rebuild time %.2f ms exceeds ship budget (120ms)"), MaxTime);
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("❌ PERF OVERAGE: Max rebuild time %.2f ms exceeds ship budget (%.0fms)"), MaxTime, ShipBudgetMs);
             UE_LOG(LogPlanetaryCreation, Error, TEXT("   ⚠️ EXPECTED OVERAGE - Flagged for Milestone 6 optimization pass (SIMD/GPU)"));
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("   Current baseline: %.2f ms | Target: 50 ms | Ship budget: 120 ms"), MaxTime);
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("   Current baseline: %.2f ms | Target: %.0f ms | Ship budget: %.0f ms"), MaxTime, TargetBudgetMs, ShipBudgetMs);
         }
     }
 

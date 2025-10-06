@@ -3,11 +3,12 @@
 #include "PlanetaryCreationLogging.h"
 
 DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
+#include "HAL/PlatformFileManager.h"
 #include "Math/RandomStream.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
-#include "HAL/PlatformFileManager.h"
 #include "SphericalKDTree.h"
+#include "Trace/Trace.h"
 
 void UTectonicSimulationService::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -170,9 +171,21 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     const double StartTime = FPlatformTime::Seconds();
 
     constexpr double StepDurationMy = 2.0; // Paper defines delta t = 2 My per iteration
+    constexpr double StageBBudgetSeconds = 2.0; // Soft budget for Stage B passes at high LOD
 
     for (int32 Step = 0; Step < StepCount; ++Step)
     {
+        TRACE_CPUPROFILER_EVENT_SCOPE(TectonicStep);
+        const double StepLoopStart = FPlatformTime::Seconds();
+
+        double ErosionTime = 0.0;
+        double SedimentTime = 0.0;
+        double DampeningTime = 0.0;
+        double BaselineInitTime = 0.0;
+        double RidgeDirectionTime = 0.0;
+        double OceanicAmpTime = 0.0;
+        double ContinentalAmpTime = 0.0;
+
         // Phase 2 Task 4: Migrate plate centroids via Euler pole rotation
         MigratePlateCentroids(StepDurationMy);
 
@@ -212,30 +225,64 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         ApplyHotspotThermalContribution();
 
         // Milestone 5 Task 2.1: Apply continental erosion
-        ApplyContinentalErosion(StepDurationMy);
+        {
+            TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalErosion);
+            const double BlockStart = FPlatformTime::Seconds();
+            ApplyContinentalErosion(StepDurationMy);
+            ErosionTime += FPlatformTime::Seconds() - BlockStart;
+        }
 
         // Milestone 5 Task 2.2: Redistribute eroded sediment
-        ApplySedimentTransport(StepDurationMy);
+        {
+            TRACE_CPUPROFILER_EVENT_SCOPE(SedimentTransport);
+            const double BlockStart = FPlatformTime::Seconds();
+            ApplySedimentTransport(StepDurationMy);
+            SedimentTime += FPlatformTime::Seconds() - BlockStart;
+        }
 
         // Milestone 5 Task 2.3: Apply oceanic dampening
-        ApplyOceanicDampening(StepDurationMy);
+        {
+            TRACE_CPUPROFILER_EVENT_SCOPE(OceanicDampening);
+            const double BlockStart = FPlatformTime::Seconds();
+            ApplyOceanicDampening(StepDurationMy);
+            DampeningTime += FPlatformTime::Seconds() - BlockStart;
+        }
 
         // Ensure amplified elevation starts from current base elevation before Stage B passes run (or remain disabled).
-        InitializeAmplifiedElevationBaseline();
+        {
+            TRACE_CPUPROFILER_EVENT_SCOPE(AmplificationBaseline);
+            const double BlockStart = FPlatformTime::Seconds();
+            InitializeAmplifiedElevationBaseline();
+            BaselineInitTime += FPlatformTime::Seconds() - BlockStart;
+        }
 
         // Milestone 6 Task 2.1: Apply Stage B oceanic amplification
         // Must run after erosion/dampening to use base elevations as input
         // Must run before topology changes to ensure valid vertex indices
         if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
         {
-            ComputeRidgeDirections();
-            ApplyOceanicAmplification();
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirections);
+                const double BlockStart = FPlatformTime::Seconds();
+                ComputeRidgeDirections();
+                RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
+            }
+
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
+                const double BlockStart = FPlatformTime::Seconds();
+                ApplyOceanicAmplification();
+                OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+            }
         }
 
         // Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based)
         if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
         {
+            TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
+            const double BlockStart = FPlatformTime::Seconds();
             ApplyContinentalAmplification();
+            ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
         }
 
         // Milestone 4 Task 1.2: Detect and execute plate splits/merges
@@ -260,6 +307,26 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Increment surface version immediately beforehand so cached heightmap surfaces refresh on rebuild.
         SurfaceDataVersion++;
         CaptureHistorySnapshot();
+
+        const double StepElapsed = FPlatformTime::Seconds() - StepLoopStart;
+        const double StageBDuration = BaselineInitTime + RidgeDirectionTime + OceanicAmpTime + ContinentalAmpTime;
+
+        if (StageBDuration > StageBBudgetSeconds)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[StageB][Perf] Step %d LOD L%d took %.2f s (StageB %.2f s | Baseline %.2f s, Ridge %.2f s, Oceanic %.2f s, Continental %.2f s | Erosion %.2f s, Sediment %.2f s, Dampening %.2f s)"),
+                Step + 1,
+                Parameters.RenderSubdivisionLevel,
+                StepElapsed,
+                StageBDuration,
+                BaselineInitTime,
+                RidgeDirectionTime,
+                OceanicAmpTime,
+                ContinentalAmpTime,
+                ErosionTime,
+                SedimentTime,
+                DampeningTime);
+        }
     }
 
     // Milestone 3 Task 4.5: Record step time for UI display

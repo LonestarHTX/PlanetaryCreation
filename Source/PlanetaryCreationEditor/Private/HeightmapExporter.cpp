@@ -36,7 +36,7 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
         return FString();
     }
 
-    if (RenderVertices.Num() == 0 || VertexAmplifiedElevation.Num() == 0)
+    if (RenderVertices.Num() == 0)
     {
         UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: No render data available"));
         return FString();
@@ -50,17 +50,30 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     }
 #endif
 
+	// Decide which elevation source to use
+	// Prefer amplified (Stage B with transform faults), fallback to base elevation (erosion system)
+	const bool bUseAmplified = (VertexAmplifiedElevation.Num() == RenderVertices.Num());
+	const TArray<double>& ElevationSource = bUseAmplified ? VertexAmplifiedElevation : VertexElevationValues;
+
+	if (ElevationSource.Num() != RenderVertices.Num())
+	{
+		UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: Elevation data mismatch (vertices=%d, elevations=%d)"),
+			RenderVertices.Num(), ElevationSource.Num());
+		return FString();
+	}
+
 	// Find min/max elevation
 	double MinElevation = TNumericLimits<double>::Max();
 	double MaxElevation = TNumericLimits<double>::Lowest();
 
-	for (const double Elevation : VertexAmplifiedElevation)
+	for (const double Elevation : ElevationSource)
 	{
 		MinElevation = FMath::Min(MinElevation, Elevation);
 		MaxElevation = FMath::Max(MaxElevation, Elevation);
 	}
 
-    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Heightmap range: %.1f m to %.1f m"), MinElevation, MaxElevation);
+    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Heightmap export using %s elevation, range: %.1f m to %.1f m"),
+		bUseAmplified ? TEXT("amplified") : TEXT("base"), MinElevation, MaxElevation);
 
 	// Create image buffer (RGBA8)
 	TArray<FColor> ImageData;
@@ -72,7 +85,7 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 	for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
 	{
 		const FVector3d& Position = RenderVertices[VertexIdx];
-		const double Elevation = VertexAmplifiedElevation[VertexIdx];
+		const double Elevation = ElevationSource[VertexIdx];
 
 		// Normalize elevation to [0, 1]
 		const double NormalizedHeight = (MaxElevation > MinElevation) ?
@@ -238,8 +251,17 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
     if (PlatformFile.FileExists(*OutputPath))
     {
-        PlatformFile.SetReadOnly(*OutputPath, false);
-        PlatformFile.DeleteFile(*OutputPath);
+        if (PlatformFile.IsReadOnly(*OutputPath))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to overwrite heightmap: %s is read-only"), *OutputPath);
+            return FString();
+        }
+
+        if (!PlatformFile.DeleteFile(*OutputPath))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to delete existing heightmap: %s"), *OutputPath);
+            return FString();
+        }
     }
 
     if (bForceHeightmapWriteFailure)
