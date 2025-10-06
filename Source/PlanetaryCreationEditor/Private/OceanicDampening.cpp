@@ -172,4 +172,6 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
             }
         }
     }
+
+    BumpOceanicAmplificationSerial();
 }

@@ -131,7 +131,8 @@ double ComputeOceanicAmplification(
     double BaseElevation_m,
     const FVector3d& RidgeDirection,
     const TArray<FTectonicPlate>& Plates,
-    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries)
+    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
+    const FTectonicSimulationParameters& Parameters)
 {
     // Start with base elevation from M5 system (erosion, subsidence)
     double AmplifiedElevation = BaseElevation_m;
@@ -165,15 +166,17 @@ double ComputeOceanicAmplification(
 
     // Paper: "oceanic crust age a_o to accentuate the faults where the crust is young"
     // Age-based amplitude decay: young crust has strong faults, old crust smooths out
-    const double AgeFactor = FMath::Exp(-CrustAge_My / 50.0); // τ = 50 My decay constant
-    const double FaultAmplitude_m = 150.0 * AgeFactor; // 150m max for young ridges
+    const double AgeFalloff = FMath::Max(Parameters.OceanicAgeFalloff, 0.0);
+    const double AgeFactor = (AgeFalloff > 0.0) ? FMath::Exp(-CrustAge_My * AgeFalloff) : 1.0;
+    const double FaultAmplitude_m = Parameters.OceanicFaultAmplitude * AgeFactor;
 
     // Transform faults are perpendicular to ridge direction (r_c from paper)
     const FVector3d TransformFaultDir = FVector3d::CrossProduct(RidgeDirection, Position.GetSafeNormal()).GetSafeNormal();
 
     // 3D Gabor noise approximation oriented along transform faults
     // Use higher frequency for more detail
-    const double RawGaborNoise = ComputeGaborNoiseApproximation(Position, TransformFaultDir, 0.05);
+    const double FaultFrequency = FMath::Max(Parameters.OceanicFaultFrequency, 0.0001);
+    const double RawGaborNoise = ComputeGaborNoiseApproximation(Position, TransformFaultDir, FaultFrequency);
 
     // Scale up to ensure full [-1, 1] range (Perlin typically gives smaller values)
     // This ensures fault amplitudes reach the target 150m for young crust
@@ -209,6 +212,7 @@ double ComputeOceanicAmplification(
     AmplifiedElevation += FineDetail_m;
 
     // Debug: Log amplification breakdown for first few young crust vertices
+#if UE_BUILD_DEBUG
     static int32 DebugLogCount = 0;
     if (DebugLogCount < 5 && CrustAge_My < 10.0)
     {
@@ -216,6 +220,7 @@ double ComputeOceanicAmplification(
             DebugLogCount, CrustAge_My, BaseElevation_m, FaultDetail_m, GaborNoise, FineDetail_m, AmplifiedElevation, AmplifiedElevation - BaseElevation_m);
         DebugLogCount++;
     }
+#endif
 
     return AmplifiedElevation;
 }

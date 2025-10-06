@@ -50,6 +50,26 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
 "C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<ProjectPath>\PlanetaryCreation.uproject" -ExecCmds="Automation RunTests PlanetaryCreation; Quit" -unattended -nop4 -nosplash
 ```
 
+**RHI selection for automation suites:**
+
+- *CPU-only suites* (e.g., Milestone 4 LOD/UX tests) run fastest with `-NullRHI` because the engine skips shader compilation:
+
+  ```bash
+  "C:\Program Files\Epic Games\\UE_5.5\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe" "<ProjectPath>\PlanetaryCreation.uproject" \
+    -NullRHI \
+    -ExecCmds="Automation RunTests PlanetaryCreation.Milestone4; Quit" \
+    -unattended -nop4 -nosplash
+  ```
+
+- *GPU compute suites* (Milestone 6 Stage B parity, etc.) require an actual D3D/Vulkan RHI so compute shaders compile. **Do not pass `-NullRHI`** in these runs:
+
+  ```bash
+  "C:\Program Files\Epic Games\\UE_5.5\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe" "<ProjectPath>\PlanetaryCreation.uproject" \
+    -ExecCmds="Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit" \
+    -unattended -nop4 -nosplash
+  ```
+
+
 Tests live in `Source/PlanetaryCreationEditor/Private/Tests/` and use Unreal's automation framework with `IMPLEMENT_SIMPLE_AUTOMATION_TEST`.
 
 ## Architecture Overview

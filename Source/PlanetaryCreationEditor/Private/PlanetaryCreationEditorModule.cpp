@@ -12,11 +12,36 @@
 #include "Widgets/Docking/SDockTab.h"
 #include "WorkspaceMenuStructure.h"
 #include "WorkspaceMenuStructureModule.h"
+#include "Misc/App.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "ShaderCore.h"
 
 static const FName TectonicToolTabName(TEXT("TectonicTool"));
 
 void FPlanetaryCreationEditorModule::StartupModule()
 {
+    // Milestone 6: Register shader directory for GPU compute shaders
+    // CRITICAL: Must be ABSOLUTE path, not relative, and registered even during automation runs
+    const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+    const FString ShaderDirectory = FPaths::Combine(ProjectDir, TEXT("Source/PlanetaryCreationEditor/Shaders"));
+
+    UE_LOG(LogTemp, Log, TEXT("[M6 GPU] Registering shader directory: %s"), *ShaderDirectory);
+    AddShaderSourceDirectoryMapping(TEXT("/Plugin/PlanetaryCreation"), ShaderDirectory);
+
+    const FString CmdLine(FCommandLine::Get());
+    const bool bAutomationOrCmdlet = IsRunningCommandlet()
+        || FApp::IsUnattended()
+        || GIsAutomationTesting
+        || CmdLine.Contains(TEXT("-ExecCmds="))
+        || CmdLine.Contains(TEXT("-run=Automation"));
+
+    if (bAutomationOrCmdlet)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[M6 GPU] Skipping UI registration for automation/cmdlet run"));
+        return; // Skip editor-only UI registration for commandlets/automation runs
+    }
+
     SimulationController = MakeShared<FTectonicSimulationController>();
     SimulationController->Initialize();
 
@@ -38,6 +63,18 @@ void FPlanetaryCreationEditorModule::StartupModule()
 
 void FPlanetaryCreationEditorModule::ShutdownModule()
 {
+    const FString CmdLine(FCommandLine::Get());
+    const bool bAutomationOrCmdlet = IsRunningCommandlet()
+        || FApp::IsUnattended()
+        || GIsAutomationTesting
+        || CmdLine.Contains(TEXT("-ExecCmds="))
+        || CmdLine.Contains(TEXT("-run=Automation"));
+
+    if (bAutomationOrCmdlet)
+    {
+        return;
+    }
+
     UnregisterMenus();
 
     FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TectonicToolTabName);

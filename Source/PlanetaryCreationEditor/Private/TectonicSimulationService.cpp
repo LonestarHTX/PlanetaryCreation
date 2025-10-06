@@ -3,12 +3,24 @@
 #include "PlanetaryCreationLogging.h"
 
 DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "Math/RandomStream.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "SphericalKDTree.h"
 #include "Trace/Trace.h"
+#include "RHI.h"
+#include "OceanicAmplificationGPU.h"
+#include "ExemplarTextureArray.h"
+
+#if WITH_EDITOR
+static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
+    TEXT("r.PlanetaryCreation.UseGPUAmplification"),
+    0,
+    TEXT("Enable GPU compute path for Stage B amplification. 0 = CPU (default), 1 = GPU when available."),
+    ECVF_Default);
+#endif
 
 void UTectonicSimulationService::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -18,6 +30,9 @@ void UTectonicSimulationService::Initialize(FSubsystemCollectionBase& Collection
 
 void UTectonicSimulationService::Deinitialize()
 {
+    // Milestone 6 GPU: Cleanup GPU resources before shutdown
+    ShutdownGPUExemplarResources();
+
     BaseSphereSamples.Reset();
     Plates.Reset();
     SharedVertices.Reset();
@@ -157,6 +172,7 @@ void UTectonicSimulationService::ResetSimulation()
     HistoryStack.Empty();
     CurrentHistoryIndex = -1;
     CaptureHistorySnapshot();
+    BumpOceanicAmplificationSerial();
     UE_LOG(LogPlanetaryCreation, Log, TEXT("ResetSimulation: History stack initialized with initial state"));
 }
 
@@ -261,28 +277,66 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Must run before topology changes to ensure valid vertex indices
         if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
         {
+            bool bUsedGPU = false;
+#if WITH_EDITOR
+            if (ShouldUseGPUAmplification())
             {
-                TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirections);
-                const double BlockStart = FPlatformTime::Seconds();
-                ComputeRidgeDirections();
-                RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
-            }
+                // Milestone 6 GPU: Lazy initialization on first use
+                InitializeGPUExemplarResources();
 
-            {
-                TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
+                TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplificationGPU);
                 const double BlockStart = FPlatformTime::Seconds();
-                ApplyOceanicAmplification();
-                OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                bUsedGPU = ApplyOceanicAmplificationGPU();
+                if (bUsedGPU)
+                {
+                    OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                }
+            }
+#endif
+            if (!bUsedGPU)
+            {
+                {
+                    TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirections);
+                    const double BlockStart = FPlatformTime::Seconds();
+                    ComputeRidgeDirections();
+                    RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
+                }
+
+                {
+                    TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
+                    const double BlockStart = FPlatformTime::Seconds();
+                    ApplyOceanicAmplification();
+                    OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                }
             }
         }
 
         // Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based)
         if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
         {
-            TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
-            const double BlockStart = FPlatformTime::Seconds();
-            ApplyContinentalAmplification();
-            ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
+            bool bUsedGPU = false;
+#if WITH_EDITOR
+            if (ShouldUseGPUAmplification())
+            {
+                // Milestone 6 GPU: Lazy initialization on first use
+                InitializeGPUExemplarResources();
+
+                TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplificationGPU);
+                const double BlockStart = FPlatformTime::Seconds();
+                bUsedGPU = ApplyContinentalAmplificationGPU();
+                if (bUsedGPU)
+                {
+                    ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
+                }
+            }
+#endif
+            if (!bUsedGPU)
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
+                const double BlockStart = FPlatformTime::Seconds();
+                ApplyContinentalAmplification();
+                ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
+            }
         }
 
         // Milestone 4 Task 1.2: Detect and execute plate splits/merges
@@ -423,8 +477,43 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
     // Milestone 4 Task 2.3: Recompute thermal field for new render vertices
     ComputeThermalField();
 
+    BumpOceanicAmplificationSerial();
+
     UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD] Render mesh regenerated at L%d: %d vertices, %d triangles"),
         NewLevel, RenderVertices.Num(), RenderTriangles.Num() / 3);
+}
+
+bool UTectonicSimulationService::ShouldUseGPUAmplification() const
+{
+#if WITH_EDITOR
+    return CVarPlanetaryCreationUseGPUAmplification.GetValueOnGameThread() != 0 &&
+        Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
+#else
+    return false;
+#endif
+}
+
+bool UTectonicSimulationService::ApplyOceanicAmplificationGPU()
+{
+#if WITH_EDITOR
+    const bool bResult = PlanetaryCreation::GPU::ApplyOceanicAmplificationGPU(*this);
+    if (bResult)
+    {
+        BumpOceanicAmplificationSerial();
+    }
+    return bResult;
+#else
+    return false;
+#endif
+}
+
+bool UTectonicSimulationService::ApplyContinentalAmplificationGPU()
+{
+#if WITH_EDITOR
+    return PlanetaryCreation::GPU::ApplyContinentalAmplificationGPU(*this);
+#else
+    return false;
+#endif
 }
 
 void UTectonicSimulationService::GenerateDefaultSphereSamples()
@@ -446,6 +535,8 @@ void UTectonicSimulationService::GenerateDefaultSphereSamples()
     {
         BaseSphereSamples.Add(Seed.GetSafeNormal());
     }
+
+    BumpOceanicAmplificationSerial();
 }
 
 void UTectonicSimulationService::GenerateIcospherePlates()
@@ -577,6 +668,8 @@ void UTectonicSimulationService::SubdivideIcosphere(int32 SubdivisionLevel)
         Plate.VertexIndices = Face;
         Plates.Add(Plate);
     }
+
+    BumpOceanicAmplificationSerial();
 }
 
 void UTectonicSimulationService::InitializeEulerPoles()
@@ -1200,6 +1293,8 @@ void UTectonicSimulationService::GenerateRenderMesh()
     {
         UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Render mesh topology validated: Euler characteristic χ=2"));
     }
+
+    BumpOceanicAmplificationSerial();
 }
 
 int32 UTectonicSimulationService::GetMidpointIndex(int32 V0, int32 V1, TMap<TPair<int32, int32>, int32>& MidpointCache, TArray<FVector3d>& Vertices)
@@ -1751,6 +1846,7 @@ bool UTectonicSimulationService::Undo()
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Undo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
+    BumpOceanicAmplificationSerial();
     return true;
 }
 
@@ -1794,6 +1890,7 @@ bool UTectonicSimulationService::Redo()
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Redo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
+    BumpOceanicAmplificationSerial();
     return true;
 }
 
@@ -1838,6 +1935,7 @@ bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("JumpToHistoryIndex: Jumped to snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
+    BumpOceanicAmplificationSerial();
     return true;
 }
 
@@ -2397,6 +2495,8 @@ void UTectonicSimulationService::UpdateTerranePositions(double DeltaTimeMy)
         NewCentroid /= static_cast<double>(Terrane.VertexIndices.Num());
         Terrane.Centroid = NewCentroid.GetSafeNormal();
     }
+
+    BumpOceanicAmplificationSerial();
 }
 
 void UTectonicSimulationService::DetectTerraneCollisions()
@@ -2521,7 +2621,9 @@ void UTectonicSimulationService::ProcessTerraneReattachments()
 // Forward declarations from OceanicAmplification.cpp
 double ComputeGaborNoiseApproximation(const FVector3d& Position, const FVector3d& FaultDirection, double Frequency);
 double ComputeOceanicAmplification(const FVector3d& Position, int32 PlateID, double CrustAge_My, double BaseElevation_m,
-    const FVector3d& RidgeDirection, const TArray<FTectonicPlate>& Plates, const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries);
+    const FVector3d& RidgeDirection, const TArray<FTectonicPlate>& Plates,
+    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
+    const FTectonicSimulationParameters& Parameters);
 
 // Forward declarations from ContinentalAmplification.cpp
 double ComputeContinentalAmplification(const FVector3d& Position, int32 PlateID, double BaseElevation_m,
@@ -2686,6 +2788,8 @@ void UTectonicSimulationService::InitializeAmplifiedElevationBaseline()
     {
         VertexAmplifiedElevation[VertexIdx] = VertexElevationValues[VertexIdx];
     }
+
+    BumpOceanicAmplificationSerial();
 }
 
 void UTectonicSimulationService::ApplyOceanicAmplification()
@@ -2733,7 +2837,8 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
             BaseElevation_m,
             RidgeDirection,
             Plates,
-            Boundaries
+            Boundaries,
+            Parameters
         );
 
         VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;
@@ -2741,6 +2846,7 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
 
     // Milestone 4 Phase 4.2: Increment surface data version (elevation changed)
     SurfaceDataVersion++;
+    BumpOceanicAmplificationSerial();
 }
 
 // ============================================================================
@@ -2817,4 +2923,172 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
 
     // Milestone 4 Phase 4.2: Increment surface data version (elevation changed)
     SurfaceDataVersion++;
+}
+
+// Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification
+void UTectonicSimulationService::InitializeGPUExemplarResources()
+{
+    using namespace PlanetaryCreation::GPU;
+
+    FExemplarTextureArray& ExemplarArray = GetExemplarTextureArray();
+
+    if (ExemplarArray.IsInitialized())
+    {
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[TectonicService] GPU exemplar resources already initialized"));
+        return;
+    }
+
+    // Get project Content directory
+    const FString ProjectContentDir = FPaths::ProjectContentDir();
+
+    if (!ExemplarArray.Initialize(ProjectContentDir))
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[TectonicService] Failed to initialize GPU exemplar texture array"));
+        return;
+    }
+
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[TectonicService] GPU exemplar resources initialized: %d textures (%dx%d)"),
+        ExemplarArray.GetExemplarCount(), ExemplarArray.GetTextureWidth(), ExemplarArray.GetTextureHeight());
+}
+
+// Milestone 6 GPU: Shutdown GPU exemplar texture array
+void UTectonicSimulationService::ShutdownGPUExemplarResources()
+{
+    using namespace PlanetaryCreation::GPU;
+
+    FExemplarTextureArray& ExemplarArray = GetExemplarTextureArray();
+
+    if (ExemplarArray.IsInitialized())
+    {
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[TectonicService] Shutting down GPU exemplar resources"));
+        ExemplarArray.Shutdown();
+    }
+}
+
+void UTectonicSimulationService::GetRenderVertexFloatSoA(
+    const TArray<float>*& OutPositionX,
+    const TArray<float>*& OutPositionY,
+    const TArray<float>*& OutPositionZ,
+    const TArray<float>*& OutNormalX,
+    const TArray<float>*& OutNormalY,
+    const TArray<float>*& OutNormalZ) const
+{
+    RefreshRenderVertexFloatSoA();
+
+    OutPositionX = &RenderVertexFloatSoA.PositionX;
+    OutPositionY = &RenderVertexFloatSoA.PositionY;
+    OutPositionZ = &RenderVertexFloatSoA.PositionZ;
+    OutNormalX = &RenderVertexFloatSoA.NormalX;
+    OutNormalY = &RenderVertexFloatSoA.NormalY;
+    OutNormalZ = &RenderVertexFloatSoA.NormalZ;
+}
+
+void UTectonicSimulationService::GetOceanicAmplificationFloatInputs(
+    const TArray<float>*& OutBaselineElevation,
+    const TArray<FVector4f>*& OutRidgeDirections,
+    const TArray<float>*& OutCrustAge,
+    const TArray<FVector3f>*& OutRenderPositions) const
+{
+    RefreshOceanicAmplificationFloatInputs();
+
+    OutBaselineElevation = &OceanicAmplificationFloatInputs.BaselineElevation;
+    OutRidgeDirections = &OceanicAmplificationFloatInputs.RidgeDirections;
+    OutCrustAge = &OceanicAmplificationFloatInputs.CrustAge;
+    OutRenderPositions = &OceanicAmplificationFloatInputs.RenderPositions;
+}
+
+void UTectonicSimulationService::RefreshRenderVertexFloatSoA() const
+{
+    FRenderVertexFloatSoA& Cache = RenderVertexFloatSoA;
+    const int32 VertexCount = RenderVertices.Num();
+
+    if (VertexCount <= 0)
+    {
+        Cache.PositionX.Reset();
+        Cache.PositionY.Reset();
+        Cache.PositionZ.Reset();
+        Cache.NormalX.Reset();
+        Cache.NormalY.Reset();
+        Cache.NormalZ.Reset();
+        return;
+    }
+
+    Cache.PositionX.SetNum(VertexCount);
+    Cache.PositionY.SetNum(VertexCount);
+    Cache.PositionZ.SetNum(VertexCount);
+    Cache.NormalX.SetNum(VertexCount);
+    Cache.NormalY.SetNum(VertexCount);
+    Cache.NormalZ.SetNum(VertexCount);
+
+    for (int32 Index = 0; Index < VertexCount; ++Index)
+    {
+        const FVector3d& Vertex = RenderVertices[Index];
+        Cache.PositionX[Index] = static_cast<float>(Vertex.X);
+        Cache.PositionY[Index] = static_cast<float>(Vertex.Y);
+        Cache.PositionZ[Index] = static_cast<float>(Vertex.Z);
+
+        const FVector3d SafeNormal = Vertex.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        Cache.NormalX[Index] = static_cast<float>(SafeNormal.X);
+        Cache.NormalY[Index] = static_cast<float>(SafeNormal.Y);
+        Cache.NormalZ[Index] = static_cast<float>(SafeNormal.Z);
+    }
+}
+
+void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
+{
+    FOceanicAmplificationFloatInputs& Cache = OceanicAmplificationFloatInputs;
+
+    const int32 VertexCount = VertexAmplifiedElevation.Num();
+    if (Cache.CachedDataSerial == OceanicAmplificationDataSerial &&
+        Cache.BaselineElevation.Num() == VertexCount)
+    {
+        return; // Cache is already up to date
+    }
+
+    const bool bHasValidData = VertexCount > 0 &&
+        VertexCrustAge.Num() == VertexCount &&
+        VertexRidgeDirections.Num() == VertexCount &&
+        RenderVertices.Num() == VertexCount;
+
+    if (!bHasValidData)
+    {
+        Cache.BaselineElevation.Reset();
+        Cache.CrustAge.Reset();
+        Cache.RidgeDirections.Reset();
+        Cache.RenderPositions.Reset();
+        Cache.CachedDataSerial = OceanicAmplificationDataSerial;
+        return;
+    }
+
+    Cache.BaselineElevation.SetNum(VertexCount);
+    Cache.CrustAge.SetNum(VertexCount);
+    Cache.RidgeDirections.SetNum(VertexCount);
+    Cache.RenderPositions.SetNum(VertexCount);
+
+    for (int32 Index = 0; Index < VertexCount; ++Index)
+    {
+        Cache.BaselineElevation[Index] = static_cast<float>(VertexAmplifiedElevation[Index]);
+        Cache.CrustAge[Index] = static_cast<float>(VertexCrustAge[Index]);
+
+        const FVector3d RidgeDirSafe = VertexRidgeDirections[Index].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        Cache.RidgeDirections[Index] = FVector4f(
+            static_cast<float>(RidgeDirSafe.X),
+            static_cast<float>(RidgeDirSafe.Y),
+            static_cast<float>(RidgeDirSafe.Z),
+            0.0f);
+
+        const FVector3d& Position = RenderVertices[Index];
+        Cache.RenderPositions[Index] = FVector3f(
+            static_cast<float>(Position.X),
+            static_cast<float>(Position.Y),
+            static_cast<float>(Position.Z));
+    }
+
+    Cache.CachedDataSerial = OceanicAmplificationDataSerial;
+}
+
+void UTectonicSimulationService::BumpOceanicAmplificationSerial()
+{
+    ++OceanicAmplificationDataSerial;
+    OceanicAmplificationFloatInputs.CachedDataSerial = 0;
 }

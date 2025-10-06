@@ -561,6 +561,27 @@ struct FTectonicSimulationParameters
     bool bEnableOceanicAmplification = false;
 
     /**
+     * Milestone 6 Task 2.1: Ridge amplitude applied to transform faults (meters).
+     * Acts as a scalar multiplier for the procedural oceanic amplification noise.
+     */
+    UPROPERTY()
+    double OceanicFaultAmplitude = 150.0;
+
+    /**
+     * Milestone 6 Task 2.1: Spatial frequency for transform fault noise (unitless).
+     * Higher values yield denser fault bands, lower values produce broader ridges.
+     */
+    UPROPERTY()
+    double OceanicFaultFrequency = 0.05;
+
+    /**
+     * Milestone 6 Task 2.1: Exponential age falloff constant for ridge noise (1/My).
+     * Controls how quickly transform fault detail fades as crust ages. Default 0.02 ≈ 50 My e-folding.
+     */
+    UPROPERTY()
+    double OceanicAgeFalloff = 0.02;
+
+    /**
      * Milestone 6 Task 2.2: Enable Stage B continental amplification (exemplar-based terrain synthesis).
      * Default false for backward compatibility. Set true to activate continental amplification.
      */
@@ -659,12 +680,19 @@ public:
 
     /** Milestone 6 Task 2.1: Accessor for per-vertex amplified elevation (Stage B, meters). */
     const TArray<double>& GetVertexAmplifiedElevation() const { return VertexAmplifiedElevation; }
+    TArray<double>& GetMutableVertexAmplifiedElevation() { return VertexAmplifiedElevation; }
 
     const TArray<int32>& GetRenderVertexAdjacencyOffsets() const { return RenderVertexAdjacencyOffsets; }
     const TArray<int32>& GetRenderVertexAdjacency() const { return RenderVertexAdjacency; }
 
     /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
     const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
+
+    /** Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification. */
+    void InitializeGPUExemplarResources();
+
+    /** Milestone 6 GPU: Shutdown GPU exemplar texture array (cleanup on module shutdown). */
+    void ShutdownGPUExemplarResources();
 
     /** Accessor for boundary adjacency map (Milestone 2). */
     const TMap<TPair<int32, int32>, FPlateBoundary>& GetBoundaries() const { return Boundaries; }
@@ -703,6 +731,10 @@ public:
      * Only regenerates render mesh and Voronoi mapping; preserves plates, stress, rifts, etc.
      */
     void SetRenderSubdivisionLevel(int32 NewLevel);
+
+    bool ShouldUseGPUAmplification() const;
+    bool ApplyOceanicAmplificationGPU();
+    bool ApplyContinentalAmplificationGPU();
 
     /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
     void ExportMetricsToCSV();
@@ -857,6 +889,22 @@ public:
 
     /** Milestone 6 Task 1.1: Get terrane by ID (nullptr if not found). */
     const FContinentalTerrane* GetTerraneByID(int32 TerraneID) const;
+
+    /** Access cached float SoA streams for render vertices (position + normal). */
+    void GetRenderVertexFloatSoA(
+        const TArray<float>*& OutPositionX,
+        const TArray<float>*& OutPositionY,
+        const TArray<float>*& OutPositionZ,
+        const TArray<float>*& OutNormalX,
+        const TArray<float>*& OutNormalY,
+        const TArray<float>*& OutNormalZ) const;
+
+    /** Access cached float inputs required by the oceanic amplification GPU path. */
+    void GetOceanicAmplificationFloatInputs(
+        const TArray<float>*& OutBaselineElevation,
+        const TArray<FVector4f>*& OutRidgeDirections,
+        const TArray<float>*& OutCrustAge,
+        const TArray<FVector3f>*& OutRenderPositions) const;
 
     /**
      * Milestone 6 Task 1.2: Assign extracted terrane to nearest oceanic carrier plate.
@@ -1083,4 +1131,36 @@ private:
     bool bForceHeightmapWriteFailure = false;
     FString HeightmapExportOverrideDirectory;
 #endif
+
+    /** Persistent float SoA mirrors for render vertex data. */
+    struct FRenderVertexFloatSoA
+    {
+        TArray<float> PositionX;
+        TArray<float> PositionY;
+        TArray<float> PositionZ;
+        TArray<float> NormalX;
+        TArray<float> NormalY;
+        TArray<float> NormalZ;
+    };
+
+    /** Cached float inputs shared by the oceanic amplification GPU path. */
+    struct FOceanicAmplificationFloatInputs
+    {
+        TArray<float> BaselineElevation;
+        TArray<float> CrustAge;
+        TArray<FVector4f> RidgeDirections;
+        TArray<FVector3f> RenderPositions;
+        uint64 CachedDataSerial = 0;
+    };
+
+    /** Mutable caches to avoid recomputing float mirrors on every call. */
+    mutable FRenderVertexFloatSoA RenderVertexFloatSoA;
+    mutable FOceanicAmplificationFloatInputs OceanicAmplificationFloatInputs;
+
+    /** Monotonic serial tracking modifications to amplification inputs. */
+    uint64 OceanicAmplificationDataSerial = 1;
+
+    void RefreshRenderVertexFloatSoA() const;
+    void RefreshOceanicAmplificationFloatInputs() const;
+    void BumpOceanicAmplificationSerial();
 };

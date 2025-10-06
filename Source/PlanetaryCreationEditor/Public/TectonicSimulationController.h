@@ -48,6 +48,25 @@ struct FCachedLODMesh
     int32 TopologyVersion = 0;
     int32 SurfaceDataVersion = 0;
     double CacheTimestamp = 0.0; // For LRU eviction if needed
+
+    /** Precomputed vertex streams (SoA) captured after the initial build. */
+    TArray<float> PositionX;
+    TArray<float> PositionY;
+    TArray<float> PositionZ;
+
+    TArray<float> NormalX;
+    TArray<float> NormalY;
+    TArray<float> NormalZ;
+
+    TArray<float> TangentX;
+    TArray<float> TangentY;
+    TArray<float> TangentZ;
+
+    TArray<FColor> VertexColors;
+    TArray<FVector2f> UVs;
+
+    /** Final index buffer (post seam-duplication) recorded as uint32 values. */
+    TArray<uint32> Indices;
 };
 
 /** Encapsulates higher-level control over the tectonic simulation and mesh conversion. */
@@ -125,7 +144,12 @@ private:
     void DrawVelocityVectorField();
 
     /** Milestone 3 Task 4.3: Build mesh StreamSet from snapshot (thread-safe). */
-    static void BuildMeshFromSnapshot(const FMeshBuildSnapshot& Snapshot, RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
+    void BuildMeshFromSnapshot(int32 LODLevel, int32 TopologyVersion, const FMeshBuildSnapshot& Snapshot,
+        RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount,
+        TArray<float>& OutPositionX, TArray<float>& OutPositionY, TArray<float>& OutPositionZ,
+        TArray<float>& OutNormalX, TArray<float>& OutNormalY, TArray<float>& OutNormalZ,
+        TArray<float>& OutTangentX, TArray<float>& OutTangentY, TArray<float>& OutTangentZ,
+        TArray<FColor>& OutColors, TArray<FVector2f>& OutUVs, TArray<uint32>& OutIndices);
 
     /** Milestone 4 Phase 4.2: Check if LOD mesh is cached and valid. */
     bool IsLODCached(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const;
@@ -134,13 +158,21 @@ private:
     const FCachedLODMesh* GetCachedLOD(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const;
 
     /** Milestone 4 Phase 4.2: Store built mesh snapshot in cache. */
-    void CacheLODMesh(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion, const FMeshBuildSnapshot& Snapshot, int32 VertexCount, int32 TriangleCount);
+    void CacheLODMesh(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion,
+        const FMeshBuildSnapshot& Snapshot, int32 VertexCount, int32 TriangleCount,
+        TArray<float>&& PositionX, TArray<float>&& PositionY, TArray<float>&& PositionZ,
+        TArray<float>&& NormalX, TArray<float>&& NormalY, TArray<float>&& NormalZ,
+        TArray<float>&& TangentX, TArray<float>&& TangentY, TArray<float>&& TangentZ,
+        TArray<FColor>&& VertexColors, TArray<FVector2f>&& UVs, TArray<uint32>&& Indices);
 
     /** Milestone 4 Phase 4.2: Invalidate cache on topology change. */
     void InvalidateLODCache();
 
     /** Milestone 4 Phase 4.2: Pre-warm neighboring LOD levels. */
     void PreWarmNeighboringLODs();
+
+    void BuildMeshFromCache(const FCachedLODMesh& CachedMesh,
+        RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
 
     mutable TWeakObjectPtr<UTectonicSimulationService> CachedService;
     mutable TWeakObjectPtr<class ARealtimeMeshActor> PreviewActor;
@@ -177,4 +209,16 @@ private:
 
     /** Milestone 5 Task 1.2: Orbital camera controller. */
     mutable FOrbitCameraController CameraController;
+
+    struct FStaticLODData
+    {
+        TArray<FVector3f> UnitNormals;
+        TArray<FVector2f> UVs;
+        TArray<FVector3f> TangentX;
+    };
+
+    uint64 MakeLODCacheKey(int32 LODLevel, int32 TopologyVersion) const;
+    const FStaticLODData& GetOrBuildStaticLODData(int32 LODLevel, int32 TopologyVersion, const TArray<FVector3d>& RenderVertices) const;
+
+    mutable TMap<uint64, TUniquePtr<FStaticLODData>> StaticLODDataCache;
 };

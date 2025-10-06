@@ -35,7 +35,10 @@ public class PlanetaryCreationEditor : ModuleRules
             "WorkspaceMenuStructure",
             "ImageWrapper",
             "Json",
-            "JsonUtilities"
+            "JsonUtilities",
+            "RHI",                  // Milestone 6: GPU compute shader dependencies
+            "RenderCore",
+            "Renderer"
         });
     }
 }

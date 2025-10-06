@@ -1,9 +1,17 @@
 # GPU Compute Acceleration Implementation Plan
 
-**Status:** 📋 Planning
+**Status:** 📋 Planning (parity prototype validated 2025-10-06)
 **Timeline:** 3-4 weeks (1 engineer full-time)
 **Dependencies:** Milestone 6 Phase 2 complete (Stage B amplification CPU baseline)
 **Performance Goal:** Enable LOD Levels 7-8 (163K-655K vertices) with <500ms step times
+
+---
+
+## 🔄 Latest Findings (2025-10-06)
+
+- The first GPU parity prototype matches the CPU path within 0.0025 m max error but remains **~10% slower** because we perform a synchronous readback (`FlushRenderingCommands` + `FRHIGPUBufferReadback`).
+- Current usage is **correctness-only**. The CPU implementation stays in the simulation loop; the GPU path will be triggered later for high-detail rendering once the async pipeline is implemented.
+- Performance work is deferred until the SoA refactor and LOD cache changes land. See “Phase 4 – Async Pipeline” for the queued follow-up tasks.
 
 ---
 
@@ -24,6 +32,22 @@ Accelerate Stage B amplification (oceanic + continental) using **Unreal Engine 5
 
 **L7 (163K vertices) projection**: CPU ~80ms → GPU ~10ms
 **L8 (655K vertices) projection**: CPU ~300ms → GPU ~35ms
+
+### **GPU Memory Budget**
+
+| Component | L7 (163K vertices) | L8 (655K vertices) |
+|-----------|--------------------|--------------------|
+| Exemplar atlas | 150 MB | 150 MB |
+| RenderVertices (float3) | 2 MB | 8 MB |
+| VertexPlateAssignments | 0.6 MB | 2.6 MB |
+| VertexElevationValues | 0.6 MB | 2.6 MB |
+| VertexCrustAge | 0.6 MB | 2.6 MB |
+| VertexRidgeDirections | 2 MB | 8 MB |
+| PlatesCrustType | <1 KB | <1 KB |
+| OutputBuffer | 0.6 MB | 2.6 MB |
+| **Total VRAM** | **~157 MB** | **~177 MB** |
+
+**Minimum GPU Requirements**: SM5, 2GB VRAM (fallback to CPU on older hardware)
 
 ---
 
@@ -91,7 +115,7 @@ void FPlanetaryCreationEditorModule::ShutdownModule()
     // Existing code...
 
     // Unregister shader path
-    ResetAllShaderSourceDirectoryMappings();
+    RemoveShaderSourceDirectoryMapping(TEXT("/Plugin/PlanetaryCreation"));
 }
 ```
 
@@ -112,6 +136,25 @@ void FPlanetaryCreationEditorModule::ShutdownModule()
 
 **Output Buffer** (UAV):
 - `VertexAmplifiedElevation` (float)
+
+**Fallback / Toggle:** Preserve the existing CPU implementation and expose an editor/console switch (`r.PlanetaryCreation.UseGPUAmplification`) so authors and automation can flip paths instantly.
+
+**Implementation**:
+```cpp
+// TectonicSimulationService.cpp
+static TAutoConsoleVariable<int32> CVarUseGPUAmplification(
+    TEXT("r.PlanetaryCreation.UseGPUAmplification"),
+    1, // Default: enabled
+    TEXT("Use GPU compute shaders for Stage B amplification (0=CPU, 1=GPU)"),
+    ECVF_Default);
+
+bool UTectonicSimulationService::ShouldUseGPUAmplification() const
+{
+    const int32 VertexCount = RenderVertices.Num();
+    const bool bUserEnabled = CVarUseGPUAmplification.GetValueOnGameThread() != 0;
+    return (VertexCount >= 100000 && GRHISupportsComputeShaders && bUserEnabled);
+}
+```
 
 **Shader Logic**:
 ```hlsl
@@ -265,6 +308,19 @@ void DispatchOceanicAmplificationGPU(
 
     const int32 VertexCount = RenderVertices.Num();
 
+    // VRAM budget check (prevent allocation failures on low-VRAM GPUs)
+    const uint64 RequiredVRAM_MB = 165; // L8 worst case: ~157MB buffers + 150MB atlas
+    const uint64 AvailableVRAM_MB = GRHIMemoryStats.AvailableGPUMemoryMB;
+
+    if (AvailableVRAM_MB < RequiredVRAM_MB)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("Insufficient VRAM for GPU amplification (%llu MB available, %llu MB required). Falling back to CPU."),
+            AvailableVRAM_MB, RequiredVRAM_MB);
+        // Caller will fallback to CPU path
+        return;
+    }
+
     ENQUEUE_RENDER_COMMAND(OceanicAmplificationGPU)(
         [VertexCount,
          RenderVertices,
@@ -386,6 +442,17 @@ void DispatchOceanicAmplificationGPU(
 #include "/Engine/Private/Random.ush"
 
 /**
+ * Safe acos() wrapper to prevent NaN from floating-point precision issues
+ * Vulkan/Metal shader compilers sometimes produce NaN for inputs near ±1.0
+ * CRITICAL: Always use this instead of raw acos() for geodesic distance
+ */
+float SafeAcos(float Value)
+{
+    // Clamp to [-1, 1] to avoid NaN from floating-point error
+    return acos(clamp(Value, -1.0, 1.0));
+}
+
+/**
  * 3D Perlin noise implementation for GPU
  * Uses engine's Random.ush as foundation
  * Returns value in [-1, 1] range
@@ -468,10 +535,16 @@ float PerlinNoise3D_Directional(float3 Position, float3 OrientationDir)
  * GPU texture atlas for 22 SRTM90 exemplar heightmaps
  * Texture2DArray with 22 layers (one per exemplar)
  * Format: R16_UNORM (16-bit grayscale, [0, 65535])
+ *
+ * CRITICAL: This is a singleton! Must explicitly Release() to free 150MB VRAM
+ * when continental amplification is disabled.
  */
 class FExemplarTextureAtlas
 {
 public:
+    /** Singleton accessor */
+    static FExemplarTextureAtlas& Get();
+
     /** Create atlas from exemplar library JSON */
     void Initialize(const FString& ProjectContentDir);
 
@@ -481,8 +554,11 @@ public:
     /** Get metadata buffer (elevation ranges per layer) */
     FRDGBufferRef GetMetadataBuffer(FRDGBuilder& GraphBuilder) const;
 
-    /** Release GPU resources */
+    /** Release GPU resources (MUST call when disabling amplification!) */
     void Release();
+
+    /** Check if atlas is loaded */
+    bool IsLoaded() const { return AtlasTexture.IsValid(); }
 
 private:
     TRefCountPtr<FRHITexture2DArray> AtlasTexture;
@@ -742,9 +818,9 @@ void UTectonicSimulationService::ApplyOceanicAmplification_GPU()
 
 void UTectonicSimulationService::ApplyContinentalAmplification_GPU()
 {
-    // Initialize atlas on first use (lazy load)
-    static FExemplarTextureAtlas Atlas;
-    if (!Atlas.IsValid())
+    // Lazy load atlas on first use
+    FExemplarTextureAtlas& Atlas = FExemplarTextureAtlas::Get();
+    if (!Atlas.IsLoaded())
     {
         Atlas.Initialize(FPaths::ProjectContentDir());
     }
@@ -759,6 +835,21 @@ void UTectonicSimulationService::ApplyContinentalAmplification_GPU()
     );
 
     SurfaceDataVersion++;
+}
+
+void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
+{
+    const bool bWasEnabled = Parameters.bEnableContinentalAmplification;
+    const bool bIsEnabled = NewParams.bEnableContinentalAmplification;
+
+    Parameters = NewParams;
+
+    // Free 150MB VRAM when amplification disabled
+    if (bWasEnabled && !bIsEnabled)
+    {
+        FExemplarTextureAtlas::Get().Release();
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Released exemplar atlas (freed ~150MB VRAM)"));
+    }
 }
 ```
 
@@ -822,15 +913,23 @@ bool FOceanicAmplificationGPUTest::RunTest(const FString& Parameters)
     Service->ApplyOceanicAmplification_GPU();
     TArray<double> GPUResults = Service->GetVertexAmplifiedElevation();
 
-    // Validate: GPU vs CPU error <0.1m
+    // Validate: GPU vs CPU error <0.5m (tolerance accounts for cumulative float→double precision loss)
     double MaxError = 0.0;
+    double SumError = 0.0;
     for (int32 i = 0; i < CPUResults.Num(); ++i)
     {
         double Error = FMath::Abs(CPUResults[i] - GPUResults[i]);
         MaxError = FMath::Max(MaxError, Error);
+        SumError += Error;
     }
 
-    TestTrue(TEXT("GPU matches CPU within 0.1m tolerance"), MaxError < 0.1);
+    const double MeanError = SumError / CPUResults.Num();
+    const double MaxAcceptableError_m = 0.5; // Conservative: 0.5m for multi-stage amplification
+
+    UE_LOG(LogTemp, Log, TEXT("GPU vs CPU error stats: Max=%.3fm, Mean=%.3fm"),
+        MaxError, MeanError);
+
+    TestTrue(TEXT("GPU matches CPU within 0.5m tolerance"), MaxError < MaxAcceptableError_m);
 
     // Performance check: GPU faster than CPU
     const double StartTime = FPlatformTime::Seconds();
@@ -842,6 +941,10 @@ bool FOceanicAmplificationGPUTest::RunTest(const FString& Parameters)
     return true;
 }
 ```
+
+**Automation Notes:**
+- Skip GPU tests when running with Null RHI (`if (!IsFeatureLevelSupported(GMaxRHIShaderPlatform, ERHIFeatureLevel::SM5))`).
+- Add a toggle (e.g., `r.PlanetaryCreation.UseGPUAmplification`) so tests can switch between CPU and GPU paths.
 
 **File**: `Tests/ContinentalAmplificationGPUTest.cpp`
 
@@ -856,6 +959,39 @@ Similar structure, validate:
 // Full simulation: CPU vs GPU path for 100 steps
 // Validate final heightmap identical within 1m tolerance
 // LOD Level 7 stress test: 163K vertices, <20ms/step
+```
+
+**File**: `Tests/ShaderCompilationTest.cpp`
+
+```cpp
+#include "Misc/AutomationTest.h"
+#include "OceanicAmplificationGPU.h"
+#include "ContinentalAmplificationGPU.h"
+#include "ShaderCompiler.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FShaderCompilationTest,
+    "PlanetaryCreation.Milestone6.ShaderCompilation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FShaderCompilationTest::RunTest(const FString& Parameters)
+{
+    // Validate shaders compile on target RHIs (DX12, Vulkan, Metal)
+    TShaderMapRef<FOceanicAmplificationCS> OceanicShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+    TestTrue(TEXT("OceanicAmplificationCS compiled"), OceanicShader.IsValid());
+
+    TShaderMapRef<FContinentalAmplificationCS> ContinentalShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+    TestTrue(TEXT("ContinentalAmplificationCS compiled"), ContinentalShader.IsValid());
+
+    // Cross-platform validation: Ensure SafeAcos() doesn't produce NaN
+    // (This would manifest as shader compilation errors on Vulkan/Metal)
+    if (!OceanicShader.IsValid() || !ContinentalShader.IsValid())
+    {
+        AddError(TEXT("Shader compilation failed - check for acos() NaN issues on current RHI"));
+    }
+
+    return true;
+}
 ```
 
 ### Task 5.2: Cross-Platform Validation
@@ -880,14 +1016,20 @@ Similar structure, validate:
 
 ## 🚧 **Risks & Mitigations**
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| RDG API complexity | High learning curve | Study Epic's PostProcess shaders, community examples |
-| Async readback latency | 1-frame delay in elevation | Acceptable for editor tool (not real-time game) |
-| Exemplar atlas VRAM | 150MB GPU memory | Lazy load, release after use |
-| Shader compilation time | Slow first load | Pre-compile shaders in build process |
-| Cross-platform RHI bugs | Shader errors on Vulkan/Metal | Extensive testing, fallback to CPU |
-| Double→Float precision loss | Numerical drift | Validate max error <0.1m, acceptable for visualization |
+| Risk | Impact | Phase | Mitigation |
+|------|--------|-------|------------|
+| **RDG API complexity** | High learning curve | 2 | Study Epic's PostProcess shaders, community examples (e.g., timdecode/UnrealComputeShaderExample) |
+| **Perlin noise cross-platform** | Vulkan/Metal `acos()` NaN bugs | 2 | Use `SafeAcos()` wrapper (clamp input to [-1, 1]) |
+| **Async readback latency** | 1-frame delay in elevation | 4 | Use `AddReadbackBufferPass()` with RDG fence; 1-frame delay acceptable for editor tool |
+| **Exemplar atlas VRAM leak** | 150MB leak per toggle | 3 | **CRITICAL**: Call `FExemplarTextureAtlas::Get().Release()` in `SetParameters()` when amplification disabled |
+| **Low-VRAM GPUs** | Allocation failures <2GB VRAM | 2,3 | Check `GRHIMemoryStats.AvailableGPUMemoryMB` before dispatch, fallback to CPU if <165MB |
+| **Shader compilation time** | Slow first load (~5-10s) | 2,3 | Pre-compile shaders in build process, ship cooked shaders with project |
+| **Double→Float precision loss** | Cumulative error in chained ops | 2,3,4 | Validate max error <0.5m (not 0.1m), log error statistics in tests |
+
+**Phase Risk Levels**:
+- **Phase 2 (Oceanic)**: 🔴 **HIGH** - Complex math (`acos`, `exp`, Perlin noise), cross-platform shader bugs
+- **Phase 3 (Continental)**: 🟡 **MEDIUM** - Texture atlas VRAM management, but simpler math (hardware filtering)
+- **Phase 4 (Optimization)**: 🔴 **HIGH** - Async readback timing, VRAM budget enforcement, precision validation
 
 ---
 
@@ -902,11 +1044,13 @@ Similar structure, validate:
 - [ ] `Private/ContinentalAmplificationGPU.h` (Atlas + shader interface)
 - [ ] `Private/ContinentalAmplificationGPU.cpp` (Texture atlas + dispatch)
 - [ ] `TectonicSimulationService.cpp` adaptive dispatch logic
-- [ ] `Tests/OceanicAmplificationGPUTest.cpp`
-- [ ] `Tests/ContinentalAmplificationGPUTest.cpp`
-- [ ] `Tests/GPUAmplificationIntegrationTest.cpp`
-- [ ] Performance report: L6/L7/L8 benchmarks
+- [ ] `Tests/OceanicAmplificationGPUTest.cpp` (0.5m tolerance, error stats logging)
+- [ ] `Tests/ContinentalAmplificationGPUTest.cpp` (exemplar atlas integrity)
+- [ ] `Tests/GPUAmplificationIntegrationTest.cpp` (100-step determinism)
+- [ ] `Tests/ShaderCompilationTest.cpp` (validate DX12/Vulkan/Metal shader compilation)
+- [ ] Performance report: L6/L7/L8 benchmarks with VRAM usage
 - [ ] Documentation update: `Docs/Milestone6_Plan.md` GPU section
+- [ ] User guide: Minimum GPU requirements (SM5, 2GB VRAM)
 
 ---
 

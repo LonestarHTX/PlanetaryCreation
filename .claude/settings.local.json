@@ -18,7 +18,13 @@
       "Bash(else echo \"Log file not found yet\")",
       "WebSearch",
       "WebFetch(domain:dev.epicgames.com)",
-      "Read(//mnt/c/Program Files/Epic Games/UE_5.5/Engine/Shaders/**)"
+      "Read(//mnt/c/Program Files/Epic Games/UE_5.5/Engine/Shaders/**)",
+      "Read(//mnt/c/Users/Michael/Documents/**)",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(if [ -f /tmp/gpu_oceanic_test.log ])",
+      "Bash(then grep -E \"GPUOceanicParity|Parity|tolerance|delta|Delta|Mean|Max|Result=\" /tmp/gpu_oceanic_test.log)",
+      "Bash(then tail -100 /tmp/gpu_oceanic_test.log)",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects/PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit\" -unattended -nop4 -nosplash -log)"
     ],
     "deny": [],
     "ask": []

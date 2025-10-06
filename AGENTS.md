@@ -24,14 +24,14 @@
 - Inspect logs with `powershell -Command "Get-Content 'Saved/Logs/PlanetaryCreation.log' | Select-String 'Result={Success}'"`.
 
 ## Build Expectations
-- After **any** change to Unreal C++ or Slate, run the WSL-friendly build command from `CLAUDE.md`:
+- After **any** change to Unreal C++ or Slate, run the WSL-friendly build command from `CLAUDE.md` (see below).
   ```bash
   "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe" \
     PlanetaryCreationEditor Win64 Development \
     -project="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
     -WaitMutex -FromMsBuild
   ```
-- Do not skip this step; if the build cannot run, state the reason explicitly in your final summary.
+- Confirm the build **succeeds** before proceeding. If the command fails in the sandbox, rerun it immediately and include the failure reason in your summary.
 
 ## Commit & Pull Request Guidelines
 - Write concise, imperative commit subjects ≤72 chars (e.g., `Add plate hotspot sampling`); include rationale/test notes in the body when helpful.

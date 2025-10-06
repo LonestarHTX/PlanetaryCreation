@@ -1,0 +1,9 @@
+#ifndef PLANETARY_CREATION_TECTONIC_COMMON
+#define PLANETARY_CREATION_TECTONIC_COMMON
+
+float Remap(float Value, float MinInput, float MaxInput, float MinOutput, float MaxOutput)
+{
+    return lerp(MinOutput, MaxOutput, saturate((Value - MinInput) / (MaxInput - MinInput)));
+}
+
+#endif // PLANETARY_CREATION_TECTONIC_COMMON

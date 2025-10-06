@@ -1,0 +1,8 @@
+// Placeholder compute shader for continental amplification.
+#include "/Plugin/PlanetaryCreation/Private/TectonicCommon.ush"
+
+[numthreads(64, 1, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    // TODO: Implement exemplar-based amplification on GPU.
+}
