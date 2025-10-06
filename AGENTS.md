@@ -1,6 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
+- Repository overview and quick-start live in `README.md`; scan it before new sessions.
 - Core gameplay lives in `Source/PlanetaryCreation`; keep module headers lean with `.generated.h` last.
 - Runtime meshing extensions belong under `Plugins/RealtimeMeshComponent`; isolate experiments here and prefer plugin math helpers for reuse.
 - Game assets stay in `Content`; do not commit generated screenshots.
@@ -12,6 +13,7 @@
 - Rebuild editor target: `"<UE5>\Engine\Build\BatchFiles\Build.bat" PlanetaryCreationEditor Win64 Development -project="%CD%\PlanetaryCreation.uproject"`.
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
 - Run Milestone 3 automation suite: `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
+- GPU preview parity suites (Milestone 6): launch from Windows PowerShell via `Automation RunTests PlanetaryCreation.Milestone6.GPU`.
 
 ## Coding Style & Naming Conventions
 - Follow Unreal C++ style: 4-space indentation, no tabs.
@@ -49,8 +51,10 @@
 - PRs should link Jira/Trello tasks, outline tectonic simulation impact, list validation steps (editor launch, automation, perf captures), and attach before/after renders for visual changes.
 
 ## Planning & Collaboration
+- Skim `README.md` and `Docs/MilestoneSummary.md` at the start of any working session for current scope and status cues.
 - Review `Docs/PlanningAgentPlan.md` when sequencing work to stay aligned with milestone checkpoints.
 - Keep `RealtimeMeshComponent_HowTo.md` open while extending runtime mesh features to maintain API consistency.
+- GPU preview investigations: consult `Docs/gpu_preview_implementation_notes.md`, `Docs/gpu_preview_optimizations.md`, and `Docs/gpu_system_review.md` before diving into shader/controller changes.
 
 ## Automation Troubleshooting
 - **Automation tests hang or DLL lock errors**
