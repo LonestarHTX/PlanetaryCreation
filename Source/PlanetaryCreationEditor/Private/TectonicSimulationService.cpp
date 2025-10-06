@@ -201,6 +201,114 @@ void UTectonicSimulationService::MarkRidgeRingDirty(const TArray<int32>& SeedVer
     }
 }
 
+void UTectonicSimulationService::EnqueueCrustAgeResetSeeds(const TArray<int32>& SeedVertices)
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount <= 0 || SeedVertices.Num() == 0)
+    {
+        return;
+    }
+
+    if (PendingCrustAgeResetMask.Num() != VertexCount)
+    {
+        PendingCrustAgeResetMask.Init(false, VertexCount);
+        PendingCrustAgeResetSeeds.Reset();
+    }
+
+    for (int32 Seed : SeedVertices)
+    {
+        if (!RenderVertices.IsValidIndex(Seed))
+        {
+            continue;
+        }
+
+        if (!PendingCrustAgeResetMask[Seed])
+        {
+            PendingCrustAgeResetMask[Seed] = true;
+            PendingCrustAgeResetSeeds.Add(Seed);
+        }
+    }
+}
+
+void UTectonicSimulationService::ResetCrustAgeForSeeds(int32 RingDepth)
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount <= 0 || PendingCrustAgeResetSeeds.Num() == 0)
+    {
+        return;
+    }
+
+    if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
+    {
+        BuildRenderVertexAdjacency();
+    }
+
+    const int32 DepthLimit = FMath::Max(0, RingDepth);
+    TBitArray<> Visited(false, VertexCount);
+
+    TArray<int32> Current;
+    Current.Reserve(PendingCrustAgeResetSeeds.Num());
+
+    for (int32 Seed : PendingCrustAgeResetSeeds)
+    {
+        if (!RenderVertices.IsValidIndex(Seed))
+        {
+            continue;
+        }
+
+        Visited[Seed] = true;
+        if (VertexCrustAge.IsValidIndex(Seed))
+        {
+            VertexCrustAge[Seed] = 0.0;
+        }
+        Current.Add(Seed);
+    }
+
+    for (int32 Depth = 0; Depth < DepthLimit; ++Depth)
+    {
+        if (Current.Num() == 0)
+        {
+            break;
+        }
+
+        TArray<int32> Next;
+        for (int32 VertexIdx : Current)
+        {
+            if (!RenderVertices.IsValidIndex(VertexIdx))
+            {
+                continue;
+            }
+
+            const int32 Start = RenderVertexAdjacencyOffsets[VertexIdx];
+            const int32 End = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+
+            for (int32 Offset = Start; Offset < End; ++Offset)
+            {
+                const int32 Neighbor = RenderVertexAdjacency.IsValidIndex(Offset)
+                    ? RenderVertexAdjacency[Offset]
+                    : INDEX_NONE;
+
+                if (!RenderVertices.IsValidIndex(Neighbor) || Visited[Neighbor])
+                {
+                    continue;
+                }
+
+                Visited[Neighbor] = true;
+                if (VertexCrustAge.IsValidIndex(Neighbor))
+                {
+                    VertexCrustAge[Neighbor] = 0.0;
+                }
+                Next.Add(Neighbor);
+            }
+        }
+
+        Current = MoveTemp(Next);
+    }
+
+    PendingCrustAgeResetSeeds.Reset();
+    PendingCrustAgeResetMask.Init(false, VertexCount);
+}
+
 void UTectonicSimulationService::ResetSimulation()
 {
     CurrentTimeMy = 0.0;
@@ -222,6 +330,9 @@ void UTectonicSimulationService::ResetSimulation()
     VertexAmplifiedElevation.Empty();
 
     InvalidateRidgeDirectionCache();
+    PendingCrustAgeResetSeeds.Reset();
+    PendingCrustAgeResetMask.Reset();
+    StepsSinceLastVoronoiRefresh = 0;
 
     // Milestone 4 Phase 5: Reset version counters for test isolation
     TopologyVersion = 0;
@@ -409,6 +520,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
         CurrentTimeMy += StepDurationMy;
 
+        StepsSinceLastVoronoiRefresh++;
+
         // Milestone 3 Task 2.3: Interpolate stress to render vertices (per step for accurate snapshots)
         InterpolateStressToVertices();
 
@@ -457,7 +570,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Must run after erosion/dampening to use base elevations as input
         // Must run before topology changes to ensure valid vertex indices
         // Skip if controller is handling GPU preview mode (avoids redundant CPU work)
-        if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
+        if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
         {
             {
                 TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirectionsStageB);
@@ -466,31 +579,34 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
             }
 
-            bool bUsedGPU = false;
+            if (!Parameters.bSkipCPUAmplification)
+            {
+                bool bUsedGPU = false;
 #if WITH_EDITOR
-            if (ShouldUseGPUAmplification())
-            {
-                // Milestone 6 GPU: Lazy initialization on first use
-                InitializeGPUExemplarResources();
+                if (ShouldUseGPUAmplification())
+                {
+                    // Milestone 6 GPU: Lazy initialization on first use
+                    InitializeGPUExemplarResources();
 
-                TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplificationGPU);
-                const double BlockStart = FPlatformTime::Seconds();
-                bUsedGPU = ApplyOceanicAmplificationGPU();
-                if (bUsedGPU)
-                {
-                    OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
-                    ProcessPendingOceanicGPUReadbacks(true);
-                }
-            }
-#endif
-            if (!bUsedGPU)
-            {
-                {
-                    TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
+                    TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplificationGPU);
                     const double BlockStart = FPlatformTime::Seconds();
-                    ApplyOceanicAmplification();
-                    OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
-                    bSurfaceDataChanged = true;
+                    bUsedGPU = ApplyOceanicAmplificationGPU();
+                    if (bUsedGPU)
+                    {
+                        OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                        ProcessPendingOceanicGPUReadbacks(true);
+                    }
+                }
+#endif
+                if (!bUsedGPU)
+                {
+                    {
+                        TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
+                        const double BlockStart = FPlatformTime::Seconds();
+                        ApplyOceanicAmplification();
+                        OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                        bSurfaceDataChanged = true;
+                    }
                 }
             }
         }
@@ -523,6 +639,22 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
                 bSurfaceDataChanged = true;
             }
+        }
+
+        const int32 VoronoiInterval = FMath::Max(1, Parameters.VoronoiRefreshIntervalSteps);
+        if (StepsSinceLastVoronoiRefresh >= VoronoiInterval)
+        {
+            TRACE_CPUPROFILER_EVENT_SCOPE(VoronoiRefresh);
+            const double VoronoiStart = FPlatformTime::Seconds();
+            BuildVoronoiMapping();
+            ComputeVelocityField();
+            InterpolateStressToVertices();
+            StepsSinceLastVoronoiRefresh = 0;
+            bSurfaceDataChanged = true;
+            MarkAllRidgeDirectionsDirty();
+            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[Voronoi] Refresh completed in %.2f ms (interval=%d)"),
+                (FPlatformTime::Seconds() - VoronoiStart) * 1000.0,
+                VoronoiInterval);
         }
 
         // Milestone 4 Task 1.2: Detect and execute plate splits/merges
@@ -692,6 +824,8 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
 
     // Recompute velocity field for new render vertices
     ComputeVelocityField();
+
+    StepsSinceLastVoronoiRefresh = 0;
 
     // Reinterpolate stress field to new render vertices
     InterpolateStressToVertices();
@@ -1202,6 +1336,7 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
         DirtySeeds.Append(StateChangeSeeds);
         DirtySeeds.Append(DivergentSeeds);
         MarkRidgeRingDirty(DirtySeeds, RidgeRingDepth);
+        EnqueueCrustAgeResetSeeds(DivergentSeeds);
     }
 }
 
@@ -1668,6 +1803,7 @@ void UTectonicSimulationService::BuildRenderVertexAdjacency()
     {
         RenderVertexAdjacencyOffsets.Reset();
         RenderVertexAdjacency.Reset();
+        RenderVertexAdjacencyWeights.Reset();
         return;
     }
 
@@ -1705,6 +1841,10 @@ void UTectonicSimulationService::BuildRenderVertexAdjacency()
     RenderVertexAdjacencyOffsets[VertexCount] = RunningTotal;
 
     RenderVertexAdjacency.SetNum(RunningTotal);
+    RenderVertexAdjacencyWeights.SetNum(RunningTotal);
+
+    const double SmoothingRadius = FMath::Max(Parameters.OceanicDampeningSmoothingRadius, UE_DOUBLE_SMALL_NUMBER);
+    const double InvTwoRadiusSq = 1.0 / (2.0 * SmoothingRadius * SmoothingRadius);
 
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
@@ -1718,9 +1858,26 @@ void UTectonicSimulationService::BuildRenderVertexAdjacency()
         TArray<int32> SortedNeighbors = NeighborSets[VertexIdx].Array();
         SortedNeighbors.Sort();
 
+        const FVector3d& VertexPos = RenderVertices[VertexIdx];
+
         for (int32 LocalIdx = 0; LocalIdx < Count; ++LocalIdx)
         {
-            RenderVertexAdjacency[Start + LocalIdx] = SortedNeighbors[LocalIdx];
+            const int32 NeighborIdx = SortedNeighbors[LocalIdx];
+            RenderVertexAdjacency[Start + LocalIdx] = NeighborIdx;
+
+            const FVector3d& NeighborPos = RenderVertices.IsValidIndex(NeighborIdx)
+                ? RenderVertices[NeighborIdx]
+                : FVector3d::ZeroVector;
+
+            double Weight = 0.0;
+            if (RenderVertices.IsValidIndex(NeighborIdx))
+            {
+                const double Dot = FMath::Clamp(FVector3d::DotProduct(VertexPos.GetSafeNormal(), NeighborPos.GetSafeNormal()), -1.0, 1.0);
+                const double Geodesic = FMath::Acos(Dot);
+                Weight = FMath::Exp(-(Geodesic * Geodesic) * InvTwoRadiusSq);
+            }
+
+            RenderVertexAdjacencyWeights[Start + LocalIdx] = static_cast<float>(Weight);
         }
     }
 }

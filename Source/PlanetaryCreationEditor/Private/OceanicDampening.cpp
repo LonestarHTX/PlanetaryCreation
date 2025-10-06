@@ -23,6 +23,8 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
         return;
     }
 
+    ResetCrustAgeForSeeds(FMath::Max(0, Parameters.RidgeDirectionDirtyRingDepth));
+
     // Ensure M5 arrays are initialized (M5 Phase 3 lifecycle fix)
     // These may be empty if dampening runs before erosion or if feature flags toggle
     if (VertexCrustAge.Num() != VertexCount)
@@ -95,15 +97,8 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
         const int32 NeighborStart = RenderVertexAdjacencyOffsets[VertexIdx];
         const int32 NeighborEnd = RenderVertexAdjacencyOffsets[VertexIdx + 1];
 
-        if (NeighborEnd <= NeighborStart)
-        {
-            const double AgeSubsidencePull = (TargetDepth_m - Elevation_m) * 0.01 * DeltaTimeMy;
-            VertexElevationValues[VertexIdx] = FMath::Min(Elevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
-            continue;
-        }
-
-        double SmoothedElevation = Elevation_m; // Start with current elevation (meters)
-        double WeightSum = 1.0; // Self weight
+        double SmoothedElevation = Elevation_m;
+        double WeightSum = 1.0;
 
         for (int32 NeighborOffset = NeighborStart; NeighborOffset < NeighborEnd; ++NeighborOffset)
         {
@@ -114,22 +109,23 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
             }
 
             const double NeighborElevation = VertexElevationValues[NeighborIdx];
+            const double Weight = RenderVertexAdjacencyWeights.IsValidIndex(NeighborOffset)
+                ? RenderVertexAdjacencyWeights[NeighborOffset]
+                : 0.0f;
 
-            // Geodesic distance on unit sphere
-            const FVector3d& V1 = RenderVertices[VertexIdx];
-            const FVector3d& V2 = RenderVertices[NeighborIdx];
-            const double DotProduct = FMath::Clamp(FVector3d::DotProduct(V1.GetSafeNormal(), V2.GetSafeNormal()), -1.0, 1.0);
-            const double GeodesicDistance = FMath::Acos(DotProduct); // Radians
-
-            // Gaussian weight (radius = 0.1 rad ≈ 5.7°)
-            const double SmoothingRadius = 0.1;
-            const double Weight = FMath::Exp(-GeodesicDistance * GeodesicDistance / (2.0 * SmoothingRadius * SmoothingRadius));
+            if (Weight <= 0.0)
+            {
+                continue;
+            }
 
             SmoothedElevation += NeighborElevation * Weight;
             WeightSum += Weight;
         }
 
-        SmoothedElevation /= WeightSum;
+        if (WeightSum > 1.0)
+        {
+            SmoothedElevation /= WeightSum;
+        }
 
         // Dampen toward smoothed elevation (slow subsidence rate)
         const double DampenRate = Parameters.OceanicDampeningConstant * DeltaTimeMy;
@@ -140,37 +136,6 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
 
         // M5 Phase 3 fix: Clamp oceanic elevations below sea level (prevent stress from lifting them)
         VertexElevationValues[VertexIdx] = FMath::Min(NewElevation_m + AgeSubsidencePull, Parameters.SeaLevel - 1.0);
-    }
-
-    // Reset crust age at divergent boundaries (new oceanic crust)
-    for (const auto& BoundaryPair : Boundaries)
-    {
-        const FPlateBoundary& Boundary = BoundaryPair.Value;
-
-        if (Boundary.BoundaryType == EBoundaryType::Divergent)
-        {
-            // Find vertices on this boundary edge and reset their age
-            for (int32 EdgeVertexIdx : Boundary.SharedEdgeVertices)
-            {
-                // Find render vertices near this shared edge vertex
-                if (SharedVertices.IsValidIndex(EdgeVertexIdx))
-                {
-                    const FVector3d& EdgePos = SharedVertices[EdgeVertexIdx];
-
-                    for (int32 RenderVertexIdx = 0; RenderVertexIdx < VertexCount; ++RenderVertexIdx)
-                    {
-                        const FVector3d& RenderPos = RenderVertices[RenderVertexIdx];
-                        const double Distance = FVector3d::Distance(EdgePos, RenderPos);
-
-                        // If very close to ridge, reset crust age (new crust)
-                        if (Distance < 0.01) // ~0.01 radians ≈ 0.6° proximity
-                        {
-                            VertexCrustAge[RenderVertexIdx] = 0.0;
-                        }
-                    }
-                }
-            }
-        }
     }
 
     BumpOceanicAmplificationSerial();

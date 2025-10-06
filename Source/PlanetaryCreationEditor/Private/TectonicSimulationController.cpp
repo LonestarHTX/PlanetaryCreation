@@ -179,33 +179,12 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
         Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
 
-        // DEBUG: Log elevation array state
-#if !UE_BUILD_SHIPPING
-        if (Snapshot.VertexElevationValues.Num() > 0)
-        {
-            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DEBUG] Snapshot has %d elevations, first 3: [%.2f, %.2f, %.2f]"),
-                Snapshot.VertexElevationValues.Num(),
-                Snapshot.VertexElevationValues[0],
-                Snapshot.VertexElevationValues.Num() > 1 ? Snapshot.VertexElevationValues[1] : 0.0,
-                Snapshot.VertexElevationValues.Num() > 2 ? Snapshot.VertexElevationValues[2] : 0.0);
-        }
-        else
-        {
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("[DEBUG] Snapshot VertexElevationValues is EMPTY!"));
-        }
-#endif
         // M6 Task 2.3: Enable amplified elevation if EITHER oceanic OR continental amplification is active
         Snapshot.bUseAmplifiedElevation = (Service->GetParameters().bEnableOceanicAmplification ||
                                            Service->GetParameters().bEnableContinentalAmplification) &&
                                           Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
         Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
         Snapshot.bHighlightSeaLevel = Service->IsHighlightSeaLevelEnabled();
-
-        // DEBUG: Log heightmap visualization state
-#if !UE_BUILD_SHIPPING
-        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DEBUG] CreateMeshBuildSnapshot: bEnableHeightmapVisualization = %s"),
-            Snapshot.Parameters.bEnableHeightmapVisualization ? TEXT("TRUE") : TEXT("FALSE"));
-#endif
     }
 
     // Capture visualization state from controller
@@ -607,15 +586,16 @@ void FTectonicSimulationController::SetGPUPreviewMode(bool bEnabled)
     {
         bUseGPUPreviewMode = bEnabled;
 
-        // Tell service to skip CPU amplification when we're handling GPU preview
         if (UTectonicSimulationService* Service = GetService())
         {
-            Service->SetSkipCPUAmplification(bEnabled);
+            if (bEnabled && !Service->GetParameters().bEnableHeightmapVisualization)
+            {
+                Service->SetHeightmapVisualizationEnabled(true);
+            }
         }
 
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] GPU preview mode %s (CPU amplification %s)"),
-            bEnabled ? TEXT("ENABLED") : TEXT("DISABLED"),
-            bEnabled ? TEXT("SKIPPED") : TEXT("ACTIVE"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] GPU preview mode %s"),
+            bEnabled ? TEXT("ENABLED") : TEXT("DISABLED"));
 
         // Invalidate height texture on disable
         if (!bEnabled)
@@ -834,6 +814,7 @@ void FTectonicSimulationController::UpdatePreviewMesh(RealtimeMesh::FRealtimeMes
                             {
                                 MID->SetTextureParameterValue(PlanetaryCreation::Preview::HeightTextureParamName, GPUHeightTextureAsset.Get());
                                 MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, 100.0f); // meters → cm
+                                MID->SetScalarParameterValue(TEXT("DebugOverlayOpacity"), 0.5f);
 
                                 UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Height texture bound to material (%dx%d)"),
                                     HeightTextureSize.X, HeightTextureSize.Y);
@@ -1145,7 +1126,11 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     PreviewVertices.SetNum(SourceVertexCount);
 
     const bool bShowVelocity = Snapshot.bShowVelocityField;
-    const bool bElevColor = Snapshot.Parameters.bEnableHeightmapVisualization || Snapshot.VertexElevationValues.Num() > 0;
+    // GPU preview mode uses heightmap visualization for WPO displacement, but vertex colors should still show plates by default
+    // Only force elevation colors if BOTH conditions are met:
+    // 1. Heightmap visualization is enabled (for GPU material)
+    // 2. User hasn't explicitly requested a different visualization mode (velocity field, stress, etc.)
+    const bool bElevColor = false; // Default: show plate colors in vertex stream
     const bool bHighlightSeaLevel = Snapshot.bHighlightSeaLevel;
     const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
 

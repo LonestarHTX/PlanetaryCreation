@@ -328,6 +328,10 @@ struct FTectonicSimulationParameters
     UPROPERTY()
     int32 RetessellationCheckIntervalSteps = 5;
 
+    /** Number of steps between Voronoi refreshes (≥1). */
+    UPROPERTY()
+    int32 VoronoiRefreshIntervalSteps = 5;
+
     /** High watermark (degrees) before a rebuild is allowed (≥ threshold). */
     UPROPERTY()
     double RetessellationTriggerDegrees = 45.0;
@@ -564,6 +568,10 @@ struct FTectonicSimulationParameters
      */
     UPROPERTY()
     double OceanicDampeningConstant = 0.0005;
+
+    /** Gaussian smoothing radius for oceanic dampening (radians). */
+    UPROPERTY()
+    double OceanicDampeningSmoothingRadius = 0.1;
 
     /**
      * Milestone 5 Task 2.3: Oceanic age-subsidence coefficient (m/sqrt(My)).
@@ -862,6 +870,8 @@ public:
     void InvalidateRidgeDirectionCache();
     void MarkAllRidgeDirectionsDirty();
     void MarkRidgeRingDirty(const TArray<int32>& SeedVertices, int32 RingDepth);
+    void EnqueueCrustAgeResetSeeds(const TArray<int32>& SeedVertices);
+    void ResetCrustAgeForSeeds(int32 RingDepth);
 
     /** Milestone 4 Task 1.1: Re-tessellation performance tracking (public for tests). */
     double LastRetessellationTimeMs = 0.0;
@@ -1202,6 +1212,14 @@ private:
     /** Cached render vertex adjacency (CSR layout: Offsets.Num == RenderVertices.Num + 1). */
     TArray<int32> RenderVertexAdjacencyOffsets;
     TArray<int32> RenderVertexAdjacency;
+    TArray<float> RenderVertexAdjacencyWeights;
+
+    /** Pending seeds for crust age reset near divergent boundaries. */
+    TArray<int32> PendingCrustAgeResetSeeds;
+    TBitArray<> PendingCrustAgeResetMask;
+
+    /** Cadence counter for Voronoi refresh. */
+    int32 StepsSinceLastVoronoiRefresh = 0;
 
     /** Milestone 3 Task 3.3: Initial plate centroid positions (captured after Lloyd relaxation). */
     TArray<FVector3d> InitialPlateCentroids;
