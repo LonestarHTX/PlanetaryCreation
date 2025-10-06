@@ -1,6 +1,7 @@
 #include "TectonicSimulationController.h"
 
 #include "PlanetaryCreationLogging.h"
+#include "OceanicAmplificationGPU.h"
 
 #include "Async/Async.h"
 #include "Async/Future.h"
@@ -18,6 +19,7 @@
 #include "MaterialDomain.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionVertexColor.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "TectonicSimulationService.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Components/LineBatchComponent.h"
@@ -27,6 +29,16 @@
 #include "EditorViewportClient.h"
 #include "HAL/PlatformTime.h"
 #include "HeightmapColorPalette.h"
+#include "Engine/Texture2D.h"
+
+namespace PlanetaryCreation
+{
+    namespace Preview
+    {
+        static const FName HeightTextureParamName(TEXT("HeightTexture"));
+        static const FName ElevationScaleParamName(TEXT("ElevationScale"));
+    }
+}
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
 FTectonicSimulationController::~FTectonicSimulationController()
@@ -67,6 +79,9 @@ void FTectonicSimulationController::Shutdown()
         PreviewActor.Reset();
     }
 #endif
+
+    GPUHeightTexture.SafeRelease();
+    GPUHeightTextureAsset.Reset();
 
     PreviewMesh.Reset();
     bAsyncMeshBuildInProgress.store(false);
@@ -300,6 +315,9 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         // Kick off async mesh build on background thread
         AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, StartTime, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]() mutable
         {
+            // Register thread for Unreal Insights profiling
+            TRACE_CPUPROFILER_EVENT_SCOPE(TectonicMeshBuildAsync);
+
             if (bShutdownRequested.load(std::memory_order_relaxed))
             {
                 ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
@@ -501,6 +519,119 @@ void FTectonicSimulationController::SetElevationMode(EElevationMode Mode)
     }
 }
 
+void FTectonicSimulationController::EnsureGPUPreviewTextureAsset() const
+{
+    if (!bUseGPUPreviewMode)
+    {
+        return;
+    }
+
+    const bool bNeedsNewTexture = !GPUHeightTextureAsset.IsValid()
+        || !GPUHeightTextureAsset->IsValidLowLevelFast()
+        || GPUHeightTextureAsset->GetSizeX() != HeightTextureSize.X
+        || GPUHeightTextureAsset->GetSizeY() != HeightTextureSize.Y;
+
+    if (!bNeedsNewTexture)
+    {
+        return;
+    }
+
+    GPUHeightTextureAsset.Reset();
+
+    UTexture2D* NewTexture = UTexture2D::CreateTransient(HeightTextureSize.X, HeightTextureSize.Y, PF_R16F);
+    if (!NewTexture)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPUPreview] Failed to allocate preview height texture (%dx%d)"),
+            HeightTextureSize.X, HeightTextureSize.Y);
+        return;
+    }
+
+    NewTexture->SRGB = false;
+    NewTexture->CompressionSettings = TC_HDR;
+    NewTexture->MipGenSettings = TMGS_NoMipmaps;
+    NewTexture->NeverStream = true;
+    NewTexture->LODGroup = TEXTUREGROUP_World;
+    NewTexture->Filter = TF_Bilinear;
+    NewTexture->AddressX = TA_Wrap;
+    NewTexture->AddressY = TA_Clamp;
+    NewTexture->UpdateResource();
+
+    GPUHeightTextureAsset = TStrongObjectPtr<UTexture2D>(NewTexture);
+}
+
+void FTectonicSimulationController::CopyHeightTextureToPreviewResource() const
+{
+    if (!GPUHeightTextureAsset.IsValid() || !GPUHeightTexture.IsValid())
+    {
+        return;
+    }
+
+    UTexture2D* Texture = GPUHeightTextureAsset.Get();
+    if (!Texture)
+    {
+        return;
+    }
+
+    FTextureResource* Resource = Texture->GetResource();
+    if (!Resource)
+    {
+        Texture->UpdateResource();
+        Resource = Texture->GetResource();
+    }
+
+    if (!Resource || !Resource->TextureRHI.IsValid())
+    {
+        return;
+    }
+
+    const FTextureRHIRef SourceTexture = GPUHeightTexture;
+    const FTextureRHIRef DestinationTexture = Resource->TextureRHI;
+
+    ENQUEUE_RENDER_COMMAND(CopyGPUPreviewTexture)(
+        [SourceTexture, DestinationTexture, Size = HeightTextureSize](FRHICommandListImmediate& RHICmdList)
+        {
+            if (!SourceTexture.IsValid() || !DestinationTexture.IsValid())
+            {
+                return;
+            }
+
+            FRHICopyTextureInfo CopyInfo;
+            CopyInfo.Size = FIntVector(Size.X, Size.Y, 1);
+            RHICmdList.CopyTexture(SourceTexture, DestinationTexture, CopyInfo);
+        });
+}
+
+void FTectonicSimulationController::SetGPUPreviewMode(bool bEnabled)
+{
+    if (bUseGPUPreviewMode != bEnabled)
+    {
+        bUseGPUPreviewMode = bEnabled;
+
+        // Tell service to skip CPU amplification when we're handling GPU preview
+        if (UTectonicSimulationService* Service = GetService())
+        {
+            Service->SetSkipCPUAmplification(bEnabled);
+        }
+
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] GPU preview mode %s (CPU amplification %s)"),
+            bEnabled ? TEXT("ENABLED") : TEXT("DISABLED"),
+            bEnabled ? TEXT("SKIPPED") : TEXT("ACTIVE"));
+
+        // Invalidate height texture on disable
+        if (!bEnabled)
+        {
+            GPUHeightTexture.SafeRelease();
+            GPUHeightTextureAsset.Reset();
+        }
+        else
+        {
+            EnsureGPUPreviewTextureAsset();
+        }
+
+        RebuildPreview(); // Refresh mesh with new preview mode
+    }
+}
+
 void FTectonicSimulationController::SetBoundariesVisible(bool bVisible)
 {
     if (bShowBoundaries != bVisible)
@@ -601,18 +732,39 @@ void FTectonicSimulationController::EnsurePreviewActor() const
         {
             Mesh->SetupMaterialSlot(0, TEXT("TectonicPreview"));
 
-            // Create simple unlit material that displays vertex colors
-            UMaterial* VertexColorMaterial = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
-            VertexColorMaterial->MaterialDomain = EMaterialDomain::MD_Surface;
-            VertexColorMaterial->SetShadingModel(EMaterialShadingModel::MSM_Unlit);
+            // Milestone 6: Use GPU displacement material when GPU preview mode is enabled
+            if (bUseGPUPreviewMode)
+            {
+                // Load the GPU displacement material
+                UMaterial* GPUDisplacementMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/M_PlanetSurface_GPUDisplacement.M_PlanetSurface_GPUDisplacement"));
+                if (GPUDisplacementMaterial)
+                {
+                    Component->SetMaterial(0, GPUDisplacementMaterial);
+                    UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] GPU displacement material applied"));
+                    EnsureGPUPreviewTextureAsset();
+                }
+                else
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPUPreview] Failed to load M_PlanetSurface_GPUDisplacement, falling back to vertex color material"));
+                    bUseGPUPreviewMode = false; // Fallback to CPU mode
+                }
+            }
 
-            UMaterialExpressionVertexColor* VertexColorNode = NewObject<UMaterialExpressionVertexColor>(VertexColorMaterial);
-            VertexColorMaterial->GetExpressionCollection().AddExpression(VertexColorNode);
-            VertexColorMaterial->GetEditorOnlyData()->EmissiveColor.Expression = VertexColorNode;
+            if (!bUseGPUPreviewMode)
+            {
+                // Create simple unlit material that displays vertex colors
+                UMaterial* VertexColorMaterial = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+                VertexColorMaterial->MaterialDomain = EMaterialDomain::MD_Surface;
+                VertexColorMaterial->SetShadingModel(EMaterialShadingModel::MSM_Unlit);
 
-            VertexColorMaterial->PostEditChange();
+                UMaterialExpressionVertexColor* VertexColorNode = NewObject<UMaterialExpressionVertexColor>(VertexColorMaterial);
+                VertexColorMaterial->GetExpressionCollection().AddExpression(VertexColorNode);
+                VertexColorMaterial->GetEditorOnlyData()->EmissiveColor.Expression = VertexColorNode;
 
-            Component->SetMaterial(0, VertexColorMaterial);
+                VertexColorMaterial->PostEditChange();
+
+                Component->SetMaterial(0, VertexColorMaterial);
+            }
 
             PreviewMesh = Mesh;
             bPreviewInitialized = false;
@@ -650,6 +802,48 @@ void FTectonicSimulationController::UpdatePreviewMesh(RealtimeMesh::FRealtimeMes
 
     // Milestone 4 Task 3.1: Refresh high-res boundary overlay after mesh update
     DrawHighResolutionBoundaryOverlay();
+
+    // Milestone 6: Generate GPU height texture and bind to material when GPU preview mode is enabled
+    if (bUseGPUPreviewMode)
+    {
+        UTectonicSimulationService* Service = GetService();
+        if (Service && PreviewActor.IsValid())
+        {
+            // Generate GPU height texture (no readback - stays on device)
+            if (PlanetaryCreation::GPU::ApplyOceanicAmplificationGPUPreview(*Service, GPUHeightTexture, HeightTextureSize))
+            {
+                EnsureGPUPreviewTextureAsset();
+
+                if (GPUHeightTextureAsset.IsValid())
+                {
+                    CopyHeightTextureToPreviewResource();
+
+                    // Bind texture to material dynamic instance
+                    if (URealtimeMeshComponent* Component = PreviewActor->GetRealtimeMeshComponent())
+                    {
+                        if (UMaterialInterface* CurrentMaterial = Component->GetMaterial(0))
+                        {
+                            UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(CurrentMaterial);
+                            if (!MID)
+                            {
+                                MID = UMaterialInstanceDynamic::Create(CurrentMaterial, Component);
+                                Component->SetMaterial(0, MID);
+                            }
+
+                            if (MID)
+                            {
+                                MID->SetTextureParameterValue(PlanetaryCreation::Preview::HeightTextureParamName, GPUHeightTextureAsset.Get());
+                                MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, 100.0f); // meters → cm
+
+                                UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Height texture bound to material (%dx%d)"),
+                                    HeightTextureSize.X, HeightTextureSize.Y);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Milestone 4 Task 3.2: Refresh velocity vector field after mesh update
     DrawVelocityVectorField();
@@ -1533,6 +1727,9 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
         ActiveAsyncTasks.fetch_add(1, std::memory_order_relaxed);
         AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [this, Snapshot, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion]() mutable
         {
+            // Register thread for Unreal Insights profiling
+            TRACE_CPUPROFILER_EVENT_SCOPE(TectonicLODPrebuildAsync);
+
             if (bShutdownRequested.load(std::memory_order_relaxed))
             {
                 ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);

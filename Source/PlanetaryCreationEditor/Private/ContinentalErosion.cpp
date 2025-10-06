@@ -66,7 +66,6 @@ void UTectonicSimulationService::ApplyContinentalErosion(double DeltaTimeMy)
         // M5 Phase 3 fix: Treat INDEX_NONE vertices as oceanic (skip erosion and log warning)
         if (PlateIdx == INDEX_NONE)
         {
-            UE_LOG(LogPlanetaryCreation, Warning, TEXT("Vertex %d has no plate assignment (INDEX_NONE) - skipping erosion. This may indicate a Voronoi assignment bug."), VertexIdx);
             VertexErosionRates[VertexIdx] = 0.0;
             continue;
         }
@@ -139,44 +138,31 @@ double UTectonicSimulationService::ComputeVertexSlope(int32 VertexIdx) const
         return 0.0;
     }
 
-    // Build neighbor list by finding triangles that share this vertex
-    TArray<int32> NeighborIndices;
-    const int32 TriangleCount = RenderTriangles.Num() / 3;
-
-    for (int32 TriIdx = 0; TriIdx < TriangleCount; ++TriIdx)
+    if (RenderVertexAdjacencyOffsets.Num() != RenderVertices.Num() + 1 || RenderVertexAdjacency.Num() == 0)
     {
-        const int32 V0 = RenderTriangles[TriIdx * 3 + 0];
-        const int32 V1 = RenderTriangles[TriIdx * 3 + 1];
-        const int32 V2 = RenderTriangles[TriIdx * 3 + 2];
-
-        if (V0 == VertexIdx)
-        {
-            NeighborIndices.AddUnique(V1);
-            NeighborIndices.AddUnique(V2);
-        }
-        else if (V1 == VertexIdx)
-        {
-            NeighborIndices.AddUnique(V0);
-            NeighborIndices.AddUnique(V2);
-        }
-        else if (V2 == VertexIdx)
-        {
-            NeighborIndices.AddUnique(V0);
-            NeighborIndices.AddUnique(V1);
-        }
+        const_cast<UTectonicSimulationService*>(this)->BuildRenderVertexAdjacency();
     }
 
-    if (NeighborIndices.Num() == 0)
+    if (RenderVertexAdjacencyOffsets.Num() != RenderVertices.Num() + 1 || RenderVertexAdjacency.Num() == 0)
     {
-        return 0.0; // No neighbors (shouldn't happen)
+        return 0.0;
+    }
+
+    const int32 StartOffset = RenderVertexAdjacencyOffsets[VertexIdx];
+    const int32 EndOffset = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+
+    if (StartOffset == EndOffset)
+    {
+        return 0.0;
     }
 
     // Compute average elevation difference to neighbors
     const double CurrentElevation = VertexElevationValues.IsValidIndex(VertexIdx) ? VertexElevationValues[VertexIdx] : 0.0;
     double MaxElevationDiff = 0.0;
 
-    for (int32 NeighborIdx : NeighborIndices)
+    for (int32 Offset = StartOffset; Offset < EndOffset; ++Offset)
     {
+        const int32 NeighborIdx = RenderVertexAdjacency[Offset];
         if (!VertexElevationValues.IsValidIndex(NeighborIdx))
         {
             continue;

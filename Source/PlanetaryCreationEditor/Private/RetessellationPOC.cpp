@@ -172,6 +172,114 @@ bool UTectonicSimulationService::ValidateRetessellation(const FRetessellationSna
     return true;
 }
 
+UTectonicSimulationService::FRetessellationAnalysis UTectonicSimulationService::ComputeRetessellationAnalysis() const
+{
+    FRetessellationAnalysis Analysis;
+
+    if (Plates.Num() == 0 || RenderTriangles.Num() < 3)
+    {
+        return Analysis;
+    }
+
+    if (InitialPlateCentroids.Num() != Plates.Num())
+    {
+        return Analysis;
+    }
+
+    double MaxDriftRadians = 0.0;
+    int32 MaxDriftPlateID = INDEX_NONE;
+
+    for (int32 PlateIndex = 0; PlateIndex < Plates.Num(); ++PlateIndex)
+    {
+        const FVector3d& InitialCentroid = InitialPlateCentroids[PlateIndex];
+        const FVector3d& CurrentCentroid = Plates[PlateIndex].Centroid;
+
+        const double DotProduct = FMath::Clamp(FVector3d::DotProduct(InitialCentroid, CurrentCentroid), -1.0, 1.0);
+        const double AngularDistance = FMath::Acos(DotProduct);
+
+        if (AngularDistance > MaxDriftRadians)
+        {
+            MaxDriftRadians = AngularDistance;
+            MaxDriftPlateID = Plates[PlateIndex].PlateID;
+        }
+    }
+
+    Analysis.MaxDriftDegrees = FMath::RadiansToDegrees(MaxDriftRadians);
+    Analysis.MaxDriftPlateID = MaxDriftPlateID;
+
+    const double MinimumAngleThreshold = Parameters.RetessellationMinTriangleAngleDegrees;
+
+    const int32 TriangleCount = RenderTriangles.Num() / 3;
+    Analysis.TotalTriangleCount = TriangleCount;
+
+    if (TriangleCount == 0)
+    {
+        return Analysis;
+    }
+
+    int32 BadTriangleCount = 0;
+
+    for (int32 TriangleIndex = 0; TriangleIndex < RenderTriangles.Num(); TriangleIndex += 3)
+    {
+        const int32 IndexA = RenderTriangles[TriangleIndex];
+        const int32 IndexB = RenderTriangles[TriangleIndex + 1];
+        const int32 IndexC = RenderTriangles[TriangleIndex + 2];
+
+        if (!RenderVertices.IsValidIndex(IndexA) ||
+            !RenderVertices.IsValidIndex(IndexB) ||
+            !RenderVertices.IsValidIndex(IndexC))
+        {
+            ++BadTriangleCount;
+            continue;
+        }
+
+        const FVector3d& VertexA = RenderVertices[IndexA];
+        const FVector3d& VertexB = RenderVertices[IndexB];
+        const FVector3d& VertexC = RenderVertices[IndexC];
+
+        const FVector3d EdgeAB = VertexB - VertexA;
+        const FVector3d EdgeAC = VertexC - VertexA;
+        const FVector3d EdgeBC = VertexC - VertexB;
+
+        const double LengthAB = EdgeAB.Length();
+        const double LengthAC = EdgeAC.Length();
+        const double LengthBC = EdgeBC.Length();
+
+        if (LengthAB < KINDA_SMALL_NUMBER ||
+            LengthAC < KINDA_SMALL_NUMBER ||
+            LengthBC < KINDA_SMALL_NUMBER)
+        {
+            ++BadTriangleCount;
+            continue;
+        }
+
+        const FVector3d NormalizedAB = EdgeAB / LengthAB;
+        const FVector3d NormalizedAC = EdgeAC / LengthAC;
+        const FVector3d NormalizedBA = -NormalizedAB;
+        const FVector3d NormalizedBC = EdgeBC / LengthBC;
+        const FVector3d NormalizedCA = -NormalizedAC;
+        const FVector3d NormalizedCB = -NormalizedBC;
+
+        const double AngleA = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(NormalizedAB, NormalizedAC), -1.0, 1.0));
+        const double AngleB = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(NormalizedBA, NormalizedBC), -1.0, 1.0));
+        const double AngleC = FMath::Acos(FMath::Clamp(FVector3d::DotProduct(NormalizedCA, NormalizedCB), -1.0, 1.0));
+
+        const double MinimumAngleDegrees = FMath::RadiansToDegrees(FMath::Min3(AngleA, AngleB, AngleC));
+
+        if (MinimumAngleDegrees < MinimumAngleThreshold)
+        {
+            ++BadTriangleCount;
+        }
+    }
+
+    Analysis.BadTriangleCount = BadTriangleCount;
+    Analysis.BadTriangleRatio = (TriangleCount > 0)
+        ? static_cast<double>(BadTriangleCount) / static_cast<double>(TriangleCount)
+        : 0.0;
+
+    return Analysis;
+}
+
 bool UTectonicSimulationService::PerformRetessellation()
 {
     const double StartTime = FPlatformTime::Seconds();
@@ -295,6 +403,125 @@ bool UTectonicSimulationService::PerformRetessellation()
     // Milestone 4 Phase 4.2: Increment topology version (topology changed)
     TopologyVersion++;
     UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] Topology version incremented: %d"), TopologyVersion);
+    MarkAllRidgeDirectionsDirty();
+
+    RetessellationCadenceStats.StepsSinceLastTrigger = 0;
+    RetessellationCadenceStats.CurrentCooldownStepAccumulator = 0;
 
     return true;
+}
+
+void UTectonicSimulationService::MaybePerformRetessellation()
+{
+    const int32 EvaluationInterval = FMath::Max(1, Parameters.RetessellationCheckIntervalSteps);
+
+    if (InitialPlateCentroids.Num() != Plates.Num())
+    {
+        InitialPlateCentroids.SetNum(Plates.Num());
+        for (int32 PlateIndex = 0; PlateIndex < Plates.Num(); ++PlateIndex)
+        {
+            InitialPlateCentroids[PlateIndex] = Plates[PlateIndex].Centroid;
+        }
+
+        StepsSinceLastRetessellationCheck = 0;
+        bRetessellationInCooldown = false;
+        LastRetessellationMaxDriftDegrees = 0.0;
+        LastRetessellationBadTriangleRatio = 0.0;
+        RetessellationCadenceStats.StepsSinceLastTrigger = 0;
+        RetessellationCadenceStats.CurrentCooldownStepAccumulator = 0;
+        return;
+    }
+
+    StepsSinceLastRetessellationCheck++;
+
+    RetessellationCadenceStats.StepsObserved++;
+
+    if (bRetessellationInCooldown)
+    {
+        RetessellationCadenceStats.StepsSpentInCooldown++;
+        if (RetessellationCadenceStats.CurrentCooldownStepAccumulator < TNumericLimits<int32>::Max())
+        {
+            RetessellationCadenceStats.CurrentCooldownStepAccumulator++;
+        }
+    }
+
+    if (RetessellationCadenceStats.StepsSinceLastTrigger < TNumericLimits<int32>::Max())
+    {
+        RetessellationCadenceStats.StepsSinceLastTrigger++;
+    }
+
+    if (StepsSinceLastRetessellationCheck < EvaluationInterval)
+    {
+        return;
+    }
+
+    StepsSinceLastRetessellationCheck = 0;
+    RetessellationCadenceStats.EvaluationCount++;
+
+    const FRetessellationAnalysis Analysis = ComputeRetessellationAnalysis();
+    LastRetessellationMaxDriftDegrees = Analysis.MaxDriftDegrees;
+    LastRetessellationBadTriangleRatio = Analysis.BadTriangleRatio;
+
+    if (Analysis.TotalTriangleCount == 0)
+    {
+        return;
+    }
+
+    const double TriggerDegrees = FMath::Max(Parameters.RetessellationTriggerDegrees, Parameters.RetessellationThresholdDegrees);
+    const bool bExceededDrift = LastRetessellationMaxDriftDegrees >= TriggerDegrees;
+    const bool bTriangleQualityPoor = LastRetessellationBadTriangleRatio >= Parameters.RetessellationBadTriangleRatioThreshold;
+
+    if (!bRetessellationInCooldown && bExceededDrift && bTriangleQualityPoor)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[Re-tessellation] Trigger condition met (max drift %.2f°, bad tri %.2f%%, plate %d, interval %d steps)"),
+            LastRetessellationMaxDriftDegrees,
+            LastRetessellationBadTriangleRatio * 100.0,
+            Analysis.MaxDriftPlateID,
+            EvaluationInterval);
+
+        const bool bRetessSuccess = PerformRetessellation();
+        if (bRetessSuccess)
+        {
+            bRetessellationInCooldown = true;
+            RetessellationCadenceStats.TriggerCount++;
+            RetessellationCadenceStats.LastTriggerTimeMy = CurrentTimeMy;
+            RetessellationCadenceStats.LastTriggerMaxDriftDegrees = LastRetessellationMaxDriftDegrees;
+            RetessellationCadenceStats.LastTriggerBadTriangleRatio = LastRetessellationBadTriangleRatio;
+            RetessellationCadenceStats.LastTriggerInterval = RetessellationCadenceStats.StepsSinceLastTrigger;
+            RetessellationCadenceStats.StepsSinceLastTrigger = 0;
+            RetessellationCadenceStats.CurrentCooldownStepAccumulator = 0;
+            RetessellationCadenceStats.LastCooldownDuration = 0;
+
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[Re-tessellation] Auto trigger #%d (evals=%d, interval=%d steps, drift %.2f°, bad %.2f%%)"),
+                RetessellationCadenceStats.TriggerCount,
+                RetessellationCadenceStats.EvaluationCount,
+                RetessellationCadenceStats.LastTriggerInterval,
+                RetessellationCadenceStats.LastTriggerMaxDriftDegrees,
+                RetessellationCadenceStats.LastTriggerBadTriangleRatio * 100.0);
+        }
+
+        return;
+    }
+
+    if (bRetessellationInCooldown)
+    {
+        if (bExceededDrift && bTriangleQualityPoor)
+        {
+            RetessellationCadenceStats.CooldownBlocks++;
+        }
+
+        if (LastRetessellationMaxDriftDegrees <= Parameters.RetessellationThresholdDegrees)
+        {
+            bRetessellationInCooldown = false;
+            RetessellationCadenceStats.LastCooldownDuration = RetessellationCadenceStats.CurrentCooldownStepAccumulator;
+            RetessellationCadenceStats.CurrentCooldownStepAccumulator = 0;
+            UE_LOG(LogPlanetaryCreation, Verbose,
+                TEXT("[Re-tessellation] Drift %.2f° <= cooldown %.2f°; rebuilds re-enabled after %d steps in cooldown."),
+                LastRetessellationMaxDriftDegrees,
+                Parameters.RetessellationThresholdDegrees,
+                RetessellationCadenceStats.LastCooldownDuration);
+        }
+    }
 }

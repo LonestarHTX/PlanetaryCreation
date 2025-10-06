@@ -21,6 +21,8 @@ static const FName TectonicToolTabName(TEXT("TectonicTool"));
 
 void FPlanetaryCreationEditorModule::StartupModule()
 {
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Module] StartupModule() called"));
+
     // Milestone 6: Register shader directory for GPU compute shaders
     // CRITICAL: Must be ABSOLUTE path, not relative, and registered even during automation runs
     const FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
@@ -78,6 +80,8 @@ void FPlanetaryCreationEditorModule::ShutdownModule()
 
 void FPlanetaryCreationEditorModule::HandlePostEngineInit()
 {
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Module] HandlePostEngineInit() called - registering UI"));
+
     SimulationController = MakeShared<FTectonicSimulationController>();
     SimulationController->Initialize();
 
@@ -85,11 +89,13 @@ void FPlanetaryCreationEditorModule::HandlePostEngineInit()
     CommandList = MakeShared<FUICommandList>();
     BindCommands();
 
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Module] Registering Tectonic Tool tab spawner"));
     FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
         TectonicToolTabName,
         FOnSpawnTab::CreateRaw(this, &FPlanetaryCreationEditorModule::HandleSpawnTectonicTab))
         .SetDisplayName(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTitle", "Tectonic Tool"))
         .SetTooltipText(NSLOCTEXT("PlanetaryCreation", "TectonicToolTabTooltip", "Control the procedural tectonic simulation."));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Module] Tab spawner registered successfully"));
 
     RegisterMenus();
 

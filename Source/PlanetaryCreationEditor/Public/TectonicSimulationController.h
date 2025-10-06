@@ -4,8 +4,10 @@
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshDataStream.h"
 #include "OrbitCameraController.h"
 #include "TectonicSimulationService.h"
+#include "UObject/StrongObjectPtr.h"
 
 class UTectonicSimulationService;
+class UTexture2D;
 
 /** Milestone 3 Task 2.4: Elevation visualization mode. */
 enum class EElevationMode : uint8
@@ -101,6 +103,12 @@ public:
     /** Get current elevation mode. */
     EElevationMode GetElevationMode() const { return CurrentElevationMode; }
 
+    /** Set GPU preview mode (Milestone 6 - GPU displacement optimization). */
+    void SetGPUPreviewMode(bool bEnabled);
+
+    /** Get current GPU preview mode state. */
+    bool IsGPUPreviewModeEnabled() const { return bUseGPUPreviewMode; }
+
     /** Refresh preview colors without forcing a full geometry rebuild (used by UI toggles). */
     bool RefreshPreviewColors();
 
@@ -174,6 +182,9 @@ private:
     void BuildMeshFromCache(const FCachedLODMesh& CachedMesh,
         RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
 
+    void EnsureGPUPreviewTextureAsset() const;
+    void CopyHeightTextureToPreviewResource() const;
+
     mutable TWeakObjectPtr<UTectonicSimulationService> CachedService;
     mutable TWeakObjectPtr<class ARealtimeMeshActor> PreviewActor;
     mutable TWeakObjectPtr<class URealtimeMeshSimple> PreviewMesh;
@@ -209,6 +220,12 @@ private:
 
     /** Milestone 5 Task 1.2: Orbital camera controller. */
     mutable FOrbitCameraController CameraController;
+
+    /** Milestone 6: GPU preview mode state (eliminates CPU readback stall). */
+    mutable bool bUseGPUPreviewMode = false;
+    mutable FTextureRHIRef GPUHeightTexture;
+    mutable FIntPoint HeightTextureSize = FIntPoint(2048, 1024);
+    mutable TStrongObjectPtr<UTexture2D> GPUHeightTextureAsset;
 
     struct FStaticLODData
     {

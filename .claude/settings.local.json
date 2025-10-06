@@ -24,7 +24,15 @@
       "Bash(if [ -f /tmp/gpu_oceanic_test.log ])",
       "Bash(then grep -E \"GPUOceanicParity|Parity|tolerance|delta|Delta|Mean|Max|Result=\" /tmp/gpu_oceanic_test.log)",
       "Bash(then tail -100 /tmp/gpu_oceanic_test.log)",
-      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects/PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit\" -unattended -nop4 -nosplash -log)"
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects/PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(tasklist)",
+      "Bash(cmd.exe /c tasklist)",
+      "Bash(findstr:*)",
+      "Bash(cmd.exe /c \"tasklist | findstr /i Unreal\")",
+      "Bash(cmd.exe /c \"taskkill /F /PID 30824\")",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(if [ -f /tmp/gpu_preview_test.log ])",
+      "Bash(then tail -200 /tmp/gpu_preview_test.log)"
     ],
     "deny": [],
     "ask": []

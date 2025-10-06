@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "PlanetaryCreationLogging.h"
 #include "Subsystems/UnrealEditorSubsystem.h"
+#include "Containers/BitArray.h"
 #include "TectonicSimulationService.generated.h"
 
 /**
@@ -317,10 +318,27 @@ struct FTectonicSimulationParameters
     /**
      * Milestone 3 Task 3.3: Dynamic re-tessellation threshold (degrees).
      * When plate centroid drifts >N degrees from initial position, log warning.
-     * Full re-tessellation implementation deferred to M4.
+     * In Milestone 6+, this also serves as the cooldown threshold that must be
+     * re-attained before another rebuild is permitted (hysteresis lower bound).
      */
     UPROPERTY()
     double RetessellationThresholdDegrees = 30.0;
+
+    /** Number of steps between drift/quality evaluations (≥1). */
+    UPROPERTY()
+    int32 RetessellationCheckIntervalSteps = 5;
+
+    /** High watermark (degrees) before a rebuild is allowed (≥ threshold). */
+    UPROPERTY()
+    double RetessellationTriggerDegrees = 45.0;
+
+    /** Minimum acceptable interior angle (degrees) before a triangle is flagged. */
+    UPROPERTY()
+    double RetessellationMinTriangleAngleDegrees = 15.0;
+
+    /** Fraction of flagged triangles that will trigger a rebuild (0–1). */
+    UPROPERTY()
+    double RetessellationBadTriangleRatioThreshold = 0.02;
 
     /**
      * Milestone 4 Task 1.1: Enable dynamic re-tessellation.
@@ -516,6 +534,15 @@ struct FTectonicSimulationParameters
     bool bEnableHeightmapVisualization = false;
 
     /**
+     * Milestone 6 GPU Preview: Skip CPU amplification path when controller handles GPU preview.
+     * When true, AdvanceSteps() skips ApplyOceanicAmplification/ApplyContinentalAmplification CPU paths.
+     * Controller sets this when bUseGPUPreviewMode is active to avoid redundant CPU work.
+     * Default false (normal CPU/GPU-with-readback path).
+     */
+    UPROPERTY()
+    bool bSkipCPUAmplification = false;
+
+    /**
      * Milestone 5 Task 2.2: Sediment diffusion rate (dimensionless, 0-1).
      * Controls how quickly eroded material redistributes to neighbors.
      * Default 0.1 (10% of excess sediment diffuses per step).
@@ -595,6 +622,15 @@ struct FTectonicSimulationParameters
      */
     UPROPERTY()
     int32 MinAmplificationLOD = 5;
+
+    /**
+     * Milestone 6 Task 2.1: Number of adjacency rings marked dirty around ridge boundaries.
+     * Controls how many neighbor layers refresh when boundary motion occurs. Higher values smooth
+     * transitions but touch more vertices. Default 2 provides a 1-hop safety margin beyond
+     * boundary edges.
+     */
+    UPROPERTY()
+    int32 RidgeDirectionDirtyRingDepth = 2;
 };
 
 /**
@@ -687,6 +723,7 @@ public:
 
     /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
     const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
+    int32 GetLastRidgeDirectionUpdateCount() const { return LastRidgeDirectionUpdateCount; }
 
     /** Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification. */
     void InitializeGPUExemplarResources();
@@ -772,9 +809,70 @@ public:
     /** Validates re-tessellation result against snapshot. */
     bool ValidateRetessellation(const FRetessellationSnapshot& Snapshot) const;
 
+    /** Aggregated drift/quality metrics used to determine rebuild cadence. */
+    struct FRetessellationAnalysis
+    {
+        double MaxDriftDegrees = 0.0;
+        int32 MaxDriftPlateID = INDEX_NONE;
+        double BadTriangleRatio = 0.0;
+        int32 BadTriangleCount = 0;
+        int32 TotalTriangleCount = 0;
+    };
+
+    /** Aggregated telemetry for re-tessellation cadence/throttling. */
+    struct FRetessellationCadenceStats
+    {
+        int64 StepsObserved = 0;
+        int64 StepsSpentInCooldown = 0;
+        int32 EvaluationCount = 0;
+        int32 TriggerCount = 0;
+        int32 CooldownBlocks = 0;
+        int32 StepsSinceLastTrigger = 0;
+        int32 LastTriggerInterval = 0;
+        int32 CurrentCooldownStepAccumulator = 0;
+        int32 LastCooldownDuration = 0;
+        double LastTriggerTimeMy = 0.0;
+        double LastTriggerMaxDriftDegrees = 0.0;
+        double LastTriggerBadTriangleRatio = 0.0;
+
+        void Reset()
+        {
+            StepsObserved = 0;
+            StepsSpentInCooldown = 0;
+            EvaluationCount = 0;
+            TriggerCount = 0;
+            CooldownBlocks = 0;
+            StepsSinceLastTrigger = 0;
+            LastTriggerInterval = 0;
+            CurrentCooldownStepAccumulator = 0;
+            LastCooldownDuration = 0;
+            LastTriggerTimeMy = 0.0;
+            LastTriggerMaxDriftDegrees = 0.0;
+            LastTriggerBadTriangleRatio = 0.0;
+        }
+    };
+
+    /** Compute drift/quality metrics for the currently cached render mesh. */
+    FRetessellationAnalysis ComputeRetessellationAnalysis() const;
+
+    /** Apply cadence/hysteresis rules before invoking PerformRetessellation. */
+    void MaybePerformRetessellation();
+
+    /** Force ridge direction cache to rebuild on the next Stage B pass. */
+    void InvalidateRidgeDirectionCache();
+    void MarkAllRidgeDirectionsDirty();
+    void MarkRidgeRingDirty(const TArray<int32>& SeedVertices, int32 RingDepth);
+
     /** Milestone 4 Task 1.1: Re-tessellation performance tracking (public for tests). */
     double LastRetessellationTimeMs = 0.0;
     int32 RetessellationCount = 0;
+    double LastRetessellationMaxDriftDegrees = 0.0;
+    double LastRetessellationBadTriangleRatio = 0.0;
+    int32 StepsSinceLastRetessellationCheck = 0;
+    bool bRetessellationInCooldown = false;
+
+    const FRetessellationCadenceStats& GetRetessellationCadenceStats() const { return RetessellationCadenceStats; }
+    int64 GetTotalStepsSimulated() const { return TotalStepsSimulated; }
 
     /** Milestone 4 Phase 4.2: Version tracking for LOD cache invalidation. */
     int32 GetTopologyVersion() const { return TopologyVersion; }
@@ -1060,6 +1158,8 @@ private:
 
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
+    int64 TotalStepsSimulated = 0;
+    FRetessellationCadenceStats RetessellationCadenceStats;
     TArray<FVector3d> BaseSphereSamples;
 
     /** Milestone 2 state (Phase 1). */
@@ -1137,6 +1237,11 @@ private:
 public:
     void SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure = false, const FString& InOverrideOutputDirectory = FString());
 
+    void SetSkipCPUAmplification(bool bInSkip) { Parameters.bSkipCPUAmplification = bInSkip; }
+    bool IsSkippingCPUAmplification() const { return Parameters.bSkipCPUAmplification; }
+
+    void ForceRidgeRecomputeForTest() { ComputeRidgeDirections(); }
+
 private:
     bool bForceHeightmapModuleFailure = false;
     bool bForceHeightmapWriteFailure = false;
@@ -1168,12 +1273,29 @@ private:
         uint64 CachedDataSerial = 0;
     };
 
+    struct FRidgeDirectionFloatSoA
+    {
+        TArray<float> DirX;
+        TArray<float> DirY;
+        TArray<float> DirZ;
+        int32 CachedTopologyVersion = INDEX_NONE;
+        int32 CachedVertexCount = 0;
+    };
+
     /** Mutable caches to avoid recomputing float mirrors on every call. */
     mutable FRenderVertexFloatSoA RenderVertexFloatSoA;
     mutable FOceanicAmplificationFloatInputs OceanicAmplificationFloatInputs;
+    mutable FRidgeDirectionFloatSoA RidgeDirectionFloatSoA;
 
     /** Monotonic serial tracking modifications to amplification inputs. */
     uint64 OceanicAmplificationDataSerial = 1;
+
+    /** Ridge direction cache bookkeeping. */
+    mutable TBitArray<> RidgeDirectionDirtyMask;
+    mutable int32 RidgeDirectionDirtyCount = 0;
+    mutable int32 CachedRidgeDirectionTopologyVersion = INDEX_NONE;
+    mutable int32 CachedRidgeDirectionVertexCount = 0;
+    mutable int32 LastRidgeDirectionUpdateCount = 0;
 
 #if WITH_EDITOR
     struct FOceanicGPUAsyncJob
@@ -1190,6 +1312,8 @@ private:
     void RefreshRenderVertexFloatSoA() const;
     void RefreshOceanicAmplificationFloatInputs() const;
     void BumpOceanicAmplificationSerial();
+    void EnsureRidgeDirtyMaskSize(int32 VertexCount) const;
+    bool MarkRidgeDirectionVertexDirty(int32 VertexIdx);
 };
 #if WITH_EDITOR
 class FRHIGPUBufferReadback;

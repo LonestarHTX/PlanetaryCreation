@@ -74,6 +74,16 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 .ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
             ]
 
+            // Retessellation cadence telemetry
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            [
+                SNew(STextBlock)
+                .Text(this, &SPTectonicToolPanel::GetRetessellationStatsLabel)
+                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+                .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
+            ]
+
             // Seed input
             + SVerticalBox::Slot()
             .AutoHeight()
@@ -472,6 +482,22 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 ]
             ]
 
+            // GPU preview toggle (Stage B preview path)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 4.0f)
+            [
+                SNew(SCheckBox)
+                .IsChecked(this, &SPTectonicToolPanel::GetGPUPreviewState)
+                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnGPUPreviewChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "GPUPreviewLabel", "GPU Preview Mode"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "GPUPreviewTooltip", "Use the GPU height texture preview path (World Position Offset) to eliminate CPU readback stalls. Visualization-only; collision stays CPU-side."))
+                ]
+            ]
+
             // Heightmap visualization toggle (Milestone 6 Task 2.3)
             + SVerticalBox::Slot()
             .AutoHeight()
@@ -685,6 +711,47 @@ FText SPTectonicToolPanel::GetPerformanceStatsLabel() const
     return NSLOCTEXT("PlanetaryCreation", "PerfStatsUnavailable", "Performance: n/a");
 }
 
+FText SPTectonicToolPanel::GetRetessellationStatsLabel() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            const UTectonicSimulationService::FRetessellationCadenceStats& Stats = Service->GetRetessellationCadenceStats();
+
+            if (Stats.StepsObserved == 0)
+            {
+                return NSLOCTEXT("PlanetaryCreation", "RetessStatsPending", "Retess: waiting for cadence...");
+            }
+
+            const bool bHasTriggerSample = Stats.TriggerCount > 0;
+
+            const FString DriftString = bHasTriggerSample
+                ? FString::Printf(TEXT("%.1f"), Stats.LastTriggerMaxDriftDegrees)
+                : TEXT("--");
+            const FString BadTriString = bHasTriggerSample
+                ? FString::Printf(TEXT("%.2f"), Stats.LastTriggerBadTriangleRatio * 100.0)
+                : TEXT("--");
+
+            const int32 SinceLast = FMath::Clamp(Stats.StepsSinceLastTrigger, 0, 999999);
+            const int32 CooldownSteps = FMath::Clamp(Stats.LastCooldownDuration, 0, 999999);
+
+            const FString LabelString = FString::Printf(
+                TEXT("Retess: auto %d | eval %d | last %s° / %s%% | since %d | cool %d"),
+                Stats.TriggerCount,
+                Stats.EvaluationCount,
+                *DriftString,
+                *BadTriString,
+                SinceLast,
+                CooldownSteps);
+
+            return FText::FromString(LabelString);
+        }
+    }
+
+    return NSLOCTEXT("PlanetaryCreation", "RetessStatsUnavailable", "Retess: n/a");
+}
+
 int32 SPTectonicToolPanel::GetSeedValue() const
 {
     return CachedSeed;
@@ -817,6 +884,25 @@ void SPTectonicToolPanel::OnAutomaticLODChanged(ECheckBoxState NewState)
             Service->SetAutomaticLODEnabled(bEnabled);
             UE_LOG(LogPlanetaryCreation, Log, TEXT("Automatic LOD %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
         }
+    }
+}
+
+ECheckBoxState SPTectonicToolPanel::GetGPUPreviewState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        return Controller->IsGPUPreviewModeEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnGPUPreviewChanged(ECheckBoxState NewState)
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        const bool bEnabled = (NewState == ECheckBoxState::Checked);
+        Controller->SetGPUPreviewMode(bEnabled);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("GPU preview mode %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
     }
 }
 

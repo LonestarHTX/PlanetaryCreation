@@ -1,6 +1,7 @@
 #include "TectonicSimulationService.h"
 
 #include "PlanetaryCreationLogging.h"
+#include "Containers/BitArray.h"
 
 DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "HAL/IConsoleManager.h"
@@ -46,9 +47,165 @@ void UTectonicSimulationService::Deinitialize()
     Super::Deinitialize();
 }
 
+void UTectonicSimulationService::InvalidateRidgeDirectionCache()
+{
+    CachedRidgeDirectionTopologyVersion = INDEX_NONE;
+    CachedRidgeDirectionVertexCount = 0;
+    RidgeDirectionDirtyMask.Reset();
+    RidgeDirectionDirtyCount = 0;
+
+    RidgeDirectionFloatSoA.DirX.Reset();
+    RidgeDirectionFloatSoA.DirY.Reset();
+    RidgeDirectionFloatSoA.DirZ.Reset();
+    RidgeDirectionFloatSoA.CachedTopologyVersion = INDEX_NONE;
+    RidgeDirectionFloatSoA.CachedVertexCount = 0;
+}
+
+void UTectonicSimulationService::EnsureRidgeDirtyMaskSize(int32 VertexCount) const
+{
+    if (VertexCount <= 0)
+    {
+        const_cast<TBitArray<>&>(RidgeDirectionDirtyMask).Reset();
+        const_cast<int32&>(RidgeDirectionDirtyCount) = 0;
+        const_cast<int32&>(LastRidgeDirectionUpdateCount) = 0;
+        return;
+    }
+
+    if (RidgeDirectionDirtyMask.Num() != VertexCount)
+    {
+        const_cast<TBitArray<>&>(RidgeDirectionDirtyMask).Init(false, VertexCount);
+        const_cast<int32&>(RidgeDirectionDirtyCount) = 0;
+        const_cast<int32&>(LastRidgeDirectionUpdateCount) = 0;
+    }
+}
+
+bool UTectonicSimulationService::MarkRidgeDirectionVertexDirty(int32 VertexIdx)
+{
+    if (!RenderVertices.IsValidIndex(VertexIdx))
+    {
+        return false;
+    }
+
+    EnsureRidgeDirtyMaskSize(RenderVertices.Num());
+
+    if (!RidgeDirectionDirtyMask.IsValidIndex(VertexIdx))
+    {
+        return false;
+    }
+
+    if (!RidgeDirectionDirtyMask[VertexIdx])
+    {
+        RidgeDirectionDirtyMask[VertexIdx] = true;
+        ++RidgeDirectionDirtyCount;
+        return true;
+    }
+
+    return false;
+}
+
+void UTectonicSimulationService::MarkAllRidgeDirectionsDirty()
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount <= 0)
+    {
+        RidgeDirectionDirtyMask.Reset();
+        RidgeDirectionDirtyCount = 0;
+        CachedRidgeDirectionTopologyVersion = INDEX_NONE;
+        CachedRidgeDirectionVertexCount = 0;
+        LastRidgeDirectionUpdateCount = 0;
+        return;
+    }
+
+    RidgeDirectionDirtyMask.Init(true, VertexCount);
+    RidgeDirectionDirtyCount = VertexCount;
+    CachedRidgeDirectionTopologyVersion = INDEX_NONE;
+    CachedRidgeDirectionVertexCount = 0;
+    LastRidgeDirectionUpdateCount = 0;
+}
+
+void UTectonicSimulationService::MarkRidgeRingDirty(const TArray<int32>& SeedVertices, int32 RingDepth)
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount <= 0 || SeedVertices.Num() == 0)
+    {
+        return;
+    }
+
+    EnsureRidgeDirtyMaskSize(VertexCount);
+
+    if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
+    {
+        BuildRenderVertexAdjacency();
+    }
+
+    const int32 DepthLimit = FMath::Max(0, RingDepth);
+
+    TBitArray<> Added(false, VertexCount);
+    TArray<int32> Current;
+    Current.Reserve(SeedVertices.Num());
+
+    for (int32 Seed : SeedVertices)
+    {
+        if (!RenderVertices.IsValidIndex(Seed) || Added[Seed])
+        {
+            continue;
+        }
+
+        Added[Seed] = true;
+        MarkRidgeDirectionVertexDirty(Seed);
+        Current.Add(Seed);
+    }
+
+    for (int32 Depth = 0; Depth < DepthLimit; ++Depth)
+    {
+        if (Current.Num() == 0)
+        {
+            break;
+        }
+
+        TArray<int32> Next;
+        for (int32 VertexIdx : Current)
+        {
+            if (!RenderVertices.IsValidIndex(VertexIdx))
+            {
+                continue;
+            }
+
+            const int32 Start = RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx)
+                ? RenderVertexAdjacencyOffsets[VertexIdx]
+                : 0;
+            const int32 End = RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1)
+                ? RenderVertexAdjacencyOffsets[VertexIdx + 1]
+                : Start;
+
+            for (int32 AdjIdx = Start; AdjIdx < End; ++AdjIdx)
+            {
+                if (!RenderVertexAdjacency.IsValidIndex(AdjIdx))
+                {
+                    continue;
+                }
+
+                const int32 Neighbor = RenderVertexAdjacency[AdjIdx];
+                if (!RenderVertices.IsValidIndex(Neighbor) || Added[Neighbor])
+                {
+                    continue;
+                }
+
+                Added[Neighbor] = true;
+                MarkRidgeDirectionVertexDirty(Neighbor);
+                Next.Add(Neighbor);
+            }
+        }
+
+        Current = MoveTemp(Next);
+    }
+}
+
 void UTectonicSimulationService::ResetSimulation()
 {
     CurrentTimeMy = 0.0;
+    TotalStepsSimulated = 0;
+    RetessellationCadenceStats.Reset();
 
 #if WITH_EDITOR
     PendingOceanicGPUJobs.Empty();
@@ -64,10 +221,16 @@ void UTectonicSimulationService::ResetSimulation()
     VertexRidgeDirections.Empty();
     VertexAmplifiedElevation.Empty();
 
+    InvalidateRidgeDirectionCache();
+
     // Milestone 4 Phase 5: Reset version counters for test isolation
     TopologyVersion = 0;
     SurfaceDataVersion = 0;
     RetessellationCount = 0;
+    StepsSinceLastRetessellationCheck = 0;
+    bRetessellationInCooldown = false;
+    LastRetessellationMaxDriftDegrees = 0.0;
+    LastRetessellationBadTriangleRatio = 0.0;
 
     // Milestone 6 Task 1.3: Clear terranes on reset
     Terranes.Empty();
@@ -125,6 +288,8 @@ void UTectonicSimulationService::ResetSimulation()
         VertexRidgeDirections[i] = FVector3d::ZAxisVector; // Default fallback direction
     }
     VertexAmplifiedElevation.SetNumZeroed(VertexCount);
+
+    MarkAllRidgeDirectionsDirty();
 
     // M5 Phase 3 fix: Seed elevation baselines from plate crust type for order independence
     // This ensures oceanic dampening/erosion work regardless of execution order
@@ -188,6 +353,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         return;
     }
 
+    TotalStepsSimulated += StepCount;
+
     // Milestone 3 Task 4.5: Track step performance
     const double StartTime = FPlatformTime::Seconds();
 
@@ -211,6 +378,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         double RidgeDirectionTime = 0.0;
         double OceanicAmpTime = 0.0;
         double ContinentalAmpTime = 0.0;
+        bool bSurfaceDataChanged = false;
 
         // Phase 2 Task 4: Migrate plate centroids via Euler pole rotation
         MigratePlateCentroids(StepDurationMy);
@@ -256,6 +424,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             const double BlockStart = FPlatformTime::Seconds();
             ApplyContinentalErosion(StepDurationMy);
             ErosionTime += FPlatformTime::Seconds() - BlockStart;
+            bSurfaceDataChanged = true;
         }
 
         // Milestone 5 Task 2.2: Redistribute eroded sediment
@@ -264,6 +433,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             const double BlockStart = FPlatformTime::Seconds();
             ApplySedimentTransport(StepDurationMy);
             SedimentTime += FPlatformTime::Seconds() - BlockStart;
+            bSurfaceDataChanged = true;
         }
 
         // Milestone 5 Task 2.3: Apply oceanic dampening
@@ -272,6 +442,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             const double BlockStart = FPlatformTime::Seconds();
             ApplyOceanicDampening(StepDurationMy);
             DampeningTime += FPlatformTime::Seconds() - BlockStart;
+            bSurfaceDataChanged = true;
         }
 
         // Ensure amplified elevation starts from current base elevation before Stage B passes run (or remain disabled).
@@ -285,7 +456,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Milestone 6 Task 2.1: Apply Stage B oceanic amplification
         // Must run after erosion/dampening to use base elevations as input
         // Must run before topology changes to ensure valid vertex indices
-        if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
+        // Skip if controller is handling GPU preview mode (avoids redundant CPU work)
+        if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
         {
             {
                 TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirectionsStageB);
@@ -318,12 +490,14 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                     const double BlockStart = FPlatformTime::Seconds();
                     ApplyOceanicAmplification();
                     OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                    bSurfaceDataChanged = true;
                 }
             }
         }
 
         // Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based)
-        if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
+        // Skip if controller is handling GPU preview mode (avoids redundant CPU work)
+        if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
         {
             bool bUsedGPU = false;
 #if WITH_EDITOR
@@ -347,6 +521,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 const double BlockStart = FPlatformTime::Seconds();
                 ApplyContinentalAmplification();
                 ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
+                bSurfaceDataChanged = true;
             }
         }
 
@@ -360,7 +535,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         // Milestone 4 Task 1.1: Perform re-tessellation if plates have drifted beyond threshold
         if (Parameters.bEnableDynamicRetessellation)
         {
-            PerformRetessellation();
+            MaybePerformRetessellation();
         }
         else
         {
@@ -369,12 +544,29 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         }
 
         // Milestone 5 Task 1.3: Capture history snapshot after each individual step for undo/redo
-        // Increment surface version immediately beforehand so cached heightmap surfaces refresh on rebuild.
-        SurfaceDataVersion++;
+        if (bSurfaceDataChanged)
+        {
+            SurfaceDataVersion++;
+        }
         CaptureHistorySnapshot();
 
         const double StepElapsed = FPlatformTime::Seconds() - StepLoopStart;
         const double StageBDuration = BaselineInitTime + RidgeDirectionTime + OceanicAmpTime + ContinentalAmpTime;
+
+        const int32 AbsoluteStep = (TotalStepsSimulated - StepCount) + (Step + 1);
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[StepTiming] Step %d | LOD L%d | Total %.2f ms | StageB %.2f ms (Baseline %.2f | Ridge %.2f | Oceanic %.2f | Continental %.2f) | Erosion %.2f ms | Sediment %.2f ms | Dampening %.2f ms"),
+            AbsoluteStep,
+            Parameters.RenderSubdivisionLevel,
+            StepElapsed * 1000.0,
+            StageBDuration * 1000.0,
+            BaselineInitTime * 1000.0,
+            RidgeDirectionTime * 1000.0,
+            OceanicAmpTime * 1000.0,
+            ContinentalAmpTime * 1000.0,
+            ErosionTime * 1000.0,
+            SedimentTime * 1000.0,
+            DampeningTime * 1000.0);
 
         if (StageBDuration > StageBBudgetSeconds)
         {
@@ -427,6 +619,23 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
             Parameters.PlanetRadius, MinRadius, MaxRadius);
         Parameters.PlanetRadius = FMath::Clamp(Parameters.PlanetRadius, MinRadius, MaxRadius);
     }
+
+    Parameters.RetessellationCheckIntervalSteps = FMath::Max(1, Parameters.RetessellationCheckIntervalSteps);
+    Parameters.RetessellationMinTriangleAngleDegrees = FMath::Clamp(Parameters.RetessellationMinTriangleAngleDegrees, 1.0, 60.0);
+    Parameters.RetessellationBadTriangleRatioThreshold = FMath::Clamp(Parameters.RetessellationBadTriangleRatioThreshold, 0.0, 1.0);
+    Parameters.RetessellationThresholdDegrees = FMath::Clamp(Parameters.RetessellationThresholdDegrees, 0.0, 179.0);
+    Parameters.RidgeDirectionDirtyRingDepth = FMath::Clamp(Parameters.RidgeDirectionDirtyRingDepth, 0, 8);
+
+    if (Parameters.RetessellationTriggerDegrees < Parameters.RetessellationThresholdDegrees)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("RetessellationTriggerDegrees %.2f° < cooldown threshold %.2f°. Clamping trigger to cooldown."),
+            Parameters.RetessellationTriggerDegrees,
+            Parameters.RetessellationThresholdDegrees);
+        Parameters.RetessellationTriggerDegrees = Parameters.RetessellationThresholdDegrees;
+    }
+
+    Parameters.RetessellationTriggerDegrees = FMath::Clamp(Parameters.RetessellationTriggerDegrees, Parameters.RetessellationThresholdDegrees, 179.0);
 
     ResetSimulation();
 }
@@ -860,6 +1069,11 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
     int32 ConvergentCount = 0;
     int32 TransformCount = 0;
 
+    TArray<int32> DivergentSeeds;
+    DivergentSeeds.Reserve(Boundaries.Num() * 2);
+    TArray<int32> StateChangeSeeds;
+    StateChangeSeeds.Reserve(Boundaries.Num() * 2);
+
     for (auto& BoundaryPair : Boundaries)
     {
         const TPair<int32, int32>& PlateIDs = BoundaryPair.Key;
@@ -944,28 +1158,51 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
         // Project relative velocity onto boundary normal
         const double NormalComponent = FVector3d::DotProduct(RelativeVelocity, BoundaryNormal);
 
+        const EBoundaryType PreviousType = Boundary.BoundaryType;
+
         // Classify boundary
         const double ClassificationThreshold = 0.001; // Radians/My threshold
+        EBoundaryType NewType = EBoundaryType::Transform;
         if (NormalComponent > ClassificationThreshold)
         {
-            Boundary.BoundaryType = EBoundaryType::Divergent; // Plates separating
+            NewType = EBoundaryType::Divergent; // Plates separating
             DivergentCount++;
         }
         else if (NormalComponent < -ClassificationThreshold)
         {
-            Boundary.BoundaryType = EBoundaryType::Convergent; // Plates colliding
+            NewType = EBoundaryType::Convergent; // Plates colliding
             ConvergentCount++;
         }
         else
         {
-            Boundary.BoundaryType = EBoundaryType::Transform; // Shear/parallel motion
             TransformCount++;
         }
 
+        if (NewType != PreviousType)
+        {
+            StateChangeSeeds.Append(Boundary.SharedEdgeVertices);
+        }
+
+        Boundary.BoundaryType = NewType;
+
+        if (NewType == EBoundaryType::Divergent)
+        {
+            DivergentSeeds.Append(Boundary.SharedEdgeVertices);
+        }
     }
 
     UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Boundary classification: %d divergent, %d convergent, %d transform"),
         DivergentCount, ConvergentCount, TransformCount);
+
+    const int32 RidgeRingDepth = FMath::Max(0, Parameters.RidgeDirectionDirtyRingDepth);
+    if (DivergentSeeds.Num() > 0 || StateChangeSeeds.Num() > 0)
+    {
+        TArray<int32> DirtySeeds;
+        DirtySeeds.Reserve(DivergentSeeds.Num() + StateChangeSeeds.Num());
+        DirtySeeds.Append(StateChangeSeeds);
+        DirtySeeds.Append(DivergentSeeds);
+        MarkRidgeRingDirty(DirtySeeds, RidgeRingDepth);
+    }
 }
 
 void UTectonicSimulationService::ExportMetricsToCSV()
@@ -1076,6 +1313,17 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     CSVLines.Add(FString::Printf(TEXT("PlateCount,%d"), Plates.Num()));
     CSVLines.Add(FString::Printf(TEXT("BoundaryCount,%d"), Boundaries.Num()));
     CSVLines.Add(FString::Printf(TEXT("Seed,%d"), Parameters.Seed));
+    CSVLines.Add(FString::Printf(TEXT("TotalStepsSimulated,%lld"), static_cast<long long>(TotalStepsSimulated)));
+    CSVLines.Add(FString::Printf(TEXT("RetessStepsObserved,%lld"), static_cast<long long>(RetessellationCadenceStats.StepsObserved)));
+    CSVLines.Add(FString::Printf(TEXT("RetessEvaluations,%d"), RetessellationCadenceStats.EvaluationCount));
+    CSVLines.Add(FString::Printf(TEXT("RetessAutoTriggers,%d"), RetessellationCadenceStats.TriggerCount));
+    CSVLines.Add(FString::Printf(TEXT("RetessCooldownBlocks,%d"), RetessellationCadenceStats.CooldownBlocks));
+    CSVLines.Add(FString::Printf(TEXT("RetessStepsInCooldown,%lld"), static_cast<long long>(RetessellationCadenceStats.StepsSpentInCooldown)));
+    CSVLines.Add(FString::Printf(TEXT("RetessLastTriggerIntervalSteps,%d"), RetessellationCadenceStats.LastTriggerInterval));
+    CSVLines.Add(FString::Printf(TEXT("RetessStepsSinceLastTrigger,%d"), RetessellationCadenceStats.StepsSinceLastTrigger));
+    CSVLines.Add(FString::Printf(TEXT("RetessLastCooldownDurationSteps,%d"), RetessellationCadenceStats.LastCooldownDuration));
+    CSVLines.Add(FString::Printf(TEXT("RetessLastDriftDegrees,%.2f"), RetessellationCadenceStats.LastTriggerMaxDriftDegrees));
+    CSVLines.Add(FString::Printf(TEXT("RetessLastBadTriangleRatio,%.4f"), RetessellationCadenceStats.LastTriggerBadTriangleRatio));
 
     // Calculate total kinetic energy (for monitoring)
     double TotalKineticEnergy = 0.0;
@@ -1220,6 +1468,8 @@ void UTectonicSimulationService::GenerateRenderMesh()
     RenderVertices.Reset();
     RenderTriangles.Reset();
 
+    InvalidateRidgeDirectionCache();
+
     // Start with base icosahedron vertices
     const double Phi = (1.0 + FMath::Sqrt(5.0)) / 2.0;
     TArray<FVector3d> Vertices = {
@@ -1307,6 +1557,7 @@ void UTectonicSimulationService::GenerateRenderMesh()
         UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Render mesh topology validated: Euler characteristic χ=2"));
     }
 
+    MarkAllRidgeDirectionsDirty();
     BumpOceanicAmplificationSerial();
 }
 
@@ -1724,42 +1975,38 @@ void UTectonicSimulationService::CheckRetessellationNeeded()
         {
             InitialPlateCentroids[i] = Plates[i].Centroid;
         }
+        LastRetessellationMaxDriftDegrees = 0.0;
+        LastRetessellationBadTriangleRatio = 0.0;
         return;
     }
 
+    const FRetessellationAnalysis Analysis = ComputeRetessellationAnalysis();
+    LastRetessellationMaxDriftDegrees = Analysis.MaxDriftDegrees;
+    LastRetessellationBadTriangleRatio = Analysis.BadTriangleRatio;
+
     const double ThresholdRadians = FMath::DegreesToRadians(Parameters.RetessellationThresholdDegrees);
-    double MaxDrift = 0.0;
-    int32 MaxDriftPlateID = INDEX_NONE;
+    const double TriggerRadians = FMath::DegreesToRadians(FMath::Max(Parameters.RetessellationTriggerDegrees, Parameters.RetessellationThresholdDegrees));
+    const double MaxDriftRadians = FMath::DegreesToRadians(Analysis.MaxDriftDegrees);
 
-    for (int32 i = 0; i < Plates.Num(); ++i)
+    if (MaxDriftRadians > TriggerRadians && LastRetessellationBadTriangleRatio >= Parameters.RetessellationBadTriangleRatioThreshold)
     {
-        const FVector3d& InitialCentroid = InitialPlateCentroids[i];
-        const FVector3d& CurrentCentroid = Plates[i].Centroid;
-
-        // Angular distance on unit sphere
-        const double DotProduct = FVector3d::DotProduct(InitialCentroid, CurrentCentroid);
-        const double AngularDistance = FMath::Acos(FMath::Clamp(DotProduct, -1.0, 1.0));
-
-        if (AngularDistance > MaxDrift)
-        {
-            MaxDrift = AngularDistance;
-            MaxDriftPlateID = Plates[i].PlateID;
-        }
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("Re-tessellation would trigger: Plate %d drifted %.2f° (trigger %.2f°) with %.2f%% low-angle tris (threshold %.2f%%), but bEnableDynamicRetessellation=false"),
+            Analysis.MaxDriftPlateID,
+            Analysis.MaxDriftDegrees,
+            FMath::Max(Parameters.RetessellationTriggerDegrees, Parameters.RetessellationThresholdDegrees),
+            LastRetessellationBadTriangleRatio * 100.0,
+            Parameters.RetessellationBadTriangleRatioThreshold * 100.0);
     }
-
-    // Log warning if threshold exceeded (M3 behavior - no actual re-tessellation)
-    if (MaxDrift > ThresholdRadians)
+    else if (MaxDriftRadians > ThresholdRadians)
     {
-        if (Parameters.bEnableDynamicRetessellation)
-        {
-            UE_LOG(LogPlanetaryCreation, Warning, TEXT("Re-tessellation triggered: Plate %d drifted %.2f° (threshold: %.2f°). Implementation deferred to M4."),
-                MaxDriftPlateID, FMath::RadiansToDegrees(MaxDrift), Parameters.RetessellationThresholdDegrees);
-        }
-        else
-        {
-            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Re-tessellation would be needed: Plate %d drifted %.2f° (threshold: %.2f°), but bEnableDynamicRetessellation=false"),
-                MaxDriftPlateID, FMath::RadiansToDegrees(MaxDrift), Parameters.RetessellationThresholdDegrees);
-        }
+        UE_LOG(LogPlanetaryCreation, Verbose,
+            TEXT("Re-tessellation would be considered: Plate %d drifted %.2f° (cooldown %.2f°), but triangle ratio %.2f%% < %.2f%%"),
+            Analysis.MaxDriftPlateID,
+            Analysis.MaxDriftDegrees,
+            Parameters.RetessellationThresholdDegrees,
+            LastRetessellationBadTriangleRatio * 100.0,
+            Parameters.RetessellationBadTriangleRatioThreshold * 100.0);
     }
 }
 
@@ -1859,6 +2106,8 @@ bool UTectonicSimulationService::Undo()
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Undo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
+    InvalidateRidgeDirectionCache();
+    MarkAllRidgeDirectionsDirty();
     BumpOceanicAmplificationSerial();
     return true;
 }
@@ -1899,10 +2148,12 @@ bool UTectonicSimulationService::Redo()
 
     // Milestone 6: Restore terrane state
     Terranes = Snapshot.Terranes;
-    NextTerraneID = Snapshot.NextTerraneID;
+   NextTerraneID = Snapshot.NextTerraneID;
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Redo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
+    InvalidateRidgeDirectionCache();
+    MarkAllRidgeDirectionsDirty();
     BumpOceanicAmplificationSerial();
     return true;
 }
@@ -1948,6 +2199,8 @@ bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("JumpToHistoryIndex: Jumped to snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
+    InvalidateRidgeDirectionCache();
+    MarkAllRidgeDirectionsDirty();
     BumpOceanicAmplificationSerial();
     return true;
 }
@@ -2255,6 +2508,8 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
 
     // Increment topology version (mesh structure unchanged, but plate assignments changed)
     TopologyVersion++;
+    InvalidateRidgeDirectionCache();
+    MarkAllRidgeDirectionsDirty();
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("ExtractTerrane: Successfully extracted terrane %d (%.2f km²) from plate %d"),
         OutTerraneID, TerraneArea, SourcePlateID);
@@ -2374,6 +2629,8 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
 
     // Increment topology version
     TopologyVersion++;
+    InvalidateRidgeDirectionCache();
+    MarkAllRidgeDirectionsDirty();
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("ReattachTerrane: Successfully reattached terrane %d to plate %d (%.2f My transport duration)"),
         TerraneID, TargetPlateID, CurrentTimeMy - Terrane->ExtractionTimeMy);
@@ -2649,7 +2906,66 @@ void UTectonicSimulationService::ComputeRidgeDirections()
     // For each vertex, find nearest divergent boundary and compute tangent direction
 
     const int32 VertexCount = RenderVertices.Num();
-    checkf(VertexRidgeDirections.Num() == VertexCount, TEXT("VertexRidgeDirections not initialized"));
+
+    if (VertexCount <= 0)
+    {
+        VertexRidgeDirections.Reset();
+        RidgeDirectionDirtyMask.Reset();
+        RidgeDirectionDirtyCount = 0;
+        RidgeDirectionFloatSoA.DirX.Reset();
+        RidgeDirectionFloatSoA.DirY.Reset();
+        RidgeDirectionFloatSoA.DirZ.Reset();
+        RidgeDirectionFloatSoA.CachedTopologyVersion = TopologyVersion;
+        RidgeDirectionFloatSoA.CachedVertexCount = 0;
+        CachedRidgeDirectionTopologyVersion = TopologyVersion;
+        CachedRidgeDirectionVertexCount = 0;
+        LastRidgeDirectionUpdateCount = 0;
+        return;
+    }
+
+    EnsureRidgeDirtyMaskSize(VertexCount);
+
+    if (VertexRidgeDirections.Num() != VertexCount)
+    {
+        VertexRidgeDirections.SetNum(VertexCount);
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            VertexRidgeDirections[Index] = FVector3d::ZAxisVector;
+        }
+    }
+
+    FRidgeDirectionFloatSoA& RidgeSoA = RidgeDirectionFloatSoA;
+    if (RidgeSoA.DirX.Num() != VertexCount)
+    {
+        RidgeSoA.DirX.SetNum(VertexCount);
+        RidgeSoA.DirY.SetNum(VertexCount);
+        RidgeSoA.DirZ.SetNum(VertexCount);
+    }
+
+    if (RidgeDirectionDirtyCount == 0)
+    {
+        RidgeSoA.CachedTopologyVersion = TopologyVersion;
+        RidgeSoA.CachedVertexCount = VertexCount;
+        CachedRidgeDirectionTopologyVersion = TopologyVersion;
+        CachedRidgeDirectionVertexCount = VertexCount;
+        LastRidgeDirectionUpdateCount = 0;
+        return;
+    }
+
+    TArray<int32> DirtyVertices;
+    DirtyVertices.Reserve(RidgeDirectionDirtyCount);
+    for (TConstSetBitIterator<> It(RidgeDirectionDirtyMask); It; ++It)
+    {
+        DirtyVertices.Add(It.GetIndex());
+    }
+
+    if (DirtyVertices.Num() == 0)
+    {
+        RidgeDirectionDirtyMask.Reset();
+        RidgeDirectionDirtyCount = 0;
+        LastRidgeDirectionUpdateCount = 0;
+        return;
+    }
 
     const auto IsPlateInBoundary = [](const TPair<int32, int32>& BoundaryKey, int32 PlateID)
     {
@@ -2664,47 +2980,67 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
     constexpr double GreatCircleSegmentAngleToleranceRad = 1e-3; // Radians (approx 0.057°)
 
-    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    int32 UpdatedVertices = 0;
+
+    for (int32 VertexIdx : DirtyVertices)
     {
+        if (!RenderVertices.IsValidIndex(VertexIdx))
+        {
+            continue;
+        }
+
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
         const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
 
+        FVector3d ResultDirection = FVector3d::ZAxisVector;
+
         if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
         {
-            VertexRidgeDirections[VertexIdx] = FVector3d::ZAxisVector; // Fallback
+            VertexRidgeDirections[VertexIdx] = ResultDirection;
+            const FVector3d SafeDir = ResultDirection;
+            RidgeSoA.DirX[VertexIdx] = static_cast<float>(SafeDir.X);
+            RidgeSoA.DirY[VertexIdx] = static_cast<float>(SafeDir.Y);
+            RidgeSoA.DirZ[VertexIdx] = static_cast<float>(SafeDir.Z);
+            ++UpdatedVertices;
             continue;
         }
 
         const FTectonicPlate& Plate = Plates[PlateID];
-
-        // Only compute ridge direction for oceanic crust
         if (Plate.CrustType != ECrustType::Oceanic)
         {
-            VertexRidgeDirections[VertexIdx] = FVector3d::ZAxisVector; // Continental vertices ignored
+            VertexRidgeDirections[VertexIdx] = ResultDirection;
+            const FVector3d SafeDir = ResultDirection;
+            RidgeSoA.DirX[VertexIdx] = static_cast<float>(SafeDir.X);
+            RidgeSoA.DirY[VertexIdx] = static_cast<float>(SafeDir.Y);
+            RidgeSoA.DirZ[VertexIdx] = static_cast<float>(SafeDir.Z);
+            ++UpdatedVertices;
             continue;
         }
 
-        const FVector3d VertexNormal = VertexPosition.GetSafeNormal();
+        const FVector3d VertexNormal = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
 
-        // Find nearest divergent boundary involving this plate
-        FVector3d NearestBoundaryTangent = FVector3d::ZAxisVector; // Default fallback
         double MinDistance = TNumericLimits<double>::Max();
+        FVector3d NearestBoundaryTangent = FVector3d::ZAxisVector;
 
         for (const auto& BoundaryPair : Boundaries)
         {
             const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
             const FPlateBoundary& Boundary = BoundaryPair.Value;
 
-            // Only consider divergent boundaries involving this plate
             if (Boundary.BoundaryType != EBoundaryType::Divergent)
+            {
                 continue;
+            }
 
-            if (!IsPlateInBoundary(BoundaryKey, PlateID))
+            if (!IsPlateInBoundary(BoundaryKey, Plate.PlateID))
+            {
                 continue;
+            }
 
-            // Boundary is defined by shared edge vertices
             if (Boundary.SharedEdgeVertices.Num() < 2)
+            {
                 continue;
+            }
 
             for (int32 EdgeIdx = 0; EdgeIdx < Boundary.SharedEdgeVertices.Num() - 1; ++EdgeIdx)
             {
@@ -2724,7 +3060,6 @@ void UTectonicSimulationService::ComputeRidgeDirections()
                     continue;
                 }
 
-                // Project vertex onto plane of great circle
                 const double Projection = FVector3d::DotProduct(VertexNormal, PlaneNormal);
                 const FVector3d Projected = (VertexNormal - Projection * PlaneNormal);
                 if (Projected.IsNearlyZero())
@@ -2762,7 +3097,43 @@ void UTectonicSimulationService::ComputeRidgeDirections()
             }
         }
 
-        VertexRidgeDirections[VertexIdx] = NearestBoundaryTangent;
+        ResultDirection = (MinDistance < TNumericLimits<double>::Max())
+            ? NearestBoundaryTangent
+            : FVector3d::ZAxisVector;
+
+        VertexRidgeDirections[VertexIdx] = ResultDirection;
+
+        const FVector3d SafeDir = ResultDirection.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        RidgeSoA.DirX[VertexIdx] = static_cast<float>(SafeDir.X);
+        RidgeSoA.DirY[VertexIdx] = static_cast<float>(SafeDir.Y);
+        RidgeSoA.DirZ[VertexIdx] = static_cast<float>(SafeDir.Z);
+
+        ++UpdatedVertices;
+    }
+
+    for (int32 VertexIdx : DirtyVertices)
+    {
+        if (RidgeDirectionDirtyMask.IsValidIndex(VertexIdx))
+        {
+            RidgeDirectionDirtyMask[VertexIdx] = false;
+        }
+    }
+
+    RidgeDirectionDirtyCount = 0;
+
+    CachedRidgeDirectionTopologyVersion = TopologyVersion;
+    CachedRidgeDirectionVertexCount = VertexCount;
+    RidgeSoA.CachedTopologyVersion = TopologyVersion;
+    RidgeSoA.CachedVertexCount = VertexCount;
+    LastRidgeDirectionUpdateCount = UpdatedVertices;
+
+    if (UpdatedVertices > 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[StageB][RidgeCache] Updated %d ridge directions (ring depth %d, vertices=%d)"),
+            UpdatedVertices,
+            Parameters.RidgeDirectionDirtyRingDepth,
+            VertexCount);
+        BumpOceanicAmplificationSerial();
     }
 }
 
@@ -3208,17 +3579,37 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
     Cache.RenderPositions.SetNum(VertexCount);
     Cache.OceanicMask.SetNum(VertexCount);
 
+    const bool bHasRidgeSoA =
+        RidgeDirectionFloatSoA.CachedTopologyVersion == CachedRidgeDirectionTopologyVersion &&
+        RidgeDirectionFloatSoA.CachedVertexCount == VertexCount &&
+        RidgeDirectionFloatSoA.DirX.Num() == VertexCount &&
+        RidgeDirectionFloatSoA.DirY.Num() == VertexCount &&
+        RidgeDirectionFloatSoA.DirZ.Num() == VertexCount;
+
     for (int32 Index = 0; Index < VertexCount; ++Index)
     {
         Cache.BaselineElevation[Index] = static_cast<float>(VertexAmplifiedElevation[Index]);
         Cache.CrustAge[Index] = static_cast<float>(VertexCrustAge[Index]);
 
-        const FVector3d RidgeDirSafe = VertexRidgeDirections[Index].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
-        Cache.RidgeDirections[Index] = FVector4f(
-            static_cast<float>(RidgeDirSafe.X),
-            static_cast<float>(RidgeDirSafe.Y),
-            static_cast<float>(RidgeDirSafe.Z),
-            0.0f);
+        float DirX = 0.0f;
+        float DirY = 0.0f;
+        float DirZ = 1.0f;
+
+        if (bHasRidgeSoA)
+        {
+            DirX = RidgeDirectionFloatSoA.DirX[Index];
+            DirY = RidgeDirectionFloatSoA.DirY[Index];
+            DirZ = RidgeDirectionFloatSoA.DirZ[Index];
+        }
+        else
+        {
+            const FVector3d RidgeDirSafe = VertexRidgeDirections[Index].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+            DirX = static_cast<float>(RidgeDirSafe.X);
+            DirY = static_cast<float>(RidgeDirSafe.Y);
+            DirZ = static_cast<float>(RidgeDirSafe.Z);
+        }
+
+        Cache.RidgeDirections[Index] = FVector4f(DirX, DirY, DirZ, 0.0f);
 
         const FVector3d& Position = RenderVertices[Index];
         Cache.RenderPositions[Index] = FVector3f(

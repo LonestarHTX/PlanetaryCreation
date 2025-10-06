@@ -28,6 +28,7 @@ private:
     FText GetCurrentTimeLabel() const;
     FText GetPlateCountLabel() const;
     FText GetPerformanceStatsLabel() const; // Milestone 3 Task 4.5
+    FText GetRetessellationStatsLabel() const;
 
     // Milestone 5 Task 1.1: Playback controls
     FReply HandlePlayClicked();
@@ -71,6 +72,10 @@ private:
     // Automatic LOD toggle (Milestone 4 Phase 4.1)
     ECheckBoxState GetAutomaticLODState() const;
     void OnAutomaticLODChanged(ECheckBoxState NewState);
+
+    // GPU preview toggle (Stage B preview path)
+    ECheckBoxState GetGPUPreviewState() const;
+    void OnGPUPreviewChanged(ECheckBoxState NewState);
 
     // Heightmap visualization toggle (Milestone 6 Task 2.3)
     ECheckBoxState GetHeightmapVisualizationState() const;

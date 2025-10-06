@@ -198,6 +198,30 @@ Document any deviations from paper in code comments. See `Docs/PlanningAgentPlan
 - Example: Actor name collision can crash tests (e.g., "Cannot generate unique name for 'TectonicPreviewActor'")
 - To verify a specific test exists: `grep -i "testname" Saved/Logs/PlanetaryCreation.log`
 
+**Automation tests hang or DLL lock errors during build:**
+- Symptom: `UnrealEditor-Cmd.exe` appears to finish but process remains running
+- Result: Next build fails with "cannot open file 'UnrealEditor-PlanetaryCreationEditor.dll' - The process cannot access the file"
+- **Root Cause**: Stale `UnrealEditor-Cmd.exe` process holds DLL lock after automation run
+- **Diagnosis**:
+  ```bash
+  # Check for Unreal processes (WSL/Linux)
+  cmd.exe /c "tasklist | findstr /i Unreal"
+  ```
+- **Fix**: Terminate stale process before rebuilding
+  ```bash
+  # Find PID from tasklist output, then:
+  cmd.exe /c "taskkill /F /PID <PID>"
+  ```
+- **Prevention**: Always check for stale processes before build if previous automation run seemed to hang
+- **Example**: If you see `UnrealEditor-Cmd.exe` in tasklist but no editor window is open, it's likely stale
+
+**Reading automation test logs:**
+- Tests output to `Saved/Logs/PlanetaryCreation.log` (not stdout when using `-log` flag with tee)
+- Find most recent log: `find "<ProjectPath>/Saved/Logs" -name "*.log" -type f -printf '%T@ %p\n' | sort -n | tail -1`
+- Search for test results: `grep -E "Test Completed|Result=|Error:" PlanetaryCreation.log`
+- Filter specific test output: `grep -A 30 "YourTestName" PlanetaryCreation.log`
+- Check exit code in log: `grep "EXIT CODE:" PlanetaryCreation.log` (0 = all passed, -1 = failures occurred)
+
 **Re-tessellation validation failures (Milestone 4):**
 - **SharedVertices vs RenderVertices confusion**: Validation MUST check `RenderVertices` (the high-density render mesh), NOT `SharedVertices` (low-density simulation mesh)
 - Symptom: Euler characteristic fails with wrong vertex count (e.g., "V=12 E=480 F=320" instead of "V=162 E=480 F=320")

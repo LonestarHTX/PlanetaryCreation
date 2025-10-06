@@ -22,6 +22,7 @@
 - Use Unreal's Automation Testing framework (`IMPLEMENT_SIMPLE_AUTOMATION_TEST`) and name suites `FPlanetaryCreation<Feature>Test`.
 - Run targeted tests headless: `"<UE5>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" PlanetaryCreation.uproject -ExecCmds="Automation RunTests PlanetaryCreation" -TestExit="Automation Test Queue Empty"`.
 - Inspect logs with `powershell -Command "Get-Content 'Saved/Logs/PlanetaryCreation.log' | Select-String 'Result={Success}'"`.
+- If automation appears to hang, check for stale `UnrealEditor-Cmd.exe` processes holding DLL locks and terminate them before rebuilding (see troubleshooting below).
 
 ## Build Expectations
 - After **any** change to Unreal C++ or Slate, run the WSL-friendly build command from `CLAUDE.md` (see below).
@@ -40,3 +41,14 @@
 ## Planning & Collaboration
 - Review `Docs/PlanningAgentPlan.md` when sequencing work to stay aligned with milestone checkpoints.
 - Keep `RealtimeMeshComponent_HowTo.md` open while extending runtime mesh features to maintain API consistency.
+
+## Automation Troubleshooting
+- **Automation tests hang or DLL lock errors**
+  - Symptom: build fails with `... cannot access the file` after a test run; root cause is a stale `UnrealEditor-Cmd.exe` still running.
+  - Diagnose with `cmd.exe /c "tasklist | findstr /i Unreal"`; terminate stuck processes via `cmd.exe /c "taskkill /F /PID <PID>"` before rebuilding.
+  - Prevention: after long-running automation, confirm no `UnrealEditor-Cmd.exe` remains in the process list.
+- **Reading automation test logs**
+  - Logs live under `Saved/Logs/PlanetaryCreation.log`; console output may omit detailed failures.
+  - Quickly locate latest log: `find "<ProjectPath>/Saved/Logs" -name "*.log" -type f -printf '%T@ %p\n' | sort -n | tail -1` (WSL).
+  - Useful patterns: `grep -E "Test Completed|Result=|Error:" PlanetaryCreation.log`; scope to a single test with `grep -A 30 "TestName" PlanetaryCreation.log`.
+  - Check overall result via `grep "EXIT CODE:" PlanetaryCreation.log` (0 = success, -1 = failures).

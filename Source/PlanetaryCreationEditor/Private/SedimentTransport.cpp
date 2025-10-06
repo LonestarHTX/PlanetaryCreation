@@ -38,22 +38,14 @@ void UTectonicSimulationService::ApplySedimentTransport(double DeltaTimeMy)
         VertexErosionRates.SetNumZeroed(VertexCount);
     }
 
-    // Build adjacency map: vertex -> neighbors
-    TMap<int32, TArray<int32>> VertexNeighbors;
-    const int32 TriangleCount = RenderTriangles.Num() / 3;
-
-    for (int32 TriIdx = 0; TriIdx < TriangleCount; ++TriIdx)
+    if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
     {
-        const int32 V0 = RenderTriangles[TriIdx * 3 + 0];
-        const int32 V1 = RenderTriangles[TriIdx * 3 + 1];
-        const int32 V2 = RenderTriangles[TriIdx * 3 + 2];
+        BuildRenderVertexAdjacency();
+    }
 
-        VertexNeighbors.FindOrAdd(V0).AddUnique(V1);
-        VertexNeighbors.FindOrAdd(V0).AddUnique(V2);
-        VertexNeighbors.FindOrAdd(V1).AddUnique(V0);
-        VertexNeighbors.FindOrAdd(V1).AddUnique(V2);
-        VertexNeighbors.FindOrAdd(V2).AddUnique(V0);
-        VertexNeighbors.FindOrAdd(V2).AddUnique(V1);
+    if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
+    {
+        return;
     }
 
     // Compute total eroded material available for redistribution
@@ -98,7 +90,52 @@ void UTectonicSimulationService::ApplySedimentTransport(double DeltaTimeMy)
     // M5 Phase 3.5 fix: Multiple iterations allow sediment to cascade through multiple hops
     // With 10 iterations, sediment can travel up to 10 vertex hops per timestep (2 My)
     // Deferred: Full hydraulic routing planned for Milestone 6
-    const int32 DiffusionIterations = 10;
+    const int32 DiffusionIterations = Parameters.bSkipCPUAmplification ? 4 : 10;
+
+    // Cache convergent-boundary proximity once (expensive boundary lookups)
+    TArray<uint8> ConvergentNeighborFlags;
+    ConvergentNeighborFlags.SetNumZeroed(VertexCount);
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 StartOffset = RenderVertexAdjacencyOffsets[VertexIdx];
+        const int32 EndOffset = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+
+        if (StartOffset == EndOffset)
+        {
+            continue;
+        }
+
+        const int32 PlateA = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        if (PlateA == INDEX_NONE)
+        {
+            continue;
+        }
+
+        for (int32 Offset = StartOffset; Offset < EndOffset; ++Offset)
+        {
+            const int32 NeighborIdx = RenderVertexAdjacency[Offset];
+            const int32 PlateB = VertexPlateAssignments.IsValidIndex(NeighborIdx) ? VertexPlateAssignments[NeighborIdx] : INDEX_NONE;
+
+            if (PlateB == INDEX_NONE || PlateA == PlateB)
+            {
+                continue;
+            }
+
+            const TPair<int32, int32> BoundaryKey = (PlateA < PlateB)
+                ? TPair<int32, int32>(PlateA, PlateB)
+                : TPair<int32, int32>(PlateB, PlateA);
+
+            if (const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey))
+            {
+                if (Boundary->BoundaryType == EBoundaryType::Convergent)
+                {
+                    ConvergentNeighborFlags[VertexIdx] = 1;
+                    break;
+                }
+            }
+        }
+    }
 
     for (int32 Iteration = 0; Iteration < DiffusionIterations; ++Iteration)
     {
@@ -115,20 +152,22 @@ void UTectonicSimulationService::ApplySedimentTransport(double DeltaTimeMy)
         // M5 Phase 3.5 fix: Use BASE elevation only (not including sediment) for gradient calculation
         // This prevents sediment from creating artificial plateaus that block further transport
         const double CurrentElevation = VertexElevationValues[VertexIdx];
-        const TArray<int32>* Neighbors = VertexNeighbors.Find(VertexIdx);
+        const int32 StartOffset = RenderVertexAdjacencyOffsets[VertexIdx];
+        const int32 EndOffset = RenderVertexAdjacencyOffsets[VertexIdx + 1];
 
-        if (!Neighbors || Neighbors->Num() == 0)
+        if (StartOffset == EndOffset)
         {
             continue;
         }
 
         // Find downhill neighbors and calculate gradients based on base elevation
-        TArray<int32> DownhillNeighbors;
-        TArray<double> NeighborGradients;
+        TArray<int32, TInlineAllocator<12>> DownhillNeighbors;
+        TArray<double, TInlineAllocator<12>> NeighborGradients;
         double TotalGradient = 0.0;
 
-        for (int32 NeighborIdx : *Neighbors)
+        for (int32 Offset = StartOffset; Offset < EndOffset; ++Offset)
         {
+            const int32 NeighborIdx = RenderVertexAdjacency[Offset];
             if (VertexElevationValues.IsValidIndex(NeighborIdx))
             {
                 const double NeighborElevation = VertexElevationValues[NeighborIdx];
@@ -169,39 +208,9 @@ void UTectonicSimulationService::ApplySedimentTransport(double DeltaTimeMy)
         }
 
         // Bonus weight for convergent boundaries (preferred sinks)
-        if (VertexPlateAssignments.IsValidIndex(VertexIdx))
+        if (ConvergentNeighborFlags[VertexIdx])
         {
-            // Check if this vertex is near a convergent boundary
-            bool bNearConvergentBoundary = false;
-
-            for (int32 NeighborIdx : *Neighbors)
-            {
-                if (VertexPlateAssignments.IsValidIndex(NeighborIdx))
-                {
-                    if (VertexPlateAssignments[VertexIdx] != VertexPlateAssignments[NeighborIdx])
-                    {
-                        // Different plates - check if boundary is convergent
-                        const int32 PlateA = VertexPlateAssignments[VertexIdx];
-                        const int32 PlateB = VertexPlateAssignments[NeighborIdx];
-                        const TPair<int32, int32> BoundaryKey = (PlateA < PlateB) ? TPair<int32, int32>(PlateA, PlateB) : TPair<int32, int32>(PlateB, PlateA);
-
-                        if (const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey))
-                        {
-                            if (Boundary->BoundaryType == EBoundaryType::Convergent)
-                            {
-                                bNearConvergentBoundary = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Bonus sediment accumulation at trenches
-            if (bNearConvergentBoundary)
-            {
-                SedimentDelta[VertexIdx] += 0.05 * Parameters.SedimentDiffusionRate * DeltaTimeMy;
-            }
+            SedimentDelta[VertexIdx] += 0.05 * Parameters.SedimentDiffusionRate * DeltaTimeMy;
         }
     }
 

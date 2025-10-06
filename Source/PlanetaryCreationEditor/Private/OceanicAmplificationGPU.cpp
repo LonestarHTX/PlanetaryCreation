@@ -46,6 +46,35 @@ namespace PlanetaryCreation::GPU
 
         IMPLEMENT_GLOBAL_SHADER(FOceanicAmplificationCS, "/Plugin/PlanetaryCreation/Private/OceanicAmplification.usf", "MainCS", SF_Compute);
 
+        // GPU Preview shader - writes to equirectangular texture instead of buffer
+        class FOceanicAmplificationPreviewCS : public FGlobalShader
+        {
+        public:
+            DECLARE_GLOBAL_SHADER(FOceanicAmplificationPreviewCS);
+            SHADER_USE_PARAMETER_STRUCT(FOceanicAmplificationPreviewCS, FGlobalShader);
+
+            BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+                SHADER_PARAMETER(uint32, VertexCount)
+                SHADER_PARAMETER(FUintVector2, TextureSize)
+                SHADER_PARAMETER(float, RidgeAmplitude)
+                SHADER_PARAMETER(float, FaultFrequency)
+                SHADER_PARAMETER(float, AgeFalloff)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float>, InBaseline)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector4f>, InRidgeDirection)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float>, InCrustAge)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector3f>, InRenderPosition)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint32>, InOceanicMask)
+                SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float>, OutHeightTexture)
+            END_SHADER_PARAMETER_STRUCT()
+
+            static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+            {
+                return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+            }
+        };
+
+        IMPLEMENT_GLOBAL_SHADER(FOceanicAmplificationPreviewCS, "/Plugin/PlanetaryCreation/Private/OceanicAmplificationPreview.usf", "MainCS", SF_Compute);
+
         static bool SupportsGPUAmplification()
         {
             return IsFeatureLevelSupported(GMaxRHIShaderPlatform, ERHIFeatureLevel::SM5);
@@ -181,5 +210,131 @@ namespace PlanetaryCreation::GPU
     {
         UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[StageB][GPU] Continental amplification GPU path not yet implemented. Falling back to CPU."));
         return false;
+    }
+
+    bool ApplyOceanicAmplificationGPUPreview(UTectonicSimulationService& Service, FTextureRHIRef& OutHeightTexture, FIntPoint TextureSize)
+    {
+        if (!SupportsGPUAmplification())
+        {
+            return false;
+        }
+
+        const TArray<double>& Baseline = Service.GetVertexAmplifiedElevation();
+        const TArray<FVector3d>& RidgeDirections = Service.GetVertexRidgeDirections();
+        const TArray<double>& CrustAges = Service.GetVertexCrustAge();
+        const TArray<FVector3d>& RenderVertices = Service.GetRenderVertices();
+
+        const int32 VertexCount = Baseline.Num();
+        if (VertexCount == 0 || RidgeDirections.Num() != VertexCount || CrustAges.Num() != VertexCount || RenderVertices.Num() != VertexCount)
+        {
+            return false;
+        }
+
+        const TArray<float>* BaselineFloatPtr = nullptr;
+        const TArray<FVector4f>* RidgeDirFloatPtr = nullptr;
+        const TArray<float>* CrustAgeFloatPtr = nullptr;
+        const TArray<FVector3f>* PositionFloatPtr = nullptr;
+        const TArray<uint32>* OceanicMaskPtr = nullptr;
+
+        Service.GetOceanicAmplificationFloatInputs(BaselineFloatPtr, RidgeDirFloatPtr, CrustAgeFloatPtr, PositionFloatPtr, OceanicMaskPtr);
+
+        if (!BaselineFloatPtr || !RidgeDirFloatPtr || !CrustAgeFloatPtr || !PositionFloatPtr || !OceanicMaskPtr)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPUPreview] Float cache unavailable"));
+            return false;
+        }
+
+        const TArray<float>& BaselineFloat = *BaselineFloatPtr;
+        const TArray<FVector4f>& RidgeDirFloat = *RidgeDirFloatPtr;
+        const TArray<float>& CrustAgeFloat = *CrustAgeFloatPtr;
+        const TArray<FVector3f>& PositionFloat = *PositionFloatPtr;
+        const TArray<uint32>& OceanicMask = *OceanicMaskPtr;
+
+        if (BaselineFloat.Num() != VertexCount || RidgeDirFloat.Num() != VertexCount ||
+            CrustAgeFloat.Num() != VertexCount || PositionFloat.Num() != VertexCount || OceanicMask.Num() != VertexCount)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPUPreview] Float cache size mismatch"));
+            return false;
+        }
+
+        const TArray<float>* BaselineArray = BaselineFloatPtr;
+        const TArray<FVector4f>* RidgeArray = RidgeDirFloatPtr;
+        const TArray<float>* CrustArray = CrustAgeFloatPtr;
+        const TArray<FVector3f>* PositionArray = PositionFloatPtr;
+        const TArray<uint32>* MaskArray = OceanicMaskPtr;
+
+        const FTectonicSimulationParameters SimParams = Service.GetParameters();
+
+        // Execute GPU compute on render thread
+        ENQUEUE_RENDER_COMMAND(OceanicAmplificationGPUPreview)(
+            [BaselineArray, RidgeArray, CrustArray, PositionArray, MaskArray, &OutHeightTexture, TextureSize, VertexCount, SimParams](FRHICommandListImmediate& RHICmdList)
+            {
+                FRDGBuilder GraphBuilder(RHICmdList);
+
+                // Create or validate height texture (PF_R16F format for compact storage)
+                FRDGTextureRef HeightTexture;
+                if (!OutHeightTexture.IsValid() || OutHeightTexture->GetSizeXY() != TextureSize)
+                {
+                    FRDGTextureDesc Desc = FRDGTextureDesc::Create2D(
+                        TextureSize,
+                        PF_R16F,
+                        FClearValueBinding::Black,
+                        TexCreate_ShaderResource | TexCreate_UAV);
+
+                    HeightTexture = GraphBuilder.CreateTexture(Desc, TEXT("PlanetaryCreation.OceanicGPUPreview.HeightTexture"));
+                }
+                else
+                {
+                    HeightTexture = GraphBuilder.RegisterExternalTexture(CreateRenderTarget(OutHeightTexture, TEXT("PlanetaryCreation.OceanicGPUPreview.ExternalHeightTexture")));
+                }
+
+                FRDGBufferRef BaselineBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPUPreview.Baseline"), *BaselineArray);
+                FRDGBufferRef RidgeBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPUPreview.Ridge"), *RidgeArray);
+                FRDGBufferRef AgeBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPUPreview.Age"), *CrustArray);
+                FRDGBufferRef PositionBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPUPreview.Position"), *PositionArray);
+                FRDGBufferRef MaskBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.OceanicGPUPreview.OceanicMask"), *MaskArray);
+
+                FOceanicAmplificationPreviewCS::FParameters* Parameters = GraphBuilder.AllocParameters<FOceanicAmplificationPreviewCS::FParameters>();
+                Parameters->VertexCount = static_cast<uint32>(VertexCount);
+                Parameters->TextureSize = FUintVector2(static_cast<uint32>(TextureSize.X), static_cast<uint32>(TextureSize.Y));
+                Parameters->RidgeAmplitude = FMath::Max(static_cast<float>(SimParams.OceanicFaultAmplitude), 0.0f);
+                Parameters->FaultFrequency = FMath::Max(static_cast<float>(SimParams.OceanicFaultFrequency), 0.0001f);
+                Parameters->AgeFalloff = FMath::Max(static_cast<float>(SimParams.OceanicAgeFalloff), 0.0f);
+                Parameters->InBaseline = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(BaselineBuffer));
+                Parameters->InRidgeDirection = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(RidgeBuffer));
+                Parameters->InCrustAge = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(AgeBuffer));
+                Parameters->InRenderPosition = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(PositionBuffer));
+                Parameters->InOceanicMask = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(MaskBuffer));
+                Parameters->OutHeightTexture = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(HeightTexture));
+
+                const int32 GroupCountX = FMath::DivideAndRoundUp(VertexCount, 64);
+
+                GraphBuilder.AddPass(
+                    RDG_EVENT_NAME("PlanetaryCreation::OceanicAmplificationGPUPreview"),
+                    Parameters,
+                    ERDGPassFlags::Compute,
+                    [Parameters, GroupCountX](FRHICommandList& RHICmdListInner)
+                    {
+                        TShaderMapRef<FOceanicAmplificationPreviewCS> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+                        FComputeShaderUtils::Dispatch(RHICmdListInner, ComputeShader, *Parameters, FIntVector(GroupCountX, 1, 1));
+                    });
+
+                // Extract height texture for persistent reference
+                TRefCountPtr<IPooledRenderTarget> OutputRenderTarget;
+                GraphBuilder.QueueTextureExtraction(HeightTexture, &OutputRenderTarget);
+                GraphBuilder.Execute();
+
+                if (OutputRenderTarget.IsValid())
+                {
+                    OutHeightTexture = OutputRenderTarget->GetRHI();
+                }
+            });
+
+        FlushRenderingCommands();
+
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[OceanicGPUPreview] Height texture written (%dx%d, %d vertices)"),
+            TextureSize.X, TextureSize.Y, VertexCount);
+
+        return true;
     }
 }
