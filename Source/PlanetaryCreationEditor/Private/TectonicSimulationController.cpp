@@ -231,12 +231,6 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         return;
     }
 
-    if (bUseGPUPreviewMode)
-    {
-        UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Skipping mesh rebuild (GPU WPO active)"));
-        return;
-    }
-
     EnsurePreviewActor();
 
     const int32 RenderLevel = Service->GetParameters().RenderSubdivisionLevel;
@@ -246,6 +240,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
     // Milestone 4 Phase 4.2: Check cache first
     const FCachedLODMesh* CachedMesh = GetCachedLOD(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion);
 
+    // GPU preview mode: reuse cached geometry or refresh colors, skip expensive CPU rebuild
     if (bUseGPUPreviewMode && !CachedMesh)
     {
         if (const TUniquePtr<FCachedLODMesh>* CachedEntry = LODCache.Find(RenderLevel))
@@ -265,6 +260,10 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
                 UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] Refreshed preview colors without geometry rebuild (Surface:%d)"), CurrentSurfaceVersion);
                 return;
             }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPUPreview] No cache and RefreshPreviewColors failed, falling back to full rebuild"));
+            }
         }
     }
     if (CachedMesh)
@@ -282,6 +281,14 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         // Pre-warm neighboring LODs opportunistically
         PreWarmNeighboringLODs();
 
+        return;
+    }
+
+    // GPU preview mode: if we reach here, we have no cache and RefreshPreviewColors already ran or failed
+    // Skip the expensive CPU mesh rebuild in GPU mode
+    if (bUseGPUPreviewMode)
+    {
+        UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Skipping CPU mesh rebuild (no cache, colors already refreshed)"));
         return;
     }
 
