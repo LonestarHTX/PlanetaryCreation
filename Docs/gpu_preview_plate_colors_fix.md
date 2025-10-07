@@ -107,12 +107,9 @@ else
 ### File: `TectonicSimulationController.cpp:1129-1133` (AFTER FIX)
 
 ```cpp
-const bool bShowVelocity = Snapshot.bShowVelocityField;
-// GPU preview mode uses heightmap visualization for WPO displacement, but vertex colors should still show plates by default
-// Only force elevation colors if BOTH conditions are met:
-// 1. Heightmap visualization is enabled (for GPU material)
-// 2. User hasn't explicitly requested a different visualization mode (velocity field, stress, etc.)
-const bool bElevColor = false; // Default: show plate colors in vertex stream
+const ETectonicVisualizationMode VisualizationMode = Snapshot.VisualizationMode;
+const bool bShowVelocity = VisualizationMode == ETectonicVisualizationMode::Velocity;
+const bool bElevColor = (VisualizationMode == ETectonicVisualizationMode::Elevation) && EffectiveElevations != nullptr;
 const bool bHighlightSeaLevel = Snapshot.bHighlightSeaLevel;
 const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
 ```
@@ -126,7 +123,13 @@ const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
 | CPU Preview OFF | None | Plate colors |
 | GPU Preview ON | Height texture | Plate colors ✅ |
 | Velocity Field ON | Height texture | Velocity colors |
-| Heightmap Viz ON (user toggle) | Height texture | Elevation colors (future) |
+| Heightmap Viz ON (user toggle) | Height texture | Elevation colors ✅ (honors toggle) |
+
+---
+
+### UI Controls
+
+The plate/elevation/velocity/stress selection now lives in the **Visualization** combo box inside the tectonic tool panel. Heightmap-specific toggles remain for legacy automation but simply proxy to the same enum.
 
 ---
 
@@ -183,16 +186,7 @@ PlanetaryCreation.Milestone6.GPU.IntegrationSmoke   → Success ✅
 
 ## Future Work
 
-1. **Expose elevation color toggle in UI**
-   - Currently hardcoded to `false` (plate colors only)
-   - Should allow user to toggle between plate/elevation/velocity colors
-   - Independent of GPU preview mode
-
-2. **Refactor visualization mode enum**
-   - Current system uses multiple booleans (bElevColor, bShowVelocity, bHighlightSeaLevel)
-   - Should use single `EVisualizationMode` enum for clarity
-
-3. **Add GPU preview mode stress test**
+1. **Add GPU preview mode stress test**
    - Test rapid toggling between CPU/GPU preview
    - Verify mesh updates and material parameters stay synchronized
 

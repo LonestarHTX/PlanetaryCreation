@@ -38,6 +38,9 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
         return false;
     }
 
+    FTectonicSimulationController Controller;
+    Controller.Initialize();
+
     // Reset simulation
     Service->ResetSimulation();
 
@@ -45,8 +48,10 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
     FTectonicSimulationParameters Params = Service->GetParameters();
     Params.RenderSubdivisionLevel = 4; // Use L4 for fast testing
     Params.bEnableOceanicAmplification = true;
-    Params.bEnableHeightmapVisualization = true; // Enable heightmap viz
+    Params.VisualizationMode = ETectonicVisualizationMode::PlateColors; // Start with plate colors enabled by default
+    Params.bEnableHeightmapVisualization = false; // Legacy toggle maintained for compatibility
     Service->SetParameters(Params);
+    const ETectonicVisualizationMode InitialVisualizationMode = Params.VisualizationMode;
 
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DIAGNOSTIC] Initial state: Time=%.2f My, Plates=%d"),
         Service->GetCurrentTimeMy(), Service->GetPlates().Num());
@@ -56,6 +61,7 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
     // ========================================================================
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n[TEST 1] CPU Path Baseline (GPU Preview OFF)"));
 
+    Controller.SetGPUPreviewMode(false);
     Service->SetSkipCPUAmplification(false); // Ensure CPU path runs
     const double CPUStartTime = Service->GetCurrentTimeMy();
     const int32 CPUStartPlateCount = Service->GetPlates().Num();
@@ -83,7 +89,7 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n[TEST 2] GPU Preview Path (GPU Preview ON)"));
 
     // Enable GPU preview mode (skips CPU amplification)
-    Service->SetSkipCPUAmplification(true);
+    Controller.SetGPUPreviewMode(true);
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPU Preview] bSkipCPUAmplification set to TRUE"));
 
     const double GPUStartTime = Service->GetCurrentTimeMy();
@@ -111,18 +117,14 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
     // ========================================================================
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n[TEST 3] Controller Integration (with Snapshot Logging)"));
 
-    // Create controller (triggers snapshot creation)
-    FTectonicSimulationController Controller;
-    Controller.Initialize();
-
     // Create snapshot and log its state
     FMeshBuildSnapshot Snapshot = Controller.CreateMeshBuildSnapshot();
 
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Snapshot State]"));
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("  bEnableHeightmapVisualization = %s"),
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("  VisualizationMode = %d"),
+        static_cast<int32>(Snapshot.VisualizationMode));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("  LegacyHeightmapFlag = %s"),
         Snapshot.Parameters.bEnableHeightmapVisualization ? TEXT("TRUE") : TEXT("FALSE"));
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("  bShowVelocityField = %s"),
-        Snapshot.bShowVelocityField ? TEXT("TRUE") : TEXT("FALSE"));
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("  bUseAmplifiedElevation = %s"),
         Snapshot.bUseAmplifiedElevation ? TEXT("TRUE") : TEXT("FALSE"));
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("  ElevationMode = %d"),
@@ -138,6 +140,17 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Snapshot has plate assignments"), Snapshot.VertexPlateAssignments.Num() > 0);
     TestEqual(TEXT("Snapshot vertex counts match"),
         Snapshot.RenderVertices.Num(), Snapshot.VertexPlateAssignments.Num());
+
+    TestEqual(TEXT("GPU preview preserves visualization mode"),
+        Snapshot.VisualizationMode,
+        InitialVisualizationMode);
+
+    // Enable elevation visualization while GPU preview remains active and verify snapshot updates
+    Controller.SetVisualizationMode(ETectonicVisualizationMode::Elevation);
+    FMeshBuildSnapshot HeightSnapshot = Controller.CreateMeshBuildSnapshot();
+    TestEqual(TEXT("Visualization mode switch honored in GPU preview"),
+        HeightSnapshot.VisualizationMode,
+        ETectonicVisualizationMode::Elevation);
 
     // ========================================================================
     // TEST 4: Plate Movement Verification
@@ -177,14 +190,13 @@ bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n=== DIAGNOSTIC SUMMARY ==="));
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("CPU Path: Time advanced %.2f My over 5 steps"), CPUTimeDelta);
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("GPU Path: Time advanced %.2f My over 5 steps"), GPUTimeDelta);
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("Heightmap Visualization: %s"),
-        Snapshot.Parameters.bEnableHeightmapVisualization ? TEXT("ENABLED") : TEXT("DISABLED"));
-    UE_LOG(LogPlanetaryCreation, Warning, TEXT("Velocity Field: %s"),
-        Snapshot.bShowVelocityField ? TEXT("ENABLED") : TEXT("DISABLED"));
+    UE_LOG(LogPlanetaryCreation, Warning, TEXT("Visualization Mode: %d"),
+        static_cast<int32>(Snapshot.VisualizationMode));
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("GPU Preview Material: Vertex colors remain active (no forced overrides)"));
 
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("\n=== GPU Preview Diagnostic Test COMPLETE ==="));
 
+    Controller.SetGPUPreviewMode(false);
     Controller.Shutdown();
     return true;
 }

@@ -89,6 +89,8 @@ while (FPlatformTime::Seconds() < Deadline)
 
 This ensures dispatch happens once, then polling proceeds asynchronously.
 
+✅ **Status (2025-10-06):** Implemented. `ProcessPendingOceanicGPUReadbacks` now owns dispatch/copy fences, the forced mode waits once during automation, and Stage B profiling records readback stall time for logs/Insights.
+
 ---
 
 ## 4. Temporary Hotfix (if needed)
@@ -124,4 +126,3 @@ This submits the render graph without reverting to blocking GPU flushes.
 ✅ Skip GPU tests under NullRHI.
 
 Result: async GPU path stays non-blocking, automation no longer hangs.
-

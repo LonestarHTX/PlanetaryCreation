@@ -55,6 +55,7 @@
 - Review `Docs/PlanningAgentPlan.md` when sequencing work to stay aligned with milestone checkpoints.
 - Keep `RealtimeMeshComponent_HowTo.md` open while extending runtime mesh features to maintain API consistency.
 - GPU preview investigations: consult `Docs/gpu_preview_implementation_notes.md`, `Docs/gpu_preview_optimizations.md`, and `Docs/gpu_system_review.md` before diving into shader/controller changes.
+- Terrane mesh surgery spike: run `planetary.TerraneMeshSurgery` in the editor console (Development builds only) to generate logs with Euler/non-manifold metrics while the extraction work is still in progress.
 
 ## Automation Troubleshooting
 - **Automation tests hang or DLL lock errors**

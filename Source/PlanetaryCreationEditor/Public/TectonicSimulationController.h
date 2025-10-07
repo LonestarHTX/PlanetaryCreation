@@ -27,8 +27,8 @@ struct FMeshBuildSnapshot
     TArray<double> VertexElevationValues; // M5 Phase 3.7: Actual elevations from erosion system
     TArray<double> VertexAmplifiedElevation; // M6 Task 2.1: Stage B amplified elevation (with transform faults)
     double ElevationScale;
-    bool bShowVelocityField;
     EElevationMode ElevationMode;
+    ETectonicVisualizationMode VisualizationMode = ETectonicVisualizationMode::PlateColors;
     bool bUseAmplifiedElevation; // M6 Task 2.1: Use Stage B amplification for visualization
 
     /** Milestone 5 Phase 3: Planet radius in meters (for unit conversion to UE centimeters). */
@@ -39,6 +39,9 @@ struct FMeshBuildSnapshot
 
     /** Visualization flag: highlight sea level isoline. */
     bool bHighlightSeaLevel = false;
+
+    /** Profiling data captured for the most recent Stage B amplification pass. */
+    FStageBProfile StageBProfile;
 };
 
 /** Milestone 4 Phase 4.2: Cached LOD mesh snapshot (snapshot of simulation state, not StreamSet). */
@@ -91,11 +94,11 @@ public:
     /** Access to underlying simulation service (for UI parameter binding). */
     UTectonicSimulationService* GetSimulationService() const;
 
-    /** Set visualization mode: false = plate colors, true = velocity field. */
-    void SetVelocityVisualizationEnabled(bool bEnabled);
+    /** Set primary visualization overlay. */
+    void SetVisualizationMode(ETectonicVisualizationMode Mode);
 
-    /** Get current visualization mode. */
-    bool IsVelocityVisualizationEnabled() const { return bShowVelocityField; }
+    /** Get current visualization overlay. */
+    ETectonicVisualizationMode GetVisualizationMode() const;
 
     /** Set elevation visualization mode (Milestone 3 Task 2.4). */
     void SetElevationMode(EElevationMode Mode);
@@ -190,9 +193,6 @@ private:
     mutable TWeakObjectPtr<class URealtimeMeshSimple> PreviewMesh;
     mutable bool bPreviewInitialized = false;
     mutable bool bBoundaryOverlayInitialized = false;
-
-    /** Milestone 3 Task 2.2: Visualization mode toggle. */
-    bool bShowVelocityField = false;
 
     /** Milestone 3 Task 2.4: Elevation visualization mode. */
     EElevationMode CurrentElevationMode = EElevationMode::Flat;

@@ -64,6 +64,18 @@ This document tracks milestone intent, delivery status, notable deviations from 
 - **Runtime Optimisations** — `Docs/gpu_preview_optimizations.md`
   - Added `bSkipCPUAmplification` flag to avoid redundant CPU pathways when previewing on GPU.
   - Surface version increments now gated to prevent unnecessary L7 rebuilds; async tasks instrumented for Insights.
+  - Stage B profiling struct + `r.PlanetaryCreation.StageBProfiling` provide per-pass timings; automation uses async readback fences (`Docs/gpu_readback_fix_plan.md`).
+- **Visualization Mode Unification** — `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h`, `SPTectonicToolPanel.cpp`
+  - Introduced `ETectonicVisualizationMode` enum, console hook (`r.PlanetaryCreation.VisualizationMode`), and combo UI replacing heightmap/velocity checkboxes.
+  - Controller/velocity overlay now clear arrows when mode ≠ Velocity; GPU preview diagnostics updated to assert enum flow (`PlanetaryCreation.Milestone6.GPU.PreviewDiagnostic`).
+- **Terrane Mesh Surgery Refactor** — `TectonicSimulationService.cpp:2951/3638`, `FContinentalTerrane`
+  - Extraction snapshots full vertex payloads (position, velocity, stress, sediment, amplified elevation, duplicate mapping) and compacts render SoA arrays without orphaned vertices.
+  - Reattachment removes patch triangles via sorted-key sets, restores duplicates, rebuilds adjacency, and keeps the mesh manifold; `TerraneMeshSurgeryTest` expanded to confirm no `INDEX_NONE` assignments remain.
+  - Build + automation coverage: Win64 Development UBT (≈3 s incremental) and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` now succeed.
+- **Sediment & Dampening Optimizations** — `SedimentTransport.cpp`, `OceanicDampening.cpp`, `TectonicSimulationService.cpp`
+  - Diffusion loop now runs 6 passes normally / 4 passes under GPU preview (`Parameters.bSkipCPUAmplification`), trimming ~40 % inner-loop work.
+  - Per-vertex adjacency weight totals cached once during `BuildRenderVertexAdjacency`, consumed directly by oceanic dampening (no per-step recompute).
+  - Milestone 5 sediment/dampening tests pass; Milestone 6 suite still has the known amplification parity failures to address separately.
 - **Stability & Diagnostics**
   - `Docs/plate_movement_debug_plan.md` drove root-cause analysis of “frozen plates” report.
   - `Docs/gpu_preview_plate_colors_fix.md` decoupled GPU heightmap displacement from vertex color overlays; new `GPUPreviewDiagnosticTest.cpp` exercises CPU vs GPU step parity.
@@ -74,10 +86,14 @@ This document tracks milestone intent, delivery status, notable deviations from 
 - **Process Fixes** — `Docs/gpu_readback_fix_plan.md` outlines commandlet-safe fence submission to unblock async readbacks in automation; implementation queued.
 
 ### Active Work
-- UI toggle and console plumbing for GPU preview mode; parity automation for continental amplification.
+- Continental Stage B path: exemplar amplification, parity automation, and Level 7 profiling instrumentation (`Task 2.1/2.2/2.3.1`).
 - Async readback submission + fence handling for commandlet automation (`ProcessPendingOceanicGPUReadbacks`).
 - Terrane extraction/reattachment systems per Milestone plan, leveraging mesh surgery spike.
+- Boundary overlay simplification pass (Task 2.4) to replace starburst traces with single-strand seams.
 - SIMD refactors (SoA cache, ParallelFor) per `Docs/simd_gpu_implementation_review.md` and `Docs/planetary_creation_simd_gpu_implementation_review_oct_6_2025.md`.
+
+Looking ahead to **Milestone 7**, add “Plate naming polish” to the presentation/UX backlog so generated plates get friendly labels alongside the existing IDs—purely cosmetic, but it’ll make review sessions more fun.
+Additional M7 polish targets queued: plate label overlay toggle, boundary legend in the tool panel, timeline markers for splits/merges/terranes, camera distance presets, snapshot thumbnails in history, visualization mode hotkeys (1–4), and log panel filters for Stage B/Terrane chatter.
 
 ### Known Gaps / Next Targets
 - Oceanic preview currently visualization-only; continental GPU path, normals pass, and cube-face preview remain.
@@ -116,4 +132,3 @@ This document tracks milestone intent, delivery status, notable deviations from 
 
 ## From Fundamentals to Production
 With Milestones 0–5 complete, the project has research-aligned simulation fundamentals, production UX, and weathering passes in place. Milestone 6 is driving Stage B amplification, terrane systems, and GPU/SIMD optimisation; subsequent milestones (7–9) build presentation polish, climate coupling, and shipping readiness on that foundation.
-

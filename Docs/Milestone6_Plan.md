@@ -112,6 +112,8 @@ struct FTectonicTerrane
 - Deterministic: Same seed produces same terrane boundaries
 - CSV export enables terrane lifecycle tracking
 
+**Status (2025-10-07):** Extraction + reattachment pipeline refactored to snapshot full per-vertex payloads (`FTerraneVertexRecord`), compact render SoA arrays, rebuild boundary caps, and restore duplicates without non-manifold edges (`TectonicSimulationService.cpp:2951` / `3638`). `TerraneMeshSurgeryTest` now exercises the round trip and verifies no `INDEX_NONE` assignments remain; incremental Win64 build and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` both pass. Follow-ups: keep TerraneSerialization/TerraneMechanics docs/tests aligned and rerun the broader Milestone 6 suite when convenient.
+
 ---
 
 #### Task 1.2: Terrane Transport & Tracking
@@ -308,6 +310,20 @@ TerraneID,SourcePlateID,CarrierPlateID,Centroid_Lat,Centroid_Lon,Area_km2,Extrac
 ### Phase 2 – Stage B Amplification *(Weeks 18–19)*
 
 **Goal:** Implement paper Section 5 amplification to generate ~100m resolution detail on the base tectonic crust.
+
+#### Task 2.0: Visualization Mode Unification *(✅ Completed 2025-10-06)*
+**Owner:** Tools Engineer, Rendering Engineer  
+**Scope:** Normalize visualization state across service, controller, UI, and automation so GPU preview uses plate colours by default and velocity overlays only appear when explicitly requested.
+
+**Deliverables:**
+- `ETectonicVisualizationMode` enum stored in `FTectonicSimulationParameters`, with compatibility setters for legacy heightmap toggles.
+- Controller snapshot/colour logic driven by the enum; velocity arrows clear automatically when mode ≠ Velocity.
+- Slate combo box replacing the old checkbox pair; visualization mode also exposed via `r.PlanetaryCreation.VisualizationMode`.
+- GPU preview diagnostics/tests/docs updated to assert the enum workflow.
+
+**Impact:** Prevents GPU preview from masking plate colours, simplifies future visualization additions (stress, Stage B detail), and gives QA direct console control for automation scripts.
+
+---
 
 #### Task 2.1: Procedural Noise Amplification (Oceanic)
 **Owner:** Rendering Engineer, Simulation Engineer
@@ -508,6 +524,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 **Deliverables:**
 - Instrument oceanic/continental amplification, erosion, and dampening with trace scopes (`TRACE_CPUPROFILER_EVENT_SCOPE`, `QUICK_SCOPE_CYCLE_COUNTER`).
 - Add stats bucket output (log + Insights markers) so step timing captures per-pass cost.
+- Stage B profiling struct + `r.PlanetaryCreation.StageBProfiling` console hook (log per-step breakdown, expose metrics to snapshots).
 - Detect when amplification exceeds budget (e.g., >2s) and emit warnings in the log panel.
 - Cache exemplar sampling prep (pre-load PNG16 heightfields, consider UV tiling cache) to eliminate per-step disk loads.
 
@@ -551,6 +568,33 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - Amplification seamlessly integrated into existing LOD system
 - GPU mesh streaming handles 4× vertex density increase
 - Material system highlights tectonic features (ridges, trenches, mountains)
+
+---
+
+#### Task 2.4: Boundary Overlay Simplification *(new)*
+**Owner:** Tools Engineer, Rendering Engineer  
+**Effort:** 1 day  
+**Rationale:** The high-resolution boundary overlay currently draws every mesh edge, producing `\|/` starbursts at junctions. We need a clean single-strand polyline so tectonic seams read clearly in the editor.
+
+**Deliverables:**
+- Edge simplifier that groups boundary edges per plate pair and emits ordered polylines (controller-side).
+- Ribbon builder renders each simplified polyline as a single strip with optional screen-space thickness.
+- Developer CVar (`r.PlanetaryCreation.BoundaryOverlayMode`) to toggle raw vs simplified output during validation.
+
+**Implementation Notes:**
+- Extend `FBoundaryEdge` in `TectonicSimulationController.cpp` with plate IDs for grouping and run a Douglas–Peucker-style simplifier (angle threshold ≈10°).
+- Update `HighResBoundaryOverlay.cpp` to consume simplified paths, offset slightly above the mesh, and reuse existing colour ramp by boundary type/state.
+- Ensure the velocity overlay clears when visualization mode ≠ Velocity (ties into the new enum refactor).
+
+**Validation:**
+- ✅ Automation: extend `HighResBoundaryOverlayTest` with a synthetic triple junction and assert only two segments remain after simplification.
+- ✅ Manual check: Inspect triple junctions in the editor; boundary overlay should present a single dominant strand.
+- ✅ Logging: Verbose mode prints raw vs simplified segment counts.
+
+**Acceptance:**
+- Overlay presents clean single-line seams at tectonic boundaries.
+- Toggle CVar restores legacy behaviour for debugging.
+- Simplification adds <1 ms at L6.
 
 ---
 

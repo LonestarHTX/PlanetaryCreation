@@ -85,7 +85,9 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
         const double TargetDepth = FMath::Max(RidgeDepth - AgeSubsidence, AbyssalDepth);
 
         double WeightedSum = 0.0;
-        double WeightTotal = 0.0;
+        const double WeightTotal = RenderVertexAdjacencyWeightTotals.IsValidIndex(VertexIdx)
+            ? static_cast<double>(RenderVertexAdjacencyWeightTotals[VertexIdx])
+            : 0.0;
 
         const int32 StartOffset = RenderVertexAdjacencyOffsets[VertexIdx];
         const int32 EndOffset = RenderVertexAdjacencyOffsets[VertexIdx + 1];
@@ -108,7 +110,6 @@ void UTectonicSimulationService::ApplyOceanicDampening(double DeltaTimeMy)
             }
 
             WeightedSum += Weight * VertexElevationValues[NeighborIdx];
-            WeightTotal += Weight;
         }
 
         double SmoothedElevation = CurrentElevation;

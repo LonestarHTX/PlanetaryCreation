@@ -36,14 +36,14 @@ void FTectonicSimulationController::DrawVelocityVectorField()
     // Always clear the batch first (removes arrows when feature is disabled)
     LineBatcher->ClearBatch(VelocityFieldBatchId);
 
-    // Early-out if velocity field disabled (after clearing arrows)
-    if (!bShowVelocityField)
+    UTectonicSimulationService* Service = GetService();
+    if (!Service)
     {
         return;
     }
 
-    UTectonicSimulationService* Service = GetService();
-    if (!Service)
+    const bool bVelocityModeActive = Service->GetVisualizationMode() == ETectonicVisualizationMode::Velocity;
+    if (!bVelocityModeActive)
     {
         return;
     }

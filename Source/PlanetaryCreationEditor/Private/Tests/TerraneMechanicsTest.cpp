@@ -251,7 +251,7 @@ bool FTerraneMechanicsTest::RunTest(const FString& Parameters)
         TestEqual(TEXT("Terrane ID matches"), Terranes[0].TerraneID, TerraneID);
         // Milestone 6 Task 1.2: Terranes now automatically transition to Transporting after extraction
         TestEqual(TEXT("Terrane state is Transporting"), static_cast<int32>(Terranes[0].State), static_cast<int32>(ETerraneState::Transporting));
-        TestEqual(TEXT("Terrane vertex count matches"), Terranes[0].VertexIndices.Num(), TerraneVertices.Num());
+        TestEqual(TEXT("Terrane vertex count matches"), Terranes[0].VertexPayload.Num(), TerraneVertices.Num());
         TestTrue(TEXT("Carrier plate assigned"), Terranes[0].CarrierPlateID != INDEX_NONE);
     }
 

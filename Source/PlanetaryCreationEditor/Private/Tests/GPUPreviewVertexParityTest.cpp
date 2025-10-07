@@ -42,6 +42,7 @@ bool FGPUPreviewVertexParityTest::RunTest(const FString& Parameters)
 
     FTectonicSimulationParameters Params = Service->GetParameters();
     Params.RenderSubdivisionLevel = 7;
+    Params.VisualizationMode = ETectonicVisualizationMode::Elevation;
     Params.bEnableHeightmapVisualization = true;
     Params.bEnableDynamicRetessellation = false;
     Service->SetParameters(Params);

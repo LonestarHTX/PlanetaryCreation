@@ -42,6 +42,24 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries = Service->GetBoundaries();
     const TArray<FVector3d>& SharedVertices = Service->GetSharedVertices();
 
+    auto FindPlateByID = [&Plates](int32 PlateID) -> const FTectonicPlate*
+    {
+        if (PlateID == INDEX_NONE)
+        {
+            return nullptr;
+        }
+
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.PlateID == PlateID)
+            {
+                return &Plate;
+            }
+        }
+
+        return nullptr;
+    };
+
     TestEqual(TEXT("Ridge directions array sized correctly"), RidgeDirections.Num(), RenderVertices.Num());
     TestEqual(TEXT("Amplified elevation array sized correctly"), AmplifiedElevation.Num(), RenderVertices.Num());
 
@@ -146,10 +164,11 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
     {
         const int32 PlateID = VertexPlateAssignments[VertexIdx];
-        if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
+        const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+        if (!PlatePtr)
             continue;
 
-        const FTectonicPlate& Plate = Plates[PlateID];
+        const FTectonicPlate& Plate = *PlatePtr;
         if (Plate.CrustType == ECrustType::Oceanic)
         {
             OceanicVertexCount++;
@@ -196,6 +215,13 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     {
         const double AlignmentRatio = static_cast<double>(WellAlignedRidgeCount) / static_cast<double>(DivergentCandidateCount);
         TestTrue(TEXT("Ridge directions align with divergent edges (>=80% of candidates)"), AlignmentRatio >= 0.8);
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[OceanicAmpTest] Ridge alignment: Oceanic=%d ValidDir=%d Divergent=%d WellAligned=%d (%.1f%%)"),
+            OceanicVertexCount,
+            ValidRidgeDirectionCount,
+            DivergentCandidateCount,
+            WellAlignedRidgeCount,
+            AlignmentRatio * 100.0);
     }
 
     // ============================================================================
@@ -207,15 +233,27 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
 
     int32 YoungCrustCount = 0;
     int32 StrongFaultCount = 0;
+    int32 MidAgeCount = 0;
+    int32 MidAgeStrong = 0;
+    int32 OldCrustCount = 0;
+    int32 VeryOldCrustCount = 0;
 
     for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
     {
         const int32 PlateID = VertexPlateAssignments[VertexIdx];
-        if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
+        const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+        if (!PlatePtr)
             continue;
 
-        const FTectonicPlate& Plate = Plates[PlateID];
-        if (Plate.CrustType == ECrustType::Oceanic && CrustAge[VertexIdx] < 10.0)
+        const FTectonicPlate& Plate = *PlatePtr;
+        if (Plate.CrustType != ECrustType::Oceanic)
+        {
+            continue;
+        }
+
+        const double AgeMy = CrustAge[VertexIdx];
+
+        if (AgeMy < 10.0)
         {
             YoungCrustCount++;
 
@@ -228,6 +266,24 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
                 StrongFaultCount++;
             }
         }
+        else if (AgeMy < 50.0)
+        {
+            MidAgeCount++;
+            const double ElevationDiff = FMath::Abs(AmplifiedElevation[VertexIdx] - BaseElevation[VertexIdx]);
+            if (ElevationDiff > 50.0)
+            {
+                MidAgeStrong++;
+            }
+        }
+
+        if (AgeMy > 200.0)
+        {
+            VeryOldCrustCount++;
+        }
+        else if (AgeMy > 50.0)
+        {
+            OldCrustCount++;
+        }
     }
 
     if (YoungCrustCount > 0)
@@ -235,21 +291,29 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("At least 60% of young oceanic crust shows strong faults (>50m amplification)"),
             StrongFaultCount > YoungCrustCount * 0.6);
     }
+    UE_LOG(LogPlanetaryCreation, Warning,
+        TEXT("[OceanicAmpTest] Strong fault coverage: Young=%d Strong=%d (%.1f%%) Mid=%d Strong=%d (%.1f%%)"),
+        YoungCrustCount,
+        StrongFaultCount,
+        YoungCrustCount > 0 ? (100.0 * StrongFaultCount / YoungCrustCount) : 0.0,
+        MidAgeCount,
+        MidAgeStrong,
+        MidAgeCount > 0 ? (100.0 * MidAgeStrong / MidAgeCount) : 0.0);
 
     // ============================================================================
     // Test 3: Old crust (>200 My) shows weak faults (amplitude <20m)
     // ============================================================================
 
-    int32 OldCrustCount = 0;
     int32 WeakFaultCount = 0;
 
     for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
     {
         const int32 PlateID = VertexPlateAssignments[VertexIdx];
-        if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
+        const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+        if (!PlatePtr)
             continue;
 
-        const FTectonicPlate& Plate = Plates[PlateID];
+        const FTectonicPlate& Plate = *PlatePtr;
         if (Plate.CrustType == ECrustType::Oceanic && CrustAge[VertexIdx] > 200.0)
         {
             OldCrustCount++;
@@ -269,6 +333,12 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("At least 70% of old oceanic crust shows weak faults (<50m amplification)"),
             WeakFaultCount > OldCrustCount * 0.7);
     }
+    UE_LOG(LogPlanetaryCreation, Warning,
+        TEXT("[OceanicAmpTest] Old crust buckets: 50-200 My=%d, >200 My=%d, WeakFaults=%d (%.1f%% of >200)"),
+        OldCrustCount - VeryOldCrustCount,
+        VeryOldCrustCount,
+        WeakFaultCount,
+        VeryOldCrustCount > 0 ? (100.0 * WeakFaultCount / VeryOldCrustCount) : 0.0);
 
     // ============================================================================
     // Test 4: High-frequency detail adds ±20m variation
@@ -286,7 +356,8 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
     {
         const int32 PlateID = VertexPlateAssignments[VertexIdx];
-        if (PlateID != INDEX_NONE && Plates.IsValidIndex(PlateID) && Plates[PlateID].CrustType == ECrustType::Oceanic)
+        const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+        if (PlatePtr && PlatePtr->CrustType == ECrustType::Oceanic)
         {
             BaseMean += BaseElevation[VertexIdx];
             AmplifiedMean += AmplifiedElevation[VertexIdx];
@@ -303,7 +374,8 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
         for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
         {
             const int32 PlateID = VertexPlateAssignments[VertexIdx];
-            if (PlateID != INDEX_NONE && Plates.IsValidIndex(PlateID) && Plates[PlateID].CrustType == ECrustType::Oceanic)
+            const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+            if (PlatePtr && PlatePtr->CrustType == ECrustType::Oceanic)
             {
                 BaseElevationVariance += FMath::Square(BaseElevation[VertexIdx] - BaseMean);
                 AmplifiedElevationVariance += FMath::Square(AmplifiedElevation[VertexIdx] - AmplifiedMean);
@@ -329,13 +401,21 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
     int32 ContinentalTotalCount = 0;
     int32 DebugLoggedContinental = 0;
 
+    const TArray<float>* DummyBaseline = nullptr;
+    const TArray<FVector4f>* DummyRidge = nullptr;
+    const TArray<float>* DummyCrust = nullptr;
+    const TArray<FVector3f>* DummyPositions = nullptr;
+    const TArray<uint32>* OceanicMaskPtr = nullptr;
+    Service->GetOceanicAmplificationFloatInputs(DummyBaseline, DummyRidge, DummyCrust, DummyPositions, OceanicMaskPtr);
+
     for (int32 VertexIdx = 0; VertexIdx < RenderVertices.Num(); ++VertexIdx)
     {
         const int32 PlateID = VertexPlateAssignments[VertexIdx];
-        if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
+        const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+        if (!PlatePtr)
             continue;
 
-        const FTectonicPlate& Plate = Plates[PlateID];
+        const FTectonicPlate& Plate = *PlatePtr;
         if (Plate.CrustType == ECrustType::Continental)
         {
             ContinentalTotalCount++;
@@ -349,9 +429,11 @@ bool FOceanicAmplificationTest::RunTest(const FString& Parameters)
             }
             else if (DebugLoggedContinental < 3)
             {
-                UE_LOG(LogPlanetaryCreation, Warning, TEXT("Continental vertex %d (PlateID=%d, CrustType=%s) modified: Base=%.3f m, Amplified=%.3f m, Diff=%.3f m"),
+                const uint32 MaskValue = (OceanicMaskPtr && OceanicMaskPtr->IsValidIndex(VertexIdx)) ? (*OceanicMaskPtr)[VertexIdx] : 0u;
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("Continental vertex %d (PlateID=%d, CrustType=%s, Mask=%u) modified: Base=%.3f m, Amplified=%.3f m, Diff=%.3f m"),
                     VertexIdx, PlateID,
                     Plate.CrustType == ECrustType::Continental ? TEXT("Continental") : TEXT("Oceanic"),
+                    MaskValue,
                     BaseElevation[VertexIdx], AmplifiedElevation[VertexIdx], ElevDiff);
                 DebugLoggedContinental++;
             }

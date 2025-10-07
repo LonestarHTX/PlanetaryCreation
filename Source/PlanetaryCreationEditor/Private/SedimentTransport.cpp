@@ -65,7 +65,7 @@ void UTectonicSimulationService::ApplySedimentTransport(double DeltaTimeMy)
         BuildRenderVertexReverseAdjacency();
     }
 
-    const int32 DiffusionIterations = Parameters.bSkipCPUAmplification ? 4 : 10;
+    const int32 DiffusionIterations = Parameters.bSkipCPUAmplification ? 4 : 6;
 
     TArray<double> NextSediment;
     NextSediment.SetNumZeroed(VertexCount);

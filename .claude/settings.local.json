@@ -37,7 +37,15 @@
       "Bash(if [ -f /tmp/gpu_diagnostic_test.log ])",
       "Bash(then tail -300 /tmp/gpu_diagnostic_test.log)",
       "Bash(git add:*)",
-      "Bash(then tail -100 /tmp/gpu_preview_test.log)"
+      "Bash(then tail -100 /tmp/gpu_preview_test.log)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(if [ -f /tmp/terrane_surgery_test.log ])",
+      "Bash(then tail -100 /tmp/terrane_surgery_test.log)",
+      "Bash(awk:*)",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone5.SedimentTransport; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone5.OceanicDampening; Quit\" -unattended -nop4 -nosplash -log)"
     ],
     "deny": [],
     "ask": []

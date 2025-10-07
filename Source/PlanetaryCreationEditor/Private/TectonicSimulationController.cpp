@@ -30,6 +30,9 @@
 #include "HAL/PlatformTime.h"
 #include "HeightmapColorPalette.h"
 #include "Engine/Texture2D.h"
+#if UE_BUILD_DEVELOPMENT
+#include "HAL/IConsoleManager.h"
+#endif
 
 namespace PlanetaryCreation
 {
@@ -39,6 +42,31 @@ namespace PlanetaryCreation
         static const FName ElevationScaleParamName(TEXT("ElevationScale"));
     }
 }
+
+#if UE_BUILD_DEVELOPMENT
+static void ExecuteTerraneMeshSurgeryCommand()
+{
+    if (!GEditor)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[TerraneSpike] GEditor not available"));
+        return;
+    }
+
+    if (UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>())
+    {
+        Service->RunTerraneMeshSurgerySpike();
+    }
+    else
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[TerraneSpike] TectonicSimulationService not found"));
+    }
+}
+
+static FAutoConsoleCommand GTerraneMeshSurgeryCmd(
+    TEXT("planetary.TerraneMeshSurgery"),
+    TEXT("Run the development terrane mesh surgery spike and log results."),
+    FConsoleCommandDelegate::CreateStatic(&ExecuteTerraneMeshSurgeryCommand));
+#endif
 
 FTectonicSimulationController::FTectonicSimulationController() = default;
 FTectonicSimulationController::~FTectonicSimulationController()
@@ -184,11 +212,12 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
                                            Service->GetParameters().bEnableContinentalAmplification) &&
                                           Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
         Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
+        Snapshot.VisualizationMode = Service->GetParameters().VisualizationMode;
         Snapshot.bHighlightSeaLevel = Service->IsHighlightSeaLevelEnabled();
+        Snapshot.StageBProfile = Service->GetLatestStageBProfile();
     }
 
     // Capture visualization state from controller
-    Snapshot.bShowVelocityField = bShowVelocityField;
     Snapshot.ElevationMode = CurrentElevationMode;
 
     return Snapshot;
@@ -504,17 +533,35 @@ const FTectonicSimulationController::FStaticLODData& FTectonicSimulationControll
     return Data;
 }
 
-void FTectonicSimulationController::SetVelocityVisualizationEnabled(bool bEnabled)
+void FTectonicSimulationController::SetVisualizationMode(ETectonicVisualizationMode Mode)
 {
-    if (bShowVelocityField != bEnabled)
+    if (UTectonicSimulationService* Service = GetService())
     {
-        bShowVelocityField = bEnabled;
+        const ETectonicVisualizationMode CurrentMode = Service->GetVisualizationMode();
+        if (CurrentMode == Mode)
+        {
+            return;
+        }
+
+        Service->SetVisualizationMode(Mode);
+
         if (!RefreshPreviewColors())
         {
             RebuildPreview(); // Fallback when geometry/LOD state forces rebuild
         }
-        DrawVelocityVectorField(); // Milestone 4 Task 3.2: Draw velocity arrows
+
+        // Velocity overlay persists as a debug layer; clear/rebuild whenever the mode changes.
+        DrawVelocityVectorField();
     }
+}
+
+ETectonicVisualizationMode FTectonicSimulationController::GetVisualizationMode() const
+{
+    if (const UTectonicSimulationService* Service = GetService())
+    {
+        return Service->GetVisualizationMode();
+    }
+    return ETectonicVisualizationMode::PlateColors;
 }
 
 void FTectonicSimulationController::SetElevationMode(EElevationMode Mode)
@@ -617,17 +664,11 @@ void FTectonicSimulationController::SetGPUPreviewMode(bool bEnabled)
         if (UTectonicSimulationService* Service = GetService())
         {
             Service->SetSkipCPUAmplification(bEnabled);
-
-            if (bEnabled && !Service->GetParameters().bEnableHeightmapVisualization)
-            {
-                Service->SetHeightmapVisualizationEnabled(true);
-            }
         }
 
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] GPU preview mode %s"),
             bEnabled ? TEXT("ENABLED") : TEXT("DISABLED"));
 
-        // Invalidate height texture on disable
         if (!bEnabled)
         {
             GPUHeightTexture.SafeRelease();
@@ -636,9 +677,17 @@ void FTectonicSimulationController::SetGPUPreviewMode(bool bEnabled)
         else
         {
             EnsureGPUPreviewTextureAsset();
+
+            if (!RefreshPreviewColors())
+            {
+                UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[GPUPreview] Refresh preview colors pending (async build in flight)"));
+            }
         }
 
-        RebuildPreview(); // Refresh mesh with new preview mode
+        if (!bEnabled)
+        {
+            RebuildPreview();
+        }
     }
 }
 
@@ -1155,12 +1204,10 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     TArray<FPreviewMeshVertex> PreviewVertices;
     PreviewVertices.SetNum(SourceVertexCount);
 
-    const bool bShowVelocity = Snapshot.bShowVelocityField;
-    // GPU preview mode uses heightmap visualization for WPO displacement, but vertex colors should still show plates by default
-    // Only force elevation colors if BOTH conditions are met:
-    // 1. Heightmap visualization is enabled (for GPU material)
-    // 2. User hasn't explicitly requested a different visualization mode (velocity field, stress, etc.)
-    const bool bElevColor = false; // Default: show plate colors in vertex stream
+    const ETectonicVisualizationMode VisualizationMode = Snapshot.VisualizationMode;
+    const bool bShowVelocity = VisualizationMode == ETectonicVisualizationMode::Velocity;
+    const bool bStressColor = VisualizationMode == ETectonicVisualizationMode::Stress;
+    const bool bElevColor = (VisualizationMode == ETectonicVisualizationMode::Elevation) && EffectiveElevations != nullptr;
     const bool bHighlightSeaLevel = Snapshot.bHighlightSeaLevel;
     const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
 
@@ -1265,7 +1312,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
                 VertexColor = FColor::White;
             }
         }
-        else if (VertexStressValues.IsValidIndex(Index))
+        else if (bStressColor && VertexStressValues.IsValidIndex(Index))
         {
             VertexColor = GetStressColor(VertexStressValues[Index]);
         }

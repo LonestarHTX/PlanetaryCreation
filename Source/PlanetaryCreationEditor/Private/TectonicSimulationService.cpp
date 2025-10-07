@@ -15,6 +15,10 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "RHIGPUReadback.h"
 #include "OceanicAmplificationGPU.h"
 #include "ExemplarTextureArray.h"
+#include <queue>
+#if WITH_EDITOR
+#include "Editor.h"
+#endif
 
 #if WITH_EDITOR
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
@@ -22,7 +26,112 @@ static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
     0,
     TEXT("Enable GPU compute path for Stage B amplification. 0 = CPU (default), 1 = GPU when available."),
     ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarPlanetaryCreationVisualizationMode(
+    TEXT("r.PlanetaryCreation.VisualizationMode"),
+    static_cast<int32>(ETectonicVisualizationMode::PlateColors),
+    TEXT("Set visualization overlay: 0=Plate Colors, 1=Elevation Heatmap, 2=Velocity Field, 3=Stress Gradient."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarPlanetaryCreationStageBProfiling(
+    TEXT("r.PlanetaryCreation.StageBProfiling"),
+    0,
+    TEXT("Enable detailed Stage B profiling logs. 0=Off, 1=Per-step log."),
+    ECVF_Default);
+
+static void HandleVisualizationModeConsoleChange(IConsoleVariable* Variable)
+{
+    if (!Variable)
+    {
+        return;
+    }
+
+    const int32 ModeValue = Variable->GetInt();
+    const ETectonicVisualizationMode Mode = static_cast<ETectonicVisualizationMode>(FMath::Clamp(ModeValue, 0, 3));
+
+    if (!GEditor)
+    {
+        return;
+    }
+
+    if (UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>())
+    {
+        Service->SetVisualizationMode(Mode);
+    }
+}
+
+struct FPlanetaryCreationVisualizationModeCVarBinder
+{
+    FPlanetaryCreationVisualizationModeCVarBinder()
+    {
+        if (IConsoleVariable* Var = CVarPlanetaryCreationVisualizationMode.AsVariable())
+        {
+            Var->SetOnChangedCallback(FConsoleVariableDelegate::CreateStatic(&HandleVisualizationModeConsoleChange));
+        }
+    }
+};
+
+static FPlanetaryCreationVisualizationModeCVarBinder GPlanetaryCreationVisualizationModeCVarBinder;
 #endif
+
+#if UE_BUILD_DEVELOPMENT
+void UTectonicSimulationService::LogPlateElevationMismatches(const TCHAR* ContextLabel, int32 SampleCount, int32 MaxLogged) const
+{
+    if (RenderVertices.Num() == 0 || VertexPlateAssignments.Num() == 0)
+    {
+        return;
+    }
+
+    const int32 SampleLimit = FMath::Clamp(SampleCount, 0, RenderVertices.Num());
+    if (SampleLimit <= 0)
+    {
+        return;
+    }
+
+    const TCHAR* Label = (ContextLabel && *ContextLabel) ? ContextLabel : TEXT("Unknown");
+    constexpr double ContinentalThresholdMeters = -1000.0;
+
+    int32 MismatchCount = 0;
+
+    for (int32 VertexIdx = 0; VertexIdx < SampleLimit; ++VertexIdx)
+    {
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        if (!(PlateID != INDEX_NONE && Plates.IsValidIndex(PlateID)))
+        {
+            continue;
+        }
+
+        const FTectonicPlate& Plate = Plates[PlateID];
+        const double Elevation = VertexElevationValues.IsValidIndex(VertexIdx) ? VertexElevationValues[VertexIdx] : 0.0;
+        const bool bPlateContinental = (Plate.CrustType == ECrustType::Continental);
+        const bool bElevationContinental = Elevation > ContinentalThresholdMeters;
+
+        if (bPlateContinental != bElevationContinental)
+        {
+            if (MismatchCount < MaxLogged)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[PlateDiag:%s] Vertex %d Plate=%d Type=%s Elev=%.1f m"),
+                    Label,
+                    VertexIdx,
+                    PlateID,
+                    bPlateContinental ? TEXT("Continental") : TEXT("Oceanic"),
+                    Elevation);
+            }
+            ++MismatchCount;
+        }
+    }
+
+    if (MismatchCount > 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[PlateDiag:%s] %d mismatches detected within first %d vertices"),
+            Label,
+            MismatchCount,
+            SampleLimit);
+    }
+}
+#endif // UE_BUILD_DEVELOPMENT
 
 void UTectonicSimulationService::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -44,6 +153,7 @@ void UTectonicSimulationService::Deinitialize()
     VertexPlateAssignments.Reset();
     VertexVelocities.Reset();
     VertexStressValues.Reset();
+    RenderVertexBoundaryCache.Reset();
     Super::Deinitialize();
 }
 
@@ -324,6 +434,7 @@ void UTectonicSimulationService::ResetSimulation()
     VertexErosionRates.Empty();
     VertexSedimentThickness.Empty();
     VertexCrustAge.Empty();
+    RenderVertexBoundaryCache.Empty();
 
     // Milestone 6: Clear amplification arrays
     VertexRidgeDirections.Empty();
@@ -438,6 +549,10 @@ void UTectonicSimulationService::ResetSimulation()
     UE_LOG(LogPlanetaryCreation, Warning, TEXT("[DEBUG] ResetSimulation: Initialized %d vertices (%d oceanic @ -6000m, %d continental @ 0m)"),
         VertexCount, OceanicCount, ContinentalCount);
 
+#if UE_BUILD_DEVELOPMENT
+    LogPlateElevationMismatches(TEXT("Reset"));
+#endif
+
     // DEBUG: Check vertex 0 specifically
     if (VertexCount > 0 && VertexPlateAssignments.Num() > 0)
     {
@@ -476,20 +591,26 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
     for (int32 Step = 0; Step < StepCount; ++Step)
     {
-#if WITH_EDITOR
-        ProcessPendingOceanicGPUReadbacks(false);
-#endif
         TRACE_CPUPROFILER_EVENT_SCOPE(TectonicStep);
         const double StepLoopStart = FPlatformTime::Seconds();
+        const int32 AbsoluteStep = (TotalStepsSimulated - StepCount) + (Step + 1);
 
         double ErosionTime = 0.0;
         double SedimentTime = 0.0;
         double DampeningTime = 0.0;
         double BaselineInitTime = 0.0;
         double RidgeDirectionTime = 0.0;
-        double OceanicAmpTime = 0.0;
-        double ContinentalAmpTime = 0.0;
+        double OceanicCpuTime = 0.0;
+        double OceanicGpuDispatchTime = 0.0;
+        double ContinentalCpuTime = 0.0;
+        double ContinentalGpuDispatchTime = 0.0;
+        double GpuReadbackSeconds = 0.0;
+        double CacheInvalidationSeconds = 0.0;
         bool bSurfaceDataChanged = false;
+
+#if WITH_EDITOR
+        ProcessPendingOceanicGPUReadbacks(false, &GpuReadbackSeconds);
+#endif
 
         // Phase 2 Task 4: Migrate plate centroids via Euler pole rotation
         MigratePlateCentroids(StepDurationMy);
@@ -539,6 +660,12 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             ErosionTime += FPlatformTime::Seconds() - BlockStart;
             bSurfaceDataChanged = true;
         }
+#if UE_BUILD_DEVELOPMENT
+        {
+            const FString Label = FString::Printf(TEXT("Step%d-AfterContinentalErosion"), AbsoluteStep);
+            LogPlateElevationMismatches(*Label);
+        }
+#endif
 
         // Milestone 5 Task 2.2: Redistribute eroded sediment
         {
@@ -548,6 +675,12 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             SedimentTime += FPlatformTime::Seconds() - BlockStart;
             bSurfaceDataChanged = true;
         }
+#if UE_BUILD_DEVELOPMENT
+        {
+            const FString Label = FString::Printf(TEXT("Step%d-AfterSedimentTransport"), AbsoluteStep);
+            LogPlateElevationMismatches(*Label);
+        }
+#endif
 
         // Milestone 5 Task 2.3: Apply oceanic dampening
         {
@@ -557,6 +690,12 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             DampeningTime += FPlatformTime::Seconds() - BlockStart;
             bSurfaceDataChanged = true;
         }
+#if UE_BUILD_DEVELOPMENT
+        {
+            const FString Label = FString::Printf(TEXT("Step%d-AfterOceanicDampening"), AbsoluteStep);
+            LogPlateElevationMismatches(*Label);
+        }
+#endif
 
         // Ensure amplified elevation starts from current base elevation before Stage B passes run (or remain disabled).
         {
@@ -593,8 +732,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                     bUsedGPU = ApplyOceanicAmplificationGPU();
                     if (bUsedGPU)
                     {
-                        OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
-                        ProcessPendingOceanicGPUReadbacks(true);
+                        OceanicGpuDispatchTime += FPlatformTime::Seconds() - BlockStart;
+                        ProcessPendingOceanicGPUReadbacks(true, &GpuReadbackSeconds);
                     }
                 }
 #endif
@@ -604,7 +743,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                         TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
                         const double BlockStart = FPlatformTime::Seconds();
                         ApplyOceanicAmplification();
-                        OceanicAmpTime += FPlatformTime::Seconds() - BlockStart;
+                        OceanicCpuTime += FPlatformTime::Seconds() - BlockStart;
                         bSurfaceDataChanged = true;
                     }
                 }
@@ -627,7 +766,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 bUsedGPU = ApplyContinentalAmplificationGPU();
                 if (bUsedGPU)
                 {
-                    ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
+                    ContinentalGpuDispatchTime += FPlatformTime::Seconds() - BlockStart;
+                    ProcessPendingOceanicGPUReadbacks(true, &GpuReadbackSeconds);
                 }
             }
 #endif
@@ -636,10 +776,16 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
                 const double BlockStart = FPlatformTime::Seconds();
                 ApplyContinentalAmplification();
-                ContinentalAmpTime += FPlatformTime::Seconds() - BlockStart;
+                ContinentalCpuTime += FPlatformTime::Seconds() - BlockStart;
                 bSurfaceDataChanged = true;
             }
         }
+#if UE_BUILD_DEVELOPMENT
+        {
+            const FString Label = FString::Printf(TEXT("Step%d-AfterStageB"), AbsoluteStep);
+            LogPlateElevationMismatches(*Label);
+        }
+#endif
 
         const int32 VoronoiInterval = FMath::Max(1, Parameters.VoronoiRefreshIntervalSteps);
         if (StepsSinceLastVoronoiRefresh >= VoronoiInterval)
@@ -655,6 +801,12 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[Voronoi] Refresh completed in %.2f ms (interval=%d)"),
                 (FPlatformTime::Seconds() - VoronoiStart) * 1000.0,
                 VoronoiInterval);
+#if UE_BUILD_DEVELOPMENT
+            {
+                const FString Label = FString::Printf(TEXT("Step%d-AfterVoronoiRefresh"), AbsoluteStep);
+                LogPlateElevationMismatches(*Label);
+            }
+#endif
         }
 
         // Milestone 4 Task 1.2: Detect and execute plate splits/merges
@@ -683,19 +835,21 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         CaptureHistorySnapshot();
 
         const double StepElapsed = FPlatformTime::Seconds() - StepLoopStart;
-        const double StageBDuration = BaselineInitTime + RidgeDirectionTime + OceanicAmpTime + ContinentalAmpTime;
+        const double OceanicCombinedTime = OceanicCpuTime + OceanicGpuDispatchTime;
+        const double ContinentalCombinedTime = ContinentalCpuTime + ContinentalGpuDispatchTime;
+        const double StageBDuration = BaselineInitTime + RidgeDirectionTime + OceanicCombinedTime + ContinentalCombinedTime + GpuReadbackSeconds + CacheInvalidationSeconds;
 
-        const int32 AbsoluteStep = (TotalStepsSimulated - StepCount) + (Step + 1);
         UE_LOG(LogPlanetaryCreation, Log,
-            TEXT("[StepTiming] Step %d | LOD L%d | Total %.2f ms | StageB %.2f ms (Baseline %.2f | Ridge %.2f | Oceanic %.2f | Continental %.2f) | Erosion %.2f ms | Sediment %.2f ms | Dampening %.2f ms"),
+            TEXT("[StepTiming] Step %d | LOD L%d | Total %.2f ms | StageB %.2f ms (Baseline %.2f | Ridge %.2f | Oceanic %.2f | Continental %.2f | Readback %.2f) | Erosion %.2f ms | Sediment %.2f ms | Dampening %.2f ms"),
             AbsoluteStep,
             Parameters.RenderSubdivisionLevel,
             StepElapsed * 1000.0,
             StageBDuration * 1000.0,
             BaselineInitTime * 1000.0,
             RidgeDirectionTime * 1000.0,
-            OceanicAmpTime * 1000.0,
-            ContinentalAmpTime * 1000.0,
+            OceanicCombinedTime * 1000.0,
+            ContinentalCombinedTime * 1000.0,
+            GpuReadbackSeconds * 1000.0,
             ErosionTime * 1000.0,
             SedimentTime * 1000.0,
             DampeningTime * 1000.0);
@@ -703,18 +857,48 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         if (StageBDuration > StageBBudgetSeconds)
         {
             UE_LOG(LogPlanetaryCreation, Warning,
-                TEXT("[StageB][Perf] Step %d LOD L%d took %.2f s (StageB %.2f s | Baseline %.2f s, Ridge %.2f s, Oceanic %.2f s, Continental %.2f s | Erosion %.2f s, Sediment %.2f s, Dampening %.2f s)"),
+                TEXT("[StageB][Perf] Step %d LOD L%d took %.2f s (StageB %.2f s | Baseline %.2f s, Ridge %.2f s, Oceanic %.2f s, Continental %.2f s, Readback %.2f s | Erosion %.2f s, Sediment %.2f s, Dampening %.2f s)"),
                 Step + 1,
                 Parameters.RenderSubdivisionLevel,
                 StepElapsed,
                 StageBDuration,
                 BaselineInitTime,
                 RidgeDirectionTime,
-                OceanicAmpTime,
-                ContinentalAmpTime,
+                OceanicCombinedTime,
+                ContinentalCombinedTime,
+                GpuReadbackSeconds,
                 ErosionTime,
                 SedimentTime,
                 DampeningTime);
+        }
+
+        FStageBProfile Profile;
+        Profile.BaselineMs = BaselineInitTime * 1000.0;
+        Profile.RidgeMs = RidgeDirectionTime * 1000.0;
+        Profile.OceanicCPUMs = OceanicCpuTime * 1000.0;
+        Profile.OceanicGPUMs = OceanicGpuDispatchTime * 1000.0;
+        Profile.ContinentalCPUMs = ContinentalCpuTime * 1000.0;
+        Profile.ContinentalGPUMs = ContinentalGpuDispatchTime * 1000.0;
+        Profile.GpuReadbackMs = GpuReadbackSeconds * 1000.0;
+        Profile.CacheInvalidationMs = CacheInvalidationSeconds * 1000.0;
+        LatestStageBProfile = Profile;
+
+        const int32 StageBLogMode = CVarPlanetaryCreationStageBProfiling.GetValueOnGameThread();
+        if (StageBLogMode > 0)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[StageB][Profile] Step %d | LOD L%d | Baseline %.2f ms | Ridge %.2f ms | OceanicCPU %.2f ms | OceanicGPU %.2f ms | ContinentalCPU %.2f ms | ContinentalGPU %.2f ms | Readback %.2f ms | Cache %.2f ms | Total %.2f ms"),
+                AbsoluteStep,
+                Parameters.RenderSubdivisionLevel,
+                Profile.BaselineMs,
+                Profile.RidgeMs,
+                Profile.OceanicCPUMs,
+                Profile.OceanicGPUMs,
+                Profile.ContinentalCPUMs,
+                Profile.ContinentalGPUMs,
+                Profile.GpuReadbackMs,
+                Profile.CacheInvalidationMs,
+                Profile.TotalMs());
         }
     }
 
@@ -732,9 +916,22 @@ void UTectonicSimulationService::SetSkipCPUAmplification(bool bInSkip)
 
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
 {
-    if (Parameters.bEnableHeightmapVisualization != NewParams.bEnableHeightmapVisualization)
+    if (Parameters.VisualizationMode != NewParams.VisualizationMode)
     {
         FTectonicSimulationParameters ComparableParams = NewParams;
+        ComparableParams.VisualizationMode = Parameters.VisualizationMode;
+        ComparableParams.bEnableHeightmapVisualization = Parameters.bEnableHeightmapVisualization;
+
+        if (FMemory::Memcmp(&ComparableParams, &Parameters, sizeof(FTectonicSimulationParameters)) == 0)
+        {
+            SetVisualizationMode(NewParams.VisualizationMode);
+            return;
+        }
+    }
+    else if (Parameters.bEnableHeightmapVisualization != NewParams.bEnableHeightmapVisualization)
+    {
+        FTectonicSimulationParameters ComparableParams = NewParams;
+        ComparableParams.VisualizationMode = Parameters.VisualizationMode;
         ComparableParams.bEnableHeightmapVisualization = Parameters.bEnableHeightmapVisualization;
 
         if (FMemory::Memcmp(&ComparableParams, &Parameters, sizeof(FTectonicSimulationParameters)) == 0)
@@ -745,6 +942,7 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
     }
 
     Parameters = NewParams;
+    Parameters.bEnableHeightmapVisualization = (Parameters.VisualizationMode == ETectonicVisualizationMode::Elevation);
 
     // M5 Phase 3: Validate and clamp PlanetRadius to prevent invalid simulations
     const double MinRadius = 10000.0;   // 10 km (minimum for asteroid-like bodies)
@@ -779,18 +977,37 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
 
 void UTectonicSimulationService::SetHeightmapVisualizationEnabled(bool bEnabled)
 {
-    if (Parameters.bEnableHeightmapVisualization == bEnabled)
+    const ETectonicVisualizationMode TargetMode = bEnabled ? ETectonicVisualizationMode::Elevation : ETectonicVisualizationMode::PlateColors;
+    if (Parameters.VisualizationMode == TargetMode && Parameters.bEnableHeightmapVisualization == bEnabled)
     {
         return;
     }
 
-    Parameters.bEnableHeightmapVisualization = bEnabled;
+    SetVisualizationMode(TargetMode);
+}
+
+void UTectonicSimulationService::SetVisualizationMode(ETectonicVisualizationMode Mode)
+{
+    if (Parameters.VisualizationMode == Mode)
+    {
+        return;
+    }
+
+    Parameters.VisualizationMode = Mode;
+    Parameters.bEnableHeightmapVisualization = (Mode == ETectonicVisualizationMode::Elevation);
 
     // Increment surface data version so cached LODs rebuild with updated vertex colors.
     SurfaceDataVersion++;
 
-    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Visualization] Heightmap visualization %s (SurfaceVersion=%d)"),
-        bEnabled ? TEXT("enabled") : TEXT("disabled"), SurfaceDataVersion);
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Visualization] Mode set to %d (SurfaceVersion=%d)"),
+        static_cast<int32>(Parameters.VisualizationMode), SurfaceDataVersion);
+
+#if WITH_EDITOR
+    if (IConsoleVariable* VisualizationCVar = CVarPlanetaryCreationVisualizationMode.AsVariable())
+    {
+        VisualizationCVar->Set(static_cast<int32>(Parameters.VisualizationMode), ECVF_SetByCode);
+    }
+#endif
 }
 
 void UTectonicSimulationService::SetAutomaticLODEnabled(bool bEnabled)
@@ -1681,20 +1898,38 @@ void UTectonicSimulationService::GenerateRenderMesh()
 
     BuildRenderVertexAdjacency();
 
-    // Validate Euler characteristic (V - E + F = 2)
-    const int32 V = RenderVertices.Num();
-    const int32 F = Faces.Num();
-    const int32 E = (F * 3) / 2; // Each edge shared by 2 faces
-    const int32 EulerChar = V - E + F;
+    // Validate Euler characteristic (V - E + F = 2) when we have plate assignments
+    if (VertexPlateAssignments.Num() == RenderVertices.Num())
+    {
+        int32 ActiveVertexCount = 0;
+        for (int32 VertexIdx = 0; VertexIdx < VertexPlateAssignments.Num(); ++VertexIdx)
+        {
+            if (VertexPlateAssignments[VertexIdx] != INDEX_NONE)
+            {
+                ActiveVertexCount++;
+            }
+        }
 
-    if (EulerChar != 2)
-    {
-        UE_LOG(LogPlanetaryCreation, Warning, TEXT("Render mesh Euler characteristic validation failed: V=%d, E=%d, F=%d, χ=%d (expected 2)"),
-            V, E, F, EulerChar);
-    }
-    else
-    {
-        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Render mesh topology validated: Euler characteristic χ=2"));
+        if (ActiveVertexCount == 0)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("Render mesh generated without any active vertices; skipping Euler validation."));
+        }
+        else
+        {
+            const int32 F = Faces.Num();
+            const int32 E = (F * 3) / 2; // Each edge shared by 2 faces
+            const int32 EulerChar = ActiveVertexCount - E + F;
+
+            if (EulerChar != 2)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("Render mesh Euler characteristic validation failed: V=%d, E=%d, F=%d, χ=%d (expected 2)"),
+                    ActiveVertexCount, E, F, EulerChar);
+            }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, Verbose, TEXT("Render mesh topology validated: Euler characteristic χ=2"));
+            }
+        }
     }
 
     MarkAllRidgeDirectionsDirty();
@@ -1743,10 +1978,16 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     const double WarpAmplitude = Parameters.VoronoiWarpingAmplitude;
     const double WarpFrequency = Parameters.VoronoiWarpingFrequency;
 
+    constexpr double ContinentalThresholdMeters = -1000.0;
+#if UE_BUILD_DEVELOPMENT
+    int32 ElevationOverrideCount = 0;
+#endif
+
     for (int32 i = 0; i < RenderVertices.Num(); ++i)
     {
         int32 ClosestPlateID = INDEX_NONE;
         double MinDistSq = TNumericLimits<double>::Max();
+        const FTectonicPlate* ClosestPlate = nullptr;
 
         const FVector3d& Vertex = RenderVertices[i];
 
@@ -1774,16 +2015,75 @@ void UTectonicSimulationService::BuildVoronoiMapping()
             {
                 MinDistSq = DistSq;
                 ClosestPlateID = Plate.PlateID;
+                ClosestPlate = &Plate;
             }
         }
 
         VertexPlateAssignments[i] = ClosestPlateID;
+
+        if (ClosestPlate && VertexElevationValues.IsValidIndex(i))
+        {
+            const bool bShouldBeOceanic = (ClosestPlate->CrustType == ECrustType::Oceanic);
+            const bool bElevationLooksContinental = VertexElevationValues[i] > ContinentalThresholdMeters;
+            const bool bCurrentlyOceanic = !bElevationLooksContinental;
+
+            if (bCurrentlyOceanic != bShouldBeOceanic)
+            {
+                const double BaselineElevation = bShouldBeOceanic
+                    ? PaperElevationConstants::AbyssalPlainDepth_m
+                    : PaperElevationConstants::ContinentalBaseline_m;
+
+                VertexElevationValues[i] = BaselineElevation;
+
+                if (VertexAmplifiedElevation.IsValidIndex(i))
+                {
+                    VertexAmplifiedElevation[i] = BaselineElevation;
+                }
+
+                if (VertexSedimentThickness.IsValidIndex(i))
+                {
+                    VertexSedimentThickness[i] = 0.0;
+                }
+
+                if (VertexErosionRates.IsValidIndex(i))
+                {
+                    VertexErosionRates[i] = 0.0;
+                }
+
+                if (VertexCrustAge.IsValidIndex(i))
+                {
+                    if (bShouldBeOceanic && !bCurrentlyOceanic)
+                    {
+                        // Newly formed oceanic crust emerging at a divergent boundary.
+                        VertexCrustAge[i] = 0.0;
+                    }
+                    else if (!bShouldBeOceanic && bCurrentlyOceanic)
+                    {
+                        // Transitioning into continental crust; treat as mature lithosphere.
+                        VertexCrustAge[i] = 200.0; // 200 My mirrors "old crust" bucket in tests
+                    }
+                }
+
+#if UE_BUILD_DEVELOPMENT
+                ++ElevationOverrideCount;
+#endif
+            }
+        }
     }
 
     const double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Built Voronoi mapping: %d vertices → %d plates in %.2f ms (avg %.3f μs per vertex)"),
         RenderVertices.Num(), Plates.Num(), ElapsedMs, (ElapsedMs * 1000.0) / RenderVertices.Num());
+
+#if UE_BUILD_DEVELOPMENT
+    if (ElevationOverrideCount > 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[Voronoi] Reset %d vertices to crust baselines after reassignment"),
+            ElevationOverrideCount);
+    }
+#endif
 
     // Validate all vertices assigned
     int32 UnassignedCount = 0;
@@ -1799,6 +2099,8 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     {
         UE_LOG(LogPlanetaryCreation, Warning, TEXT("Voronoi mapping incomplete: %d vertices unassigned"), UnassignedCount);
     }
+
+    BuildRenderVertexBoundaryCache();
 }
 
 void UTectonicSimulationService::BuildRenderVertexAdjacency()
@@ -1847,6 +2149,7 @@ void UTectonicSimulationService::BuildRenderVertexAdjacency()
 
     RenderVertexAdjacency.SetNum(RunningTotal);
     RenderVertexAdjacencyWeights.SetNum(RunningTotal);
+    RenderVertexAdjacencyWeightTotals.SetNum(VertexCount);
 
     const double SmoothingRadius = FMath::Max(Parameters.OceanicDampeningSmoothingRadius, UE_DOUBLE_SMALL_NUMBER);
     const double InvTwoRadiusSq = 1.0 / (2.0 * SmoothingRadius * SmoothingRadius);
@@ -1865,6 +2168,8 @@ void UTectonicSimulationService::BuildRenderVertexAdjacency()
 
         const FVector3d& VertexPos = RenderVertices[VertexIdx];
 
+        float WeightSum = 0.0f;
+
         for (int32 LocalIdx = 0; LocalIdx < Count; ++LocalIdx)
         {
             const int32 NeighborIdx = SortedNeighbors[LocalIdx];
@@ -1882,8 +2187,12 @@ void UTectonicSimulationService::BuildRenderVertexAdjacency()
                 Weight = FMath::Exp(-(Geodesic * Geodesic) * InvTwoRadiusSq);
             }
 
-            RenderVertexAdjacencyWeights[Start + LocalIdx] = static_cast<float>(Weight);
+            const float WeightFloat = static_cast<float>(Weight);
+            RenderVertexAdjacencyWeights[Start + LocalIdx] = WeightFloat;
+            WeightSum += WeightFloat;
         }
+
+        RenderVertexAdjacencyWeightTotals[VertexIdx] = WeightSum;
     }
 
     BuildRenderVertexReverseAdjacency();
@@ -1925,6 +2234,438 @@ void UTectonicSimulationService::BuildRenderVertexReverseAdjacency()
             RenderVertexReverseAdjacency[Offset] = ReverseIndex;
         }
     }
+}
+
+void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
+{
+    const int32 VertexCount = RenderVertices.Num();
+    RenderVertexBoundaryCache.SetNum(VertexCount);
+
+    if (VertexCount == 0)
+    {
+        return;
+    }
+
+    if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
+    {
+        BuildRenderVertexAdjacency();
+    }
+
+    struct FPropagationNode
+    {
+        int32 VertexIdx;
+        double Distance;
+        int32 SourcePlateID;
+        FVector3d Tangent;
+    };
+
+    struct FPropagationCompare
+    {
+        bool operator()(const FPropagationNode& A, const FPropagationNode& B) const
+        {
+            return A.Distance > B.Distance;
+        }
+    };
+
+    std::priority_queue<FPropagationNode, std::vector<FPropagationNode>, FPropagationCompare> Frontier;
+
+    TArray<double> Distance;
+    Distance.Init(std::numeric_limits<double>::infinity(), VertexCount);
+
+    auto ResetInfo = [&](int32 Index)
+    {
+        FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[Index];
+        Info.DistanceRadians = TNumericLimits<float>::Max();
+        Info.BoundaryTangent = FVector3d::ZeroVector;
+        Info.SourcePlateID = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
+        Info.bHasBoundary = false;
+    };
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        ResetInfo(VertexIdx);
+    }
+
+    const auto GetPlateID = [&](int32 Index) -> int32
+    {
+        return VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
+    };
+
+    // Quantize render normals for fast lookup when seeding from shared boundaries
+    TMap<FIntVector, TArray<int32>> PositionBuckets;
+    PositionBuckets.Reserve(VertexCount);
+
+    const double QuantizeScale = 10000.0;
+    auto QuantizeKey = [&](const FVector3d& Normal) -> FIntVector
+    {
+        const FVector3d Unit = Normal.GetSafeNormal();
+        return FIntVector(
+            FMath::RoundToInt(Unit.X * QuantizeScale),
+            FMath::RoundToInt(Unit.Y * QuantizeScale),
+            FMath::RoundToInt(Unit.Z * QuantizeScale));
+    };
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        PositionBuckets.FindOrAdd(QuantizeKey(RenderVertices[VertexIdx])).Add(VertexIdx);
+    }
+
+    TSet<int32> SeededVertices;
+    SeededVertices.Reserve(VertexCount / 4);
+
+    auto AddBoundarySeed = [&](int32 VertexIdx, int32 PlateID, const FVector3d& Tangent)
+    {
+        if (VertexIdx == INDEX_NONE || !RenderVertices.IsValidIndex(VertexIdx))
+        {
+            return;
+        }
+        if (PlateID == INDEX_NONE)
+        {
+            return;
+        }
+        if (SeededVertices.Contains(VertexIdx))
+        {
+            return;
+        }
+
+        const FVector3d NormalizedTangent = Tangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+        if (NormalizedTangent.IsNearlyZero())
+        {
+            return;
+        }
+
+        SeededVertices.Add(VertexIdx);
+
+        FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[VertexIdx];
+        Info.bHasBoundary = true;
+        Info.SourcePlateID = PlateID;
+        Info.BoundaryTangent = NormalizedTangent;
+        Info.DistanceRadians = 0.0f;
+
+        Distance[VertexIdx] = 0.0;
+
+        FPropagationNode Node;
+        Node.VertexIdx = VertexIdx;
+        Node.Distance = 0.0;
+        Node.SourcePlateID = PlateID;
+        Node.Tangent = NormalizedTangent;
+        Frontier.push(Node);
+    };
+
+    auto GatherCandidates = [&](const FVector3d& TargetNormal, int32 PlateID, TArray<int32>& OutCandidates)
+    {
+        const FIntVector BaseKey = QuantizeKey(TargetNormal);
+        for (int32 dx = -1; dx <= 1 && OutCandidates.IsEmpty(); ++dx)
+        {
+            for (int32 dy = -1; dy <= 1 && OutCandidates.IsEmpty(); ++dy)
+            {
+                for (int32 dz = -1; dz <= 1 && OutCandidates.IsEmpty(); ++dz)
+                {
+                    const FIntVector Key(BaseKey.X + dx, BaseKey.Y + dy, BaseKey.Z + dz);
+                    if (const TArray<int32>* Bucket = PositionBuckets.Find(Key))
+                    {
+                        for (int32 CandidateIdx : *Bucket)
+                        {
+                            if (GetPlateID(CandidateIdx) == PlateID)
+                            {
+                                OutCandidates.Add(CandidateIdx);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!OutCandidates.IsEmpty())
+        {
+            return;
+        }
+
+        // Fallback search using global scan (rare)
+        double BestDot = -1.0;
+        int32 BestIdx = INDEX_NONE;
+        const FVector3d Target = TargetNormal.GetSafeNormal();
+        for (int32 CandidateIdx = 0; CandidateIdx < VertexCount; ++CandidateIdx)
+        {
+            if (GetPlateID(CandidateIdx) != PlateID)
+            {
+                continue;
+            }
+
+            const double Dot = RenderVertices[CandidateIdx].GetSafeNormal() | Target;
+            if (Dot > BestDot)
+            {
+                BestDot = Dot;
+                BestIdx = CandidateIdx;
+            }
+        }
+
+        if (BestIdx != INDEX_NONE)
+        {
+            OutCandidates.Add(BestIdx);
+        }
+    };
+
+    // Seed from shared boundary vertices
+    for (const auto& BoundaryPair : Boundaries)
+    {
+        const FPlateBoundary& Boundary = BoundaryPair.Value;
+        if (Boundary.BoundaryType != EBoundaryType::Divergent)
+        {
+            continue;
+        }
+
+        const int32 PlateA = BoundaryPair.Key.Key;
+        const int32 PlateB = BoundaryPair.Key.Value;
+        const TArray<int32>& Shared = Boundary.SharedEdgeVertices;
+        const int32 EdgeCount = Shared.Num();
+        if (EdgeCount < 2)
+        {
+            continue;
+        }
+
+        for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount; ++EdgeIdx)
+        {
+            const int32 NextIdx = (EdgeIdx + 1) % EdgeCount;
+            if (!SharedVertices.IsValidIndex(Shared[EdgeIdx]) || !SharedVertices.IsValidIndex(Shared[NextIdx]))
+            {
+                continue;
+            }
+
+            const FVector3d EdgeV0 = SharedVertices[Shared[EdgeIdx]].GetSafeNormal();
+            const FVector3d EdgeV1 = SharedVertices[Shared[NextIdx]].GetSafeNormal();
+            const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
+            if (PlaneNormal.IsNearlyZero())
+            {
+                continue;
+            }
+
+            const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, EdgeV0).GetSafeNormal();
+            if (Tangent.IsNearlyZero())
+            {
+                continue;
+            }
+
+            auto SeedPlate = [&](int32 PlateID)
+            {
+                if (PlateID == INDEX_NONE)
+                {
+                    return;
+                }
+
+                TArray<int32> Candidates;
+                GatherCandidates(EdgeV0, PlateID, Candidates);
+                if (Candidates.Num() == 0)
+                {
+                    return;
+                }
+
+                double BestDot = -1.0;
+                int32 BestIdx = INDEX_NONE;
+                const FVector3d Target = EdgeV0;
+                for (int32 CandidateIdx : Candidates)
+                {
+                    const double Dot = RenderVertices[CandidateIdx].GetSafeNormal() | Target;
+                    if (Dot > BestDot)
+                    {
+                        BestDot = Dot;
+                        BestIdx = CandidateIdx;
+                    }
+                }
+
+                if (BestIdx != INDEX_NONE)
+                {
+                    AddBoundarySeed(BestIdx, PlateID, Tangent);
+                }
+            };
+
+            SeedPlate(PlateA);
+            SeedPlate(PlateB);
+        }
+    }
+
+    // Fallback using adjacency for any remaining unseeded boundary vertices
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        if (SeededVertices.Contains(VertexIdx))
+        {
+            continue;
+        }
+
+        const int32 PlateID = GetPlateID(VertexIdx);
+        if (PlateID == INDEX_NONE)
+        {
+            continue;
+        }
+
+        const FVector3d VertexNormal = RenderVertices[VertexIdx].GetSafeNormal();
+        FVector3d Tangent = FVector3d::ZeroVector;
+        bool bIsBoundary = false;
+
+        // Detect overlapping vertices with different plate assignments (seam duplication)
+        const FIntVector BucketKey = QuantizeKey(RenderVertices[VertexIdx]);
+        if (const TArray<int32>* Bucket = PositionBuckets.Find(BucketKey))
+        {
+            for (int32 OtherIdx : *Bucket)
+            {
+                if (OtherIdx == VertexIdx)
+                {
+                    continue;
+                }
+
+                const int32 OtherPlate = GetPlateID(OtherIdx);
+                if (OtherPlate == INDEX_NONE || OtherPlate == PlateID)
+                {
+                    continue;
+                }
+
+                const FVector3d OtherNormal = RenderVertices[OtherIdx].GetSafeNormal();
+                FVector3d PlaneNormal = FVector3d::CrossProduct(VertexNormal, OtherNormal).GetSafeNormal();
+                if (!PlaneNormal.IsNearlyZero())
+                {
+                    Tangent = FVector3d::CrossProduct(PlaneNormal, VertexNormal).GetSafeNormal();
+                    if (!Tangent.IsNearlyZero())
+                    {
+                        bIsBoundary = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Fallback to adjacency-based detection if duplicates were not found
+        if (!bIsBoundary)
+        {
+            const int32 Start = RenderVertexAdjacencyOffsets[VertexIdx];
+            const int32 End = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+            FVector3d TangentSum = FVector3d::ZeroVector;
+            FVector3d LastValidTangent = FVector3d::ZeroVector;
+
+            for (int32 Offset = Start; Offset < End; ++Offset)
+            {
+                const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
+                if (!RenderVertices.IsValidIndex(NeighborIdx))
+                {
+                    continue;
+                }
+
+                const int32 NeighborPlateID = GetPlateID(NeighborIdx);
+                if (NeighborPlateID == INDEX_NONE || NeighborPlateID == PlateID)
+                {
+                    continue;
+                }
+
+                bIsBoundary = true;
+
+                FVector3d Edge = RenderVertices[NeighborIdx] - RenderVertices[VertexIdx];
+                FVector3d Candidate = (Edge - (Edge | VertexNormal) * VertexNormal).GetSafeNormal();
+                if (!Candidate.IsNearlyZero())
+                {
+                    TangentSum += Candidate;
+                    LastValidTangent = Candidate;
+                }
+            }
+
+            if (bIsBoundary)
+            {
+                Tangent = TangentSum.IsNearlyZero() ? LastValidTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector) : TangentSum.GetSafeNormal();
+            }
+        }
+
+        if (bIsBoundary)
+        {
+            AddBoundarySeed(VertexIdx, PlateID, Tangent);
+        }
+    }
+
+    const double SmallNumber = 1e-8;
+
+    while (!Frontier.empty())
+    {
+        FPropagationNode Current = Frontier.top();
+        Frontier.pop();
+
+        if (Current.VertexIdx < 0 || Current.VertexIdx >= VertexCount)
+        {
+            continue;
+        }
+
+        if (Current.Distance > Distance[Current.VertexIdx] + SmallNumber)
+        {
+            continue;
+        }
+
+        const int32 CurrentPlateID = GetPlateID(Current.VertexIdx);
+        if (CurrentPlateID != Current.SourcePlateID)
+        {
+            continue;
+        }
+
+        const int32 Start = RenderVertexAdjacencyOffsets[Current.VertexIdx];
+        const int32 End = RenderVertexAdjacencyOffsets[Current.VertexIdx + 1];
+        const FVector3d CurrentNormal = RenderVertices[Current.VertexIdx].GetSafeNormal();
+
+        for (int32 Offset = Start; Offset < End; ++Offset)
+        {
+            const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
+            if (!RenderVertices.IsValidIndex(NeighborIdx))
+            {
+                continue;
+            }
+
+            if (GetPlateID(NeighborIdx) != CurrentPlateID)
+            {
+                continue;
+            }
+
+            const FVector3d NeighborNormal = RenderVertices[NeighborIdx].GetSafeNormal();
+            double EdgeCost = FMath::Acos(FMath::Clamp(CurrentNormal | NeighborNormal, -1.0, 1.0));
+            if (!FMath::IsFinite(EdgeCost))
+            {
+                EdgeCost = 0.0;
+            }
+
+            const double NewDistance = Current.Distance + EdgeCost;
+
+            if (NewDistance + SmallNumber < Distance[NeighborIdx])
+            {
+                Distance[NeighborIdx] = NewDistance;
+
+                FRenderVertexBoundaryInfo& NeighborInfo = RenderVertexBoundaryCache[NeighborIdx];
+                NeighborInfo.bHasBoundary = !Current.Tangent.IsNearlyZero();
+                NeighborInfo.SourcePlateID = Current.SourcePlateID;
+                NeighborInfo.BoundaryTangent = NeighborInfo.bHasBoundary ? Current.Tangent : FVector3d::ZeroVector;
+                NeighborInfo.DistanceRadians = static_cast<float>(NewDistance);
+
+                FPropagationNode Next;
+                Next.VertexIdx = NeighborIdx;
+                Next.Distance = NewDistance;
+                Next.SourcePlateID = Current.SourcePlateID;
+                Next.Tangent = Current.Tangent;
+                Frontier.push(Next);
+            }
+        }
+    }
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        if (!RenderVertexBoundaryCache[VertexIdx].bHasBoundary)
+        {
+            ResetInfo(VertexIdx);
+        }
+    }
+
+#if UE_BUILD_DEVELOPMENT
+    int32 TaggedCount = 0;
+    for (const FRenderVertexBoundaryInfo& Info : RenderVertexBoundaryCache)
+    {
+        if (Info.bHasBoundary)
+        {
+            ++TaggedCount;
+        }
+    }
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[BoundaryCache] Boundary tangents assigned to %d/%d vertices"), TaggedCount, VertexCount);
+#endif
 }
 
 void UTectonicSimulationService::UpdateConvergentNeighborFlags()
@@ -2397,7 +3138,7 @@ bool UTectonicSimulationService::Redo()
 
     // Milestone 6: Restore terrane state
     Terranes = Snapshot.Terranes;
-   NextTerraneID = Snapshot.NextTerraneID;
+    NextTerraneID = Snapshot.NextTerraneID;
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Redo: Restored snapshot %d (%.1f My)"),
         CurrentHistoryIndex, CurrentTimeMy);
@@ -2460,10 +3201,19 @@ bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
 
 bool UTectonicSimulationService::ValidateTopology(FString& OutErrorMessage) const
 {
-    const int32 V = RenderVertices.Num();
+    const int32 TotalVertices = RenderVertices.Num();
     const int32 F = RenderTriangles.Num() / 3;
 
-    if (V == 0 || F == 0)
+    int32 ActiveVertexCount = 0;
+    for (int32 VertexIdx = 0; VertexIdx < VertexPlateAssignments.Num(); ++VertexIdx)
+    {
+        if (VertexPlateAssignments[VertexIdx] != INDEX_NONE)
+        {
+            ActiveVertexCount++;
+        }
+    }
+
+    if (ActiveVertexCount == 0 || F == 0)
     {
         OutErrorMessage = TEXT("Empty mesh: no vertices or faces");
         return false;
@@ -2480,10 +3230,10 @@ bool UTectonicSimulationService::ValidateTopology(FString& OutErrorMessage) cons
         int32 V2 = RenderTriangles[i + 2];
 
         // Validate triangle indices
-        if (V0 < 0 || V0 >= V || V1 < 0 || V1 >= V || V2 < 0 || V2 >= V)
+        if (V0 < 0 || V0 >= TotalVertices || V1 < 0 || V1 >= TotalVertices || V2 < 0 || V2 >= TotalVertices)
         {
             OutErrorMessage = FString::Printf(TEXT("Invalid triangle indices: (%d, %d, %d), vertex count: %d"),
-                V0, V1, V2, V);
+                V0, V1, V2, TotalVertices);
             return false;
         }
 
@@ -2510,13 +3260,13 @@ bool UTectonicSimulationService::ValidateTopology(FString& OutErrorMessage) cons
     }
 
     const int32 E = UniqueEdges.Num();
-    const int32 EulerChar = V - E + F;
+    const int32 EulerChar = ActiveVertexCount - E + F;
 
     // Validation 1: Euler characteristic (must be 2 for closed sphere)
     if (EulerChar != 2)
     {
         OutErrorMessage = FString::Printf(TEXT("Invalid Euler characteristic: V=%d, E=%d, F=%d, V-E+F=%d (expected 2)"),
-            V, E, F, EulerChar);
+            ActiveVertexCount, E, F, EulerChar);
         return false;
     }
 
@@ -2548,7 +3298,7 @@ bool UTectonicSimulationService::ValidateTopology(FString& OutErrorMessage) cons
         ReferencedVertices.Add(Idx);
     }
 
-    const int32 OrphanedVertices = V - ReferencedVertices.Num();
+    const int32 OrphanedVertices = ActiveVertexCount - ReferencedVertices.Num();
     if (OrphanedVertices > 0)
     {
         OutErrorMessage = FString::Printf(TEXT("%d orphaned vertices found (not referenced by any triangle)"),
@@ -2613,6 +3363,180 @@ double UTectonicSimulationService::ComputeTerraneArea(const TArray<int32>& Verte
     return TotalArea;
 }
 
+void UTectonicSimulationService::InvalidateRenderVertexCaches()
+{
+    RenderVertexAdjacencyOffsets.Reset();
+    RenderVertexAdjacency.Reset();
+    RenderVertexAdjacencyWeights.Reset();
+    RenderVertexAdjacencyWeightTotals.Reset();
+    RenderVertexReverseAdjacency.Reset();
+    ConvergentNeighborFlags.Reset();
+
+    PendingCrustAgeResetSeeds.Reset();
+    PendingCrustAgeResetMask.Init(false, RenderVertices.Num());
+
+    RenderVertexFloatSoA = FRenderVertexFloatSoA();
+    OceanicAmplificationFloatInputs = FOceanicAmplificationFloatInputs();
+    RidgeDirectionFloatSoA = FRidgeDirectionFloatSoA();
+
+    RidgeDirectionDirtyMask.Reset();
+    RidgeDirectionDirtyCount = 0;
+    CachedRidgeDirectionTopologyVersion = INDEX_NONE;
+    CachedRidgeDirectionVertexCount = 0;
+    LastRidgeDirectionUpdateCount = 0;
+}
+
+int32 UTectonicSimulationService::AppendRenderVertexFromRecord(const FTerraneVertexRecord& Record, int32 OverridePlateID)
+{
+    const int32 NewIndex = RenderVertices.Add(Record.Position);
+
+    auto AppendIfSized = [NewIndex](auto& Array, const auto& Value)
+    {
+        if (Array.Num() == NewIndex)
+        {
+            Array.Add(Value);
+        }
+    };
+
+    AppendIfSized(VertexVelocities, Record.Velocity);
+    AppendIfSized(VertexStressValues, Record.Stress);
+    AppendIfSized(VertexTemperatureValues, Record.Temperature);
+    AppendIfSized(VertexElevationValues, Record.Elevation);
+    AppendIfSized(VertexErosionRates, Record.ErosionRate);
+    AppendIfSized(VertexSedimentThickness, Record.SedimentThickness);
+    AppendIfSized(VertexCrustAge, Record.CrustAge);
+    AppendIfSized(VertexAmplifiedElevation, Record.AmplifiedElevation);
+    AppendIfSized(VertexRidgeDirections, Record.RidgeDirection);
+
+    if (VertexPlateAssignments.Num() == NewIndex)
+    {
+        VertexPlateAssignments.Add(OverridePlateID);
+    }
+    else if (VertexPlateAssignments.Num() == 0)
+    {
+        VertexPlateAssignments.SetNum(NewIndex + 1);
+        VertexPlateAssignments.Last() = OverridePlateID;
+    }
+    else if (VertexPlateAssignments.Num() == NewIndex + 1)
+    {
+        VertexPlateAssignments[NewIndex] = OverridePlateID;
+    }
+    else
+    {
+        VertexPlateAssignments.Add(OverridePlateID);
+    }
+
+    return NewIndex;
+}
+
+void UTectonicSimulationService::CompactRenderVertexData(const TArray<int32>& VerticesToRemove, TArray<int32>& OutOldToNew)
+{
+    const int32 OriginalCount = RenderVertices.Num();
+    OutOldToNew.SetNum(OriginalCount);
+
+    if (VerticesToRemove.Num() == 0 || OriginalCount == 0)
+    {
+        for (int32 Index = 0; Index < OriginalCount; ++Index)
+        {
+            OutOldToNew[Index] = Index;
+        }
+        return;
+    }
+
+    TBitArray<> RemovalMask(false, OriginalCount);
+    for (int32 VertexIdx : VerticesToRemove)
+    {
+        if (VertexIdx >= 0 && VertexIdx < OriginalCount)
+        {
+            RemovalMask[VertexIdx] = true;
+        }
+    }
+
+    const int32 KeptReserve = FMath::Max(OriginalCount - VerticesToRemove.Num(), 0);
+
+    TArray<FVector3d> NewRenderVertices;
+    NewRenderVertices.Reserve(KeptReserve);
+
+    const bool bHasVelocities = VertexVelocities.Num() == OriginalCount;
+    const bool bHasStress = VertexStressValues.Num() == OriginalCount;
+    const bool bHasTemperature = VertexTemperatureValues.Num() == OriginalCount;
+    const bool bHasElevation = VertexElevationValues.Num() == OriginalCount;
+    const bool bHasErosion = VertexErosionRates.Num() == OriginalCount;
+    const bool bHasSediment = VertexSedimentThickness.Num() == OriginalCount;
+    const bool bHasCrustAge = VertexCrustAge.Num() == OriginalCount;
+    const bool bHasAmplified = VertexAmplifiedElevation.Num() == OriginalCount;
+    const bool bHasRidgeDir = VertexRidgeDirections.Num() == OriginalCount;
+    const bool bHasAssignments = VertexPlateAssignments.Num() == OriginalCount;
+
+    TArray<FVector3d> NewVelocities; if (bHasVelocities) { NewVelocities.Reserve(KeptReserve); }
+    TArray<double> NewStress; if (bHasStress) { NewStress.Reserve(KeptReserve); }
+    TArray<double> NewTemperature; if (bHasTemperature) { NewTemperature.Reserve(KeptReserve); }
+    TArray<double> NewElevation; if (bHasElevation) { NewElevation.Reserve(KeptReserve); }
+    TArray<double> NewErosion; if (bHasErosion) { NewErosion.Reserve(KeptReserve); }
+    TArray<double> NewSediment; if (bHasSediment) { NewSediment.Reserve(KeptReserve); }
+    TArray<double> NewCrustAge; if (bHasCrustAge) { NewCrustAge.Reserve(KeptReserve); }
+    TArray<double> NewAmplified; if (bHasAmplified) { NewAmplified.Reserve(KeptReserve); }
+    TArray<FVector3d> NewRidgeDir; if (bHasRidgeDir) { NewRidgeDir.Reserve(KeptReserve); }
+    TArray<int32> NewAssignments; if (bHasAssignments) { NewAssignments.Reserve(KeptReserve); }
+
+    for (int32 Index = 0; Index < OriginalCount; ++Index)
+    {
+        if (RemovalMask[Index])
+        {
+            OutOldToNew[Index] = INDEX_NONE;
+            continue;
+        }
+
+        const int32 NewIndex = NewRenderVertices.Num();
+        OutOldToNew[Index] = NewIndex;
+
+        NewRenderVertices.Add(RenderVertices[Index]);
+
+        if (bHasVelocities) { NewVelocities.Add(VertexVelocities[Index]); }
+        if (bHasStress) { NewStress.Add(VertexStressValues[Index]); }
+        if (bHasTemperature) { NewTemperature.Add(VertexTemperatureValues[Index]); }
+        if (bHasElevation) { NewElevation.Add(VertexElevationValues[Index]); }
+        if (bHasErosion) { NewErosion.Add(VertexErosionRates[Index]); }
+        if (bHasSediment) { NewSediment.Add(VertexSedimentThickness[Index]); }
+        if (bHasCrustAge) { NewCrustAge.Add(VertexCrustAge[Index]); }
+        if (bHasAmplified) { NewAmplified.Add(VertexAmplifiedElevation[Index]); }
+        if (bHasRidgeDir) { NewRidgeDir.Add(VertexRidgeDirections[Index]); }
+        if (bHasAssignments) { NewAssignments.Add(VertexPlateAssignments[Index]); }
+    }
+
+    RenderVertices = MoveTemp(NewRenderVertices);
+
+    if (bHasVelocities) { VertexVelocities = MoveTemp(NewVelocities); }
+    else { VertexVelocities.Reset(); }
+
+    if (bHasStress) { VertexStressValues = MoveTemp(NewStress); }
+    else { VertexStressValues.Reset(); }
+
+    if (bHasTemperature) { VertexTemperatureValues = MoveTemp(NewTemperature); }
+    else { VertexTemperatureValues.Reset(); }
+
+    if (bHasElevation) { VertexElevationValues = MoveTemp(NewElevation); }
+    else { VertexElevationValues.Reset(); }
+
+    if (bHasErosion) { VertexErosionRates = MoveTemp(NewErosion); }
+    else { VertexErosionRates.Reset(); }
+
+    if (bHasSediment) { VertexSedimentThickness = MoveTemp(NewSediment); }
+    else { VertexSedimentThickness.Reset(); }
+
+    if (bHasCrustAge) { VertexCrustAge = MoveTemp(NewCrustAge); }
+    else { VertexCrustAge.Reset(); }
+
+    if (bHasAmplified) { VertexAmplifiedElevation = MoveTemp(NewAmplified); }
+    else { VertexAmplifiedElevation.Reset(); }
+
+    if (bHasRidgeDir) { VertexRidgeDirections = MoveTemp(NewRidgeDir); }
+    else { VertexRidgeDirections.Reset(); }
+
+    if (bHasAssignments) { VertexPlateAssignments = MoveTemp(NewAssignments); }
+    else { VertexPlateAssignments.SetNum(RenderVertices.Num()); }
+}
+
 const FContinentalTerrane* UTectonicSimulationService::GetTerraneByID(int32 TerraneID) const
 {
     for (const FContinentalTerrane& Terrane : Terranes)
@@ -2630,7 +3554,6 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
     UE_LOG(LogPlanetaryCreation, Log, TEXT("ExtractTerrane: Attempting to extract %d vertices from plate %d"),
         TerraneVertexIndices.Num(), SourcePlateID);
 
-    // Find source plate
     FTectonicPlate* SourcePlate = nullptr;
     for (FTectonicPlate& Plate : Plates)
     {
@@ -2647,24 +3570,43 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
         return false;
     }
 
-    // Validation: Source must be continental
     if (SourcePlate->CrustType != ECrustType::Continental)
     {
         UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Source plate %d is not continental"), SourcePlateID);
         return false;
     }
 
-    // Validation: Vertices must be valid
-    for (int32 VertexIdx : TerraneVertexIndices)
+    if (TerraneVertexIndices.Num() == 0)
     {
-        if (VertexIdx < 0 || VertexIdx >= RenderVertices.Num())
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExtractTerrane: No vertices provided"));
+        return false;
+    }
+
+    TArray<int32> SortedVertexIndices = TerraneVertexIndices;
+    SortedVertexIndices.Sort();
+    int32 WriteIndex = 0;
+    int32 LastValue = MIN_int32;
+    bool bHasLast = false;
+    for (int32 Value : SortedVertexIndices)
+    {
+        if (!bHasLast || Value != LastValue)
         {
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Invalid vertex index %d (range: 0-%d)"),
-                VertexIdx, RenderVertices.Num() - 1);
+            SortedVertexIndices[WriteIndex++] = Value;
+            LastValue = Value;
+            bHasLast = true;
+        }
+    }
+    SortedVertexIndices.SetNum(WriteIndex);
+
+    const int32 VertexCount = RenderVertices.Num();
+    for (int32 VertexIdx : SortedVertexIndices)
+    {
+        if (VertexIdx < 0 || VertexIdx >= VertexCount)
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Invalid vertex index %d (range: 0-%d)"), VertexIdx, VertexCount - 1);
             return false;
         }
 
-        // Check vertex belongs to source plate
         if (VertexPlateAssignments[VertexIdx] != SourcePlateID)
         {
             UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Vertex %d does not belong to plate %d (assigned to %d)"),
@@ -2673,16 +3615,13 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
         }
     }
 
-    // Edge case 1: Single-vertex terrane (min area: 100 km²)
-    const double TerraneArea = ComputeTerraneArea(TerraneVertexIndices);
+    const double TerraneArea = ComputeTerraneArea(SortedVertexIndices);
     if (TerraneArea < 100.0)
     {
-        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExtractTerrane: Terrane area %.2f km² below minimum 100 km², rejecting extraction"),
-            TerraneArea);
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExtractTerrane: Terrane area %.2f km² below minimum 100 km², rejecting extraction"), TerraneArea);
         return false;
     }
 
-    // Edge case 3: Single-terrane plate (all vertices extracted)
     int32 PlateVertexCount = 0;
     for (int32 Assignment : VertexPlateAssignments)
     {
@@ -2692,15 +3631,13 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
         }
     }
 
-    if (TerraneVertexIndices.Num() == PlateVertexCount)
+    if (SortedVertexIndices.Num() == PlateVertexCount)
     {
         UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExtractTerrane: Extracting all %d vertices from plate %d (treat as plate split)"),
             PlateVertexCount, SourcePlateID);
-        // TODO: Convert to plate split instead of terrane extraction (deferred to edge case implementation)
         return false;
     }
 
-    // Capture pre-extraction snapshot for rollback
     FString ValidationError;
     if (!ValidateTopology(ValidationError))
     {
@@ -2708,64 +3645,606 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
         return false;
     }
 
-    // Assign terrane vertices to a temporary "detached" plate ID (-1 by convention)
-    for (int32 VertexIdx : TerraneVertexIndices)
+    const int32 SavedNextTerraneID = NextTerraneID;
+
+    TSet<int32> TerraneVertexSet(SortedVertexIndices);
+
+    TArray<FIntVector> InsideTriangles;
+    InsideTriangles.Reserve(RenderTriangles.Num() / 3);
+
+    TArray<int32> RemainingTriangles;
+    RemainingTriangles.Reserve(RenderTriangles.Num());
+
+    for (int32 TriIdx = 0; TriIdx < RenderTriangles.Num(); TriIdx += 3)
     {
-        VertexPlateAssignments[VertexIdx] = INDEX_NONE; // Mark as unassigned
+        const int32 A = RenderTriangles[TriIdx];
+        const int32 B = RenderTriangles[TriIdx + 1];
+        const int32 C = RenderTriangles[TriIdx + 2];
+
+        const bool bAIn = TerraneVertexSet.Contains(A);
+        const bool bBIn = TerraneVertexSet.Contains(B);
+        const bool bCIn = TerraneVertexSet.Contains(C);
+
+        if (bAIn && bBIn && bCIn)
+        {
+            InsideTriangles.Add(FIntVector(A, B, C));
+        }
+        else
+        {
+            RemainingTriangles.Add(A);
+            RemainingTriangles.Add(B);
+            RemainingTriangles.Add(C);
+        }
     }
 
-    // Compute terrane centroid
-    FVector3d TerraneCentroid = FVector3d::ZeroVector;
-    for (int32 VertexIdx : TerraneVertexIndices)
+    if (InsideTriangles.Num() == 0)
     {
-        TerraneCentroid += RenderVertices[VertexIdx];
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExtractTerrane: No fully contained triangles found for extraction"));
+        return false;
     }
-    TerraneCentroid /= static_cast<double>(TerraneVertexIndices.Num());
-    TerraneCentroid.Normalize();
 
-    // Create terrane record
+    TMap<TPair<int32, int32>, int32> EdgeUseCounts;
+    EdgeUseCounts.Reserve(InsideTriangles.Num() * 3);
+
+    auto RecordEdge = [&EdgeUseCounts](int32 V0, int32 V1)
+    {
+        const TPair<int32, int32> Key(FMath::Min(V0, V1), FMath::Max(V0, V1));
+        EdgeUseCounts.FindOrAdd(Key)++;
+    };
+
+    for (const FIntVector& Tri : InsideTriangles)
+    {
+        RecordEdge(Tri.X, Tri.Y);
+        RecordEdge(Tri.Y, Tri.Z);
+        RecordEdge(Tri.Z, Tri.X);
+    }
+
+    TMap<int32, TArray<int32>> BoundaryAdjacency;
+    for (const TPair<TPair<int32, int32>, int32>& Pair : EdgeUseCounts)
+    {
+        if (Pair.Value == 1)
+        {
+            const int32 U = Pair.Key.Key;
+            const int32 V = Pair.Key.Value;
+            BoundaryAdjacency.FindOrAdd(U).Add(V);
+            BoundaryAdjacency.FindOrAdd(V).Add(U);
+        }
+    }
+
+    if (BoundaryAdjacency.Num() == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Failed to identify boundary for terrane"));
+        return false;
+    }
+
+    for (const TPair<int32, TArray<int32>>& Pair : BoundaryAdjacency)
+    {
+        if (Pair.Value.Num() < 2)
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Non-manifold boundary detected around vertex %d"), Pair.Key);
+            return false;
+        }
+    }
+
+    TArray<TArray<int32>> BoundaryLoops;
+    BoundaryLoops.Reserve(BoundaryAdjacency.Num());
+    TSet<int32> VisitedBoundaryVerts;
+
+    for (const TPair<int32, TArray<int32>>& Entry : BoundaryAdjacency)
+    {
+        const int32 StartVertex = Entry.Key;
+        if (VisitedBoundaryVerts.Contains(StartVertex))
+        {
+            continue;
+        }
+
+        TArray<int32> Loop;
+        Loop.Reserve(Entry.Value.Num());
+
+        int32 Current = StartVertex;
+        int32 Previous = INDEX_NONE;
+
+        while (true)
+        {
+            Loop.Add(Current);
+            VisitedBoundaryVerts.Add(Current);
+
+            const TArray<int32>& Neighbors = BoundaryAdjacency[Current];
+            int32 NextVertex = INDEX_NONE;
+            for (int32 Neighbor : Neighbors)
+            {
+                if (Neighbor != Previous)
+                {
+                    NextVertex = Neighbor;
+                    break;
+                }
+            }
+
+            if (NextVertex == INDEX_NONE)
+            {
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Incomplete boundary loop starting at %d"), StartVertex);
+                return false;
+            }
+
+            Previous = Current;
+            Current = NextVertex;
+
+            if (Current == StartVertex)
+            {
+                break;
+            }
+        }
+
+        if (Loop.Num() < 3)
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Boundary loop too small (%d vertices)"), Loop.Num());
+            return false;
+        }
+
+        BoundaryLoops.Add(MoveTemp(Loop));
+    }
+
     FContinentalTerrane NewTerrane;
     NewTerrane.TerraneID = NextTerraneID++;
     NewTerrane.State = ETerraneState::Extracted;
-    NewTerrane.VertexIndices = TerraneVertexIndices;
     NewTerrane.SourcePlateID = SourcePlateID;
     NewTerrane.CarrierPlateID = INDEX_NONE;
     NewTerrane.TargetPlateID = INDEX_NONE;
-    NewTerrane.Centroid = TerraneCentroid;
     NewTerrane.AreaKm2 = TerraneArea;
     NewTerrane.ExtractionTimeMy = CurrentTimeMy;
     NewTerrane.ReattachmentTimeMy = 0.0;
+    NewTerrane.OriginalVertexIndices = SortedVertexIndices;
+
+    const bool bHasVelocities = VertexVelocities.Num() == VertexCount;
+    const bool bHasStress = VertexStressValues.Num() == VertexCount;
+    const bool bHasTemperature = VertexTemperatureValues.Num() == VertexCount;
+    const bool bHasElevation = VertexElevationValues.Num() == VertexCount;
+    const bool bHasErosion = VertexErosionRates.Num() == VertexCount;
+    const bool bHasSediment = VertexSedimentThickness.Num() == VertexCount;
+    const bool bHasCrustAge = VertexCrustAge.Num() == VertexCount;
+    const bool bHasAmplified = VertexAmplifiedElevation.Num() == VertexCount;
+    const bool bHasRidgeDir = VertexRidgeDirections.Num() == VertexCount;
+
+    TMap<int32, int32> LocalIndexMap;
+    LocalIndexMap.Reserve(SortedVertexIndices.Num());
+    NewTerrane.VertexPayload.Reserve(SortedVertexIndices.Num());
+
+    FVector3d TerraneCentroid = FVector3d::ZeroVector;
+
+    for (int32 VertexIdx : SortedVertexIndices)
+    {
+        FTerraneVertexRecord Record;
+        Record.Position = RenderVertices[VertexIdx];
+        if (bHasVelocities) { Record.Velocity = VertexVelocities[VertexIdx]; }
+        if (bHasStress) { Record.Stress = VertexStressValues[VertexIdx]; }
+        if (bHasTemperature) { Record.Temperature = VertexTemperatureValues[VertexIdx]; }
+        if (bHasElevation) { Record.Elevation = VertexElevationValues[VertexIdx]; }
+        if (bHasErosion) { Record.ErosionRate = VertexErosionRates[VertexIdx]; }
+        if (bHasSediment) { Record.SedimentThickness = VertexSedimentThickness[VertexIdx]; }
+        if (bHasCrustAge) { Record.CrustAge = VertexCrustAge[VertexIdx]; }
+        if (bHasAmplified) { Record.AmplifiedElevation = VertexAmplifiedElevation[VertexIdx]; }
+        if (bHasRidgeDir) { Record.RidgeDirection = VertexRidgeDirections[VertexIdx]; }
+        Record.PlateID = SourcePlateID;
+
+        TerraneCentroid += Record.Position;
+
+        const int32 LocalIndex = NewTerrane.VertexPayload.Num();
+        LocalIndexMap.Add(VertexIdx, LocalIndex);
+        NewTerrane.VertexPayload.Add(Record);
+    }
+
+    TerraneCentroid.Normalize();
+    NewTerrane.Centroid = TerraneCentroid;
+
+    NewTerrane.ExtractedTriangles.Reserve(InsideTriangles.Num() * 3);
+    for (const FIntVector& Tri : InsideTriangles)
+    {
+        const int32* LocalA = LocalIndexMap.Find(Tri.X);
+        const int32* LocalB = LocalIndexMap.Find(Tri.Y);
+        const int32* LocalC = LocalIndexMap.Find(Tri.Z);
+
+        if (!LocalA || !LocalB || !LocalC)
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Failed to map triangle (%d, %d, %d) to local indices"), Tri.X, Tri.Y, Tri.Z);
+            NextTerraneID = SavedNextTerraneID;
+            return false;
+        }
+
+        NewTerrane.ExtractedTriangles.Add(*LocalA);
+        NewTerrane.ExtractedTriangles.Add(*LocalB);
+        NewTerrane.ExtractedTriangles.Add(*LocalC);
+    }
+
+    TArray<TArray<int32>> BoundaryLoopsLocal;
+    BoundaryLoopsLocal.Reserve(BoundaryLoops.Num());
+    for (const TArray<int32>& Loop : BoundaryLoops)
+    {
+        TArray<int32> LocalLoop;
+        LocalLoop.Reserve(Loop.Num());
+        for (int32 OriginalIdx : Loop)
+        {
+            const int32* LocalIdxPtr = LocalIndexMap.Find(OriginalIdx);
+            if (!LocalIdxPtr)
+            {
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Boundary vertex %d not mapped to local payload"), OriginalIdx);
+                NextTerraneID = SavedNextTerraneID;
+                return false;
+            }
+            LocalLoop.Add(*LocalIdxPtr);
+        }
+        BoundaryLoopsLocal.Add(MoveTemp(LocalLoop));
+    }
+
+    const TArray<FVector3d> BackupRenderVertices = RenderVertices;
+    const TArray<int32> BackupRenderTriangles = RenderTriangles;
+    const TArray<int32> BackupVertexAssignments = VertexPlateAssignments;
+    const TArray<FVector3d> BackupVertexVelocities = VertexVelocities;
+    const TArray<double> BackupVertexStress = VertexStressValues;
+    const TArray<double> BackupVertexTemperature = VertexTemperatureValues;
+    const TArray<double> BackupVertexElevation = VertexElevationValues;
+    const TArray<double> BackupVertexErosion = VertexErosionRates;
+    const TArray<double> BackupVertexSediment = VertexSedimentThickness;
+    const TArray<double> BackupVertexCrustAge = VertexCrustAge;
+    const TArray<double> BackupVertexAmplified = VertexAmplifiedElevation;
+    const TArray<FVector3d> BackupVertexRidgeDirections = VertexRidgeDirections;
+    const TArray<int32> BackupAdjOffsets = RenderVertexAdjacencyOffsets;
+    const TArray<int32> BackupAdjacency = RenderVertexAdjacency;
+    const TArray<float> BackupAdjWeights = RenderVertexAdjacencyWeights;
+    const TArray<int32> BackupReverseAdjacency = RenderVertexReverseAdjacency;
+    const TArray<uint8> BackupConvergentFlags = ConvergentNeighborFlags;
+    const TArray<int32> BackupPendingSeeds = PendingCrustAgeResetSeeds;
+    const TBitArray<> BackupPendingMask = PendingCrustAgeResetMask;
+
+    TArray<int32> WorkingTriangles = MoveTemp(RemainingTriangles);
+    TArray<int32> PendingPatchVertexIndices;
+    TArray<int32> PendingPatchTriangles;
+    TMap<int32, int32> BoundaryDuplicateMap;
+
+    PendingPatchVertexIndices.Reserve(SortedVertexIndices.Num());
+    PendingPatchTriangles.Reserve(BoundaryLoopsLocal.Num() * 6);
+
+    for (int32 LoopIdx = 0; LoopIdx < BoundaryLoopsLocal.Num(); ++LoopIdx)
+    {
+        const TArray<int32>& LocalLoop = BoundaryLoopsLocal[LoopIdx];
+        const TArray<int32>& OriginalLoop = BoundaryLoops[LoopIdx];
+        const int32 LoopCount = LocalLoop.Num();
+
+        if (LoopCount < 3)
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Local boundary loop too small (%d vertices)"), LoopCount);
+
+            RenderVertices = BackupRenderVertices;
+            RenderTriangles = BackupRenderTriangles;
+            VertexPlateAssignments = BackupVertexAssignments;
+            VertexVelocities = BackupVertexVelocities;
+            VertexStressValues = BackupVertexStress;
+            VertexTemperatureValues = BackupVertexTemperature;
+            VertexElevationValues = BackupVertexElevation;
+            VertexErosionRates = BackupVertexErosion;
+            VertexSedimentThickness = BackupVertexSediment;
+            VertexCrustAge = BackupVertexCrustAge;
+            VertexAmplifiedElevation = BackupVertexAmplified;
+            VertexRidgeDirections = BackupVertexRidgeDirections;
+            RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+            RenderVertexAdjacency = BackupAdjacency;
+            RenderVertexAdjacencyWeights = BackupAdjWeights;
+            RenderVertexReverseAdjacency = BackupReverseAdjacency;
+            ConvergentNeighborFlags = BackupConvergentFlags;
+            PendingCrustAgeResetSeeds = BackupPendingSeeds;
+            PendingCrustAgeResetMask = BackupPendingMask;
+            NextTerraneID = SavedNextTerraneID;
+            return false;
+        }
+
+        TArray<int32> DuplicatedIndices;
+        DuplicatedIndices.Reserve(LoopCount);
+
+        for (int32 VertexOffset = 0; VertexOffset < LoopCount; ++VertexOffset)
+        {
+            const int32 LocalVertexIdx = LocalLoop[VertexOffset];
+            const int32 OriginalVertexIdx = OriginalLoop[VertexOffset];
+
+            int32 DuplicateIdx = INDEX_NONE;
+            if (int32* ExistingDuplicate = BoundaryDuplicateMap.Find(OriginalVertexIdx))
+            {
+                DuplicateIdx = *ExistingDuplicate;
+            }
+            else
+            {
+                FTerraneVertexRecord Record = NewTerrane.VertexPayload[LocalVertexIdx];
+                const double BaselineElevation = (SourcePlate && SourcePlate->CrustType == ECrustType::Continental)
+                    ? PaperElevationConstants::ContinentalBaseline_m
+                    : PaperElevationConstants::AbyssalPlainDepth_m;
+                Record.Elevation = BaselineElevation;
+                Record.AmplifiedElevation = BaselineElevation;
+                DuplicateIdx = AppendRenderVertexFromRecord(Record, SourcePlateID);
+                BoundaryDuplicateMap.Add(OriginalVertexIdx, DuplicateIdx);
+                PendingPatchVertexIndices.Add(DuplicateIdx);
+            }
+
+            FTerraneVertexRecord& PayloadRecord = NewTerrane.VertexPayload[LocalVertexIdx];
+            PayloadRecord.ReplacementVertexIndex = DuplicateIdx;
+
+            DuplicatedIndices.Add(DuplicateIdx);
+
+            for (int32& TriangleIndex : WorkingTriangles)
+            {
+                if (TriangleIndex == OriginalVertexIdx)
+                {
+                    TriangleIndex = DuplicateIdx;
+                }
+            }
+        }
+
+        FTerraneVertexRecord CenterRecord;
+        CenterRecord.PlateID = SourcePlateID;
+
+        for (int32 LocalVertexIdx : LocalLoop)
+        {
+            const FTerraneVertexRecord& Record = NewTerrane.VertexPayload[LocalVertexIdx];
+            CenterRecord.Position += Record.Position;
+            CenterRecord.Velocity += Record.Velocity;
+            CenterRecord.Stress += Record.Stress;
+            CenterRecord.Temperature += Record.Temperature;
+            CenterRecord.Elevation += Record.Elevation;
+            CenterRecord.ErosionRate += Record.ErosionRate;
+            CenterRecord.SedimentThickness += Record.SedimentThickness;
+            CenterRecord.CrustAge += Record.CrustAge;
+            CenterRecord.AmplifiedElevation += Record.AmplifiedElevation;
+            CenterRecord.RidgeDirection += Record.RidgeDirection;
+        }
+
+        const double InvCount = 1.0 / static_cast<double>(LoopCount);
+        CenterRecord.Position = (CenterRecord.Position * InvCount).GetSafeNormal();
+        CenterRecord.Velocity *= InvCount;
+        CenterRecord.Stress *= InvCount;
+        CenterRecord.Temperature *= InvCount;
+        CenterRecord.Elevation *= InvCount;
+        CenterRecord.ErosionRate *= InvCount;
+        CenterRecord.SedimentThickness *= InvCount;
+        CenterRecord.CrustAge *= InvCount;
+        CenterRecord.AmplifiedElevation *= InvCount;
+
+        const double RidgeLength = CenterRecord.RidgeDirection.Length();
+        if (RidgeLength > UE_DOUBLE_SMALL_NUMBER)
+        {
+            CenterRecord.RidgeDirection /= RidgeLength;
+        }
+        else
+        {
+            CenterRecord.RidgeDirection = FVector3d::ZeroVector;
+        }
+
+        const double BaselineElevation = (SourcePlate && SourcePlate->CrustType == ECrustType::Continental)
+            ? PaperElevationConstants::ContinentalBaseline_m
+            : PaperElevationConstants::AbyssalPlainDepth_m;
+        CenterRecord.Elevation = BaselineElevation;
+        CenterRecord.AmplifiedElevation = BaselineElevation;
+        const int32 CenterIdx = AppendRenderVertexFromRecord(CenterRecord, SourcePlateID);
+        PendingPatchVertexIndices.Add(CenterIdx);
+
+        auto QueuePatchTriangle = [&](int32 V0, int32 V1, int32 V2)
+        {
+            PendingPatchTriangles.Add(V0);
+            PendingPatchTriangles.Add(V1);
+            PendingPatchTriangles.Add(V2);
+        };
+
+        for (int32 i = 0; i < DuplicatedIndices.Num(); ++i)
+        {
+            const int32 V0 = DuplicatedIndices[i];
+            const int32 V1 = DuplicatedIndices[(i + 1) % DuplicatedIndices.Num()];
+            const FVector3d& A = RenderVertices[V0];
+            const FVector3d& B = RenderVertices[V1];
+            const FVector3d& C = RenderVertices[CenterIdx];
+
+            const FVector3d Normal = FVector3d::CrossProduct(B - A, C - A);
+            const double Orientation = Normal | A;
+            if (Orientation >= 0.0)
+            {
+                QueuePatchTriangle(V0, CenterIdx, V1);
+            }
+            else
+            {
+                QueuePatchTriangle(V0, V1, CenterIdx);
+            }
+        }
+    }
+
+    TArray<int32> OldToNewIndex;
+    CompactRenderVertexData(SortedVertexIndices, OldToNewIndex);
+
+    for (FTerraneVertexRecord& PayloadRecord : NewTerrane.VertexPayload)
+    {
+        if (PayloadRecord.ReplacementVertexIndex != INDEX_NONE)
+        {
+            if (!OldToNewIndex.IsValidIndex(PayloadRecord.ReplacementVertexIndex) || OldToNewIndex[PayloadRecord.ReplacementVertexIndex] == INDEX_NONE)
+            {
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Failed to remap replacement vertex %d"), PayloadRecord.ReplacementVertexIndex);
+
+                RenderVertices = BackupRenderVertices;
+                RenderTriangles = BackupRenderTriangles;
+                VertexPlateAssignments = BackupVertexAssignments;
+                VertexVelocities = BackupVertexVelocities;
+                VertexStressValues = BackupVertexStress;
+                VertexTemperatureValues = BackupVertexTemperature;
+                VertexElevationValues = BackupVertexElevation;
+                VertexErosionRates = BackupVertexErosion;
+                VertexSedimentThickness = BackupVertexSediment;
+                VertexCrustAge = BackupVertexCrustAge;
+                VertexAmplifiedElevation = BackupVertexAmplified;
+                VertexRidgeDirections = BackupVertexRidgeDirections;
+                RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+                RenderVertexAdjacency = BackupAdjacency;
+                RenderVertexAdjacencyWeights = BackupAdjWeights;
+                RenderVertexReverseAdjacency = BackupReverseAdjacency;
+                ConvergentNeighborFlags = BackupConvergentFlags;
+                PendingCrustAgeResetSeeds = BackupPendingSeeds;
+                PendingCrustAgeResetMask = BackupPendingMask;
+                NextTerraneID = SavedNextTerraneID;
+                return false;
+            }
+
+            PayloadRecord.ReplacementVertexIndex = OldToNewIndex[PayloadRecord.ReplacementVertexIndex];
+        }
+    }
+
+    auto RemapIndex = [&](int32& Index) -> bool
+    {
+        if (!OldToNewIndex.IsValidIndex(Index) || OldToNewIndex[Index] == INDEX_NONE)
+        {
+            return false;
+        }
+        Index = OldToNewIndex[Index];
+        return true;
+    };
+
+    for (int32& Index : WorkingTriangles)
+    {
+        if (!RemapIndex(Index))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Triangle remap failed for vertex %d"), Index);
+
+            RenderVertices = BackupRenderVertices;
+            RenderTriangles = BackupRenderTriangles;
+            VertexPlateAssignments = BackupVertexAssignments;
+            VertexVelocities = BackupVertexVelocities;
+            VertexStressValues = BackupVertexStress;
+            VertexTemperatureValues = BackupVertexTemperature;
+            VertexElevationValues = BackupVertexElevation;
+            VertexErosionRates = BackupVertexErosion;
+            VertexSedimentThickness = BackupVertexSediment;
+            VertexCrustAge = BackupVertexCrustAge;
+            VertexAmplifiedElevation = BackupVertexAmplified;
+            VertexRidgeDirections = BackupVertexRidgeDirections;
+            RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+            RenderVertexAdjacency = BackupAdjacency;
+            RenderVertexAdjacencyWeights = BackupAdjWeights;
+            RenderVertexReverseAdjacency = BackupReverseAdjacency;
+            ConvergentNeighborFlags = BackupConvergentFlags;
+            PendingCrustAgeResetSeeds = BackupPendingSeeds;
+            PendingCrustAgeResetMask = BackupPendingMask;
+            NextTerraneID = SavedNextTerraneID;
+            return false;
+        }
+    }
+
+    for (int32& Index : PendingPatchTriangles)
+    {
+        if (!RemapIndex(Index))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Patch triangle remap failed for vertex %d"), Index);
+
+            RenderVertices = BackupRenderVertices;
+            RenderTriangles = BackupRenderTriangles;
+            VertexPlateAssignments = BackupVertexAssignments;
+            VertexVelocities = BackupVertexVelocities;
+            VertexStressValues = BackupVertexStress;
+            VertexTemperatureValues = BackupVertexTemperature;
+            VertexElevationValues = BackupVertexElevation;
+            VertexErosionRates = BackupVertexErosion;
+            VertexSedimentThickness = BackupVertexSediment;
+            VertexCrustAge = BackupVertexCrustAge;
+            VertexAmplifiedElevation = BackupVertexAmplified;
+            VertexRidgeDirections = BackupVertexRidgeDirections;
+            RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+            RenderVertexAdjacency = BackupAdjacency;
+            RenderVertexAdjacencyWeights = BackupAdjWeights;
+            RenderVertexReverseAdjacency = BackupReverseAdjacency;
+            ConvergentNeighborFlags = BackupConvergentFlags;
+            PendingCrustAgeResetSeeds = BackupPendingSeeds;
+            PendingCrustAgeResetMask = BackupPendingMask;
+            NextTerraneID = SavedNextTerraneID;
+            return false;
+        }
+    }
+
+    for (int32& Index : PendingPatchVertexIndices)
+    {
+        if (!RemapIndex(Index))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Patch vertex remap failed for vertex %d"), Index);
+
+            RenderVertices = BackupRenderVertices;
+            RenderTriangles = BackupRenderTriangles;
+            VertexPlateAssignments = BackupVertexAssignments;
+            VertexVelocities = BackupVertexVelocities;
+            VertexStressValues = BackupVertexStress;
+            VertexTemperatureValues = BackupVertexTemperature;
+            VertexElevationValues = BackupVertexElevation;
+            VertexErosionRates = BackupVertexErosion;
+            VertexSedimentThickness = BackupVertexSediment;
+            VertexCrustAge = BackupVertexCrustAge;
+            VertexAmplifiedElevation = BackupVertexAmplified;
+            VertexRidgeDirections = BackupVertexRidgeDirections;
+            RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+            RenderVertexAdjacency = BackupAdjacency;
+            RenderVertexAdjacencyWeights = BackupAdjWeights;
+            RenderVertexReverseAdjacency = BackupReverseAdjacency;
+            ConvergentNeighborFlags = BackupConvergentFlags;
+            PendingCrustAgeResetSeeds = BackupPendingSeeds;
+            PendingCrustAgeResetMask = BackupPendingMask;
+            NextTerraneID = SavedNextTerraneID;
+            return false;
+        }
+    }
+
+    RenderTriangles = MoveTemp(WorkingTriangles);
+    RenderTriangles.Append(PendingPatchTriangles);
+
+    NewTerrane.PatchVertexIndices = MoveTemp(PendingPatchVertexIndices);
+    NewTerrane.PatchTriangles = MoveTemp(PendingPatchTriangles);
+
+    InvalidateRenderVertexCaches();
+
+    SurfaceDataVersion++;
+    TopologyVersion++;
+    InvalidateRidgeDirectionCache();
+    MarkAllRidgeDirectionsDirty();
+    BumpOceanicAmplificationSerial();
 
     Terranes.Add(NewTerrane);
     OutTerraneID = NewTerrane.TerraneID;
 
-    // Validate post-extraction topology
     if (!ValidateTopology(ValidationError))
     {
         UE_LOG(LogPlanetaryCreation, Error, TEXT("ExtractTerrane: Post-extraction topology invalid: %s"), *ValidationError);
 
-        // Rollback: Reassign vertices back to source plate
-        for (int32 VertexIdx : TerraneVertexIndices)
-        {
-            VertexPlateAssignments[VertexIdx] = SourcePlateID;
-        }
-        Terranes.Pop(); // Remove failed terrane
-        NextTerraneID--; // Restore ID counter
-
+        RenderVertices = BackupRenderVertices;
+        RenderTriangles = BackupRenderTriangles;
+        VertexPlateAssignments = BackupVertexAssignments;
+        VertexVelocities = BackupVertexVelocities;
+        VertexStressValues = BackupVertexStress;
+        VertexTemperatureValues = BackupVertexTemperature;
+        VertexElevationValues = BackupVertexElevation;
+        VertexErosionRates = BackupVertexErosion;
+        VertexSedimentThickness = BackupVertexSediment;
+        VertexCrustAge = BackupVertexCrustAge;
+        VertexAmplifiedElevation = BackupVertexAmplified;
+        VertexRidgeDirections = BackupVertexRidgeDirections;
+        RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+        RenderVertexAdjacency = BackupAdjacency;
+        RenderVertexAdjacencyWeights = BackupAdjWeights;
+        RenderVertexReverseAdjacency = BackupReverseAdjacency;
+        ConvergentNeighborFlags = BackupConvergentFlags;
+        PendingCrustAgeResetSeeds = BackupPendingSeeds;
+        PendingCrustAgeResetMask = BackupPendingMask;
+        Terranes.Pop();
+        NextTerraneID = SavedNextTerraneID;
+        SurfaceDataVersion--;
+        TopologyVersion--;
+        InvalidateRenderVertexCaches();
         return false;
     }
 
-    // Increment topology version (mesh structure unchanged, but plate assignments changed)
-    TopologyVersion++;
-    InvalidateRidgeDirectionCache();
-    MarkAllRidgeDirectionsDirty();
+    BuildRenderVertexAdjacency();
+    BuildRenderVertexReverseAdjacency();
+    UpdateConvergentNeighborFlags();
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("ExtractTerrane: Successfully extracted terrane %d (%.2f km²) from plate %d"),
         OutTerraneID, TerraneArea, SourcePlateID);
 
-    // Milestone 6 Task 1.2: Automatically assign carrier plate to initiate transport
     AssignTerraneCarrier(OutTerraneID);
-
     return true;
 }
 
@@ -2827,7 +4306,6 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
         return false;
     }
 
-    // Capture pre-reattachment snapshot for rollback
     FString ValidationError;
     if (!ValidateTopology(ValidationError))
     {
@@ -2835,55 +4313,294 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
         return false;
     }
 
-    // Assign terrane vertices to target plate
-    for (int32 VertexIdx : Terrane->VertexIndices)
+    if (Terrane->VertexPayload.Num() == 0)
     {
-        if (VertexIdx < 0 || VertexIdx >= VertexPlateAssignments.Num())
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Terrane %d has no stored vertex payload"), TerraneID);
+        return false;
+    }
+
+    const TArray<FVector3d> BackupRenderVertices = RenderVertices;
+    const TArray<int32> BackupRenderTriangles = RenderTriangles;
+    const TArray<int32> BackupVertexAssignments = VertexPlateAssignments;
+    const TArray<FVector3d> BackupVertexVelocities = VertexVelocities;
+    const TArray<double> BackupVertexStress = VertexStressValues;
+    const TArray<double> BackupVertexTemperature = VertexTemperatureValues;
+    const TArray<double> BackupVertexElevation = VertexElevationValues;
+    const TArray<double> BackupVertexErosion = VertexErosionRates;
+    const TArray<double> BackupVertexSediment = VertexSedimentThickness;
+    const TArray<double> BackupVertexCrustAge = VertexCrustAge;
+    const TArray<double> BackupVertexAmplified = VertexAmplifiedElevation;
+    const TArray<FVector3d> BackupVertexRidgeDirections = VertexRidgeDirections;
+    const TArray<int32> BackupAdjOffsets = RenderVertexAdjacencyOffsets;
+    const TArray<int32> BackupAdjacency = RenderVertexAdjacency;
+    const TArray<float> BackupAdjWeights = RenderVertexAdjacencyWeights;
+    const TArray<int32> BackupReverseAdjacency = RenderVertexReverseAdjacency;
+    const TArray<uint8> BackupConvergentFlags = ConvergentNeighborFlags;
+    const TArray<int32> BackupPendingSeeds = PendingCrustAgeResetSeeds;
+    const TBitArray<> BackupPendingMask = PendingCrustAgeResetMask;
+
+    auto MakeSortedTriangleKey = [](int32 A, int32 B, int32 C)
+    {
+        int32 Values[3] = {A, B, C};
+        if (Values[0] > Values[1])
         {
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Invalid vertex index %d in terrane %d"),
-                VertexIdx, TerraneID);
+            const int32 Temp = Values[0];
+            Values[0] = Values[1];
+            Values[1] = Temp;
+        }
+        if (Values[1] > Values[2])
+        {
+            const int32 Temp = Values[1];
+            Values[1] = Values[2];
+            Values[2] = Temp;
+        }
+        if (Values[0] > Values[1])
+        {
+            const int32 Temp = Values[0];
+            Values[0] = Values[1];
+            Values[1] = Temp;
+        }
+        return FIntVector(Values[0], Values[1], Values[2]);
+    };
+
+    TSet<FIntVector> PatchTriangleSet;
+    for (int32 TriIdx = 0; TriIdx < Terrane->PatchTriangles.Num(); TriIdx += 3)
+    {
+        const int32 A = Terrane->PatchTriangles[TriIdx];
+        const int32 B = Terrane->PatchTriangles[TriIdx + 1];
+        const int32 C = Terrane->PatchTriangles[TriIdx + 2];
+        PatchTriangleSet.Add(MakeSortedTriangleKey(A, B, C));
+    }
+
+    TArray<int32> FilteredTriangles;
+    FilteredTriangles.Reserve(RenderTriangles.Num());
+    for (int32 TriIdx = 0; TriIdx < RenderTriangles.Num(); TriIdx += 3)
+    {
+        const int32 A = RenderTriangles[TriIdx];
+        const int32 B = RenderTriangles[TriIdx + 1];
+        const int32 C = RenderTriangles[TriIdx + 2];
+        if (PatchTriangleSet.Contains(MakeSortedTriangleKey(A, B, C)))
+        {
+            continue;
+        }
+        FilteredTriangles.Add(A);
+        FilteredTriangles.Add(B);
+        FilteredTriangles.Add(C);
+    }
+
+    const TSet<int32> PatchVertexSet(Terrane->PatchVertexIndices);
+
+    TArray<int32> LocalToGlobal;
+    LocalToGlobal.Reserve(Terrane->VertexPayload.Num());
+    for (const FTerraneVertexRecord& Payload : Terrane->VertexPayload)
+    {
+        FTerraneVertexRecord Record = Payload;
+        Record.PlateID = TargetPlateID;
+        const int32 NewIndex = AppendRenderVertexFromRecord(Record, TargetPlateID);
+        LocalToGlobal.Add(NewIndex);
+    }
+
+    TMap<int32, int32> ReplacementToLocal;
+    for (int32 LocalIdx = 0; LocalIdx < Terrane->VertexPayload.Num(); ++LocalIdx)
+    {
+        const int32 ReplacementIdx = Terrane->VertexPayload[LocalIdx].ReplacementVertexIndex;
+        if (ReplacementIdx != INDEX_NONE)
+        {
+            ReplacementToLocal.Add(ReplacementIdx, LocalIdx);
+        }
+    }
+
+    for (int32& Index : FilteredTriangles)
+    {
+        if (int32* LocalIdxPtr = ReplacementToLocal.Find(Index))
+        {
+            const int32 LocalIdx = *LocalIdxPtr;
+            if (LocalToGlobal.IsValidIndex(LocalIdx))
+            {
+                Index = LocalToGlobal[LocalIdx];
+            }
+        }
+    }
+
+    TArray<int32> PatchVerticesSorted = Terrane->PatchVertexIndices;
+    PatchVerticesSorted.Sort();
+    int32 PatchWriteIndex = 0;
+    int32 PatchLastValue = MIN_int32;
+    bool bHasPatchLast = false;
+    for (int32 Value : PatchVerticesSorted)
+    {
+        if (!bHasPatchLast || Value != PatchLastValue)
+        {
+            PatchVerticesSorted[PatchWriteIndex++] = Value;
+            PatchLastValue = Value;
+            bHasPatchLast = true;
+        }
+    }
+    PatchVerticesSorted.SetNum(PatchWriteIndex);
+
+    TArray<int32> OldToNewIndex;
+    CompactRenderVertexData(PatchVerticesSorted, OldToNewIndex);
+
+    auto RemapIndex = [&](int32& Index) -> bool
+    {
+        if (!OldToNewIndex.IsValidIndex(Index) || OldToNewIndex[Index] == INDEX_NONE)
+        {
+            return false;
+        }
+        Index = OldToNewIndex[Index];
+        return true;
+    };
+
+    for (int32& Index : FilteredTriangles)
+    {
+        if (!RemapIndex(Index))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Failed to remap retained triangle index %d"), Index);
+
+            RenderVertices = BackupRenderVertices;
+            RenderTriangles = BackupRenderTriangles;
+            VertexPlateAssignments = BackupVertexAssignments;
+            VertexVelocities = BackupVertexVelocities;
+            VertexStressValues = BackupVertexStress;
+            VertexTemperatureValues = BackupVertexTemperature;
+            VertexElevationValues = BackupVertexElevation;
+            VertexErosionRates = BackupVertexErosion;
+            VertexSedimentThickness = BackupVertexSediment;
+            VertexCrustAge = BackupVertexCrustAge;
+            VertexAmplifiedElevation = BackupVertexAmplified;
+            VertexRidgeDirections = BackupVertexRidgeDirections;
+            RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+            RenderVertexAdjacency = BackupAdjacency;
+            RenderVertexAdjacencyWeights = BackupAdjWeights;
+            RenderVertexReverseAdjacency = BackupReverseAdjacency;
+            ConvergentNeighborFlags = BackupConvergentFlags;
+            PendingCrustAgeResetSeeds = BackupPendingSeeds;
+            PendingCrustAgeResetMask = BackupPendingMask;
+            return false;
+        }
+    }
+
+    for (int32& Index : LocalToGlobal)
+    {
+        if (!RemapIndex(Index))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Failed to remap terrane vertex index %d"), Index);
+
+            RenderVertices = BackupRenderVertices;
+            RenderTriangles = BackupRenderTriangles;
+            VertexPlateAssignments = BackupVertexAssignments;
+            VertexVelocities = BackupVertexVelocities;
+            VertexStressValues = BackupVertexStress;
+            VertexTemperatureValues = BackupVertexTemperature;
+            VertexElevationValues = BackupVertexElevation;
+            VertexErosionRates = BackupVertexErosion;
+            VertexSedimentThickness = BackupVertexSediment;
+            VertexCrustAge = BackupVertexCrustAge;
+            VertexAmplifiedElevation = BackupVertexAmplified;
+            VertexRidgeDirections = BackupVertexRidgeDirections;
+            RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+            RenderVertexAdjacency = BackupAdjacency;
+            RenderVertexAdjacencyWeights = BackupAdjWeights;
+            RenderVertexReverseAdjacency = BackupReverseAdjacency;
+            ConvergentNeighborFlags = BackupConvergentFlags;
+            PendingCrustAgeResetSeeds = BackupPendingSeeds;
+            PendingCrustAgeResetMask = BackupPendingMask;
+            return false;
+        }
+    }
+
+    RenderTriangles = MoveTemp(FilteredTriangles);
+
+    for (int32 TriIdx = 0; TriIdx < Terrane->ExtractedTriangles.Num(); TriIdx += 3)
+    {
+        const int32 LocalA = Terrane->ExtractedTriangles[TriIdx];
+        const int32 LocalB = Terrane->ExtractedTriangles[TriIdx + 1];
+        const int32 LocalC = Terrane->ExtractedTriangles[TriIdx + 2];
+
+        if (!LocalToGlobal.IsValidIndex(LocalA) || !LocalToGlobal.IsValidIndex(LocalB) || !LocalToGlobal.IsValidIndex(LocalC))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Invalid local triangle indices (%d, %d, %d)"), LocalA, LocalB, LocalC);
+
+            RenderVertices = BackupRenderVertices;
+            RenderTriangles = BackupRenderTriangles;
+            VertexPlateAssignments = BackupVertexAssignments;
+            VertexVelocities = BackupVertexVelocities;
+            VertexStressValues = BackupVertexStress;
+            VertexTemperatureValues = BackupVertexTemperature;
+            VertexElevationValues = BackupVertexElevation;
+            VertexErosionRates = BackupVertexErosion;
+            VertexSedimentThickness = BackupVertexSediment;
+            VertexCrustAge = BackupVertexCrustAge;
+            VertexAmplifiedElevation = BackupVertexAmplified;
+            VertexRidgeDirections = BackupVertexRidgeDirections;
+            RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+            RenderVertexAdjacency = BackupAdjacency;
+            RenderVertexAdjacencyWeights = BackupAdjWeights;
+            RenderVertexReverseAdjacency = BackupReverseAdjacency;
+            ConvergentNeighborFlags = BackupConvergentFlags;
+            PendingCrustAgeResetSeeds = BackupPendingSeeds;
+            PendingCrustAgeResetMask = BackupPendingMask;
             return false;
         }
 
-        VertexPlateAssignments[VertexIdx] = TargetPlateID;
+        const int32 GlobalA = LocalToGlobal[LocalA];
+        const int32 GlobalB = LocalToGlobal[LocalB];
+        const int32 GlobalC = LocalToGlobal[LocalC];
+
+        RenderTriangles.Add(GlobalA);
+        RenderTriangles.Add(GlobalB);
+        RenderTriangles.Add(GlobalC);
     }
 
-    // Update terrane record
+    InvalidateRenderVertexCaches();
+
+    SurfaceDataVersion++;
+    TopologyVersion++;
+    InvalidateRidgeDirectionCache();
+    MarkAllRidgeDirectionsDirty();
+    BumpOceanicAmplificationSerial();
+
+    if (!ValidateTopology(ValidationError))
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Post-reattachment topology invalid: %s"), *ValidationError);
+
+        RenderVertices = BackupRenderVertices;
+        RenderTriangles = BackupRenderTriangles;
+        VertexPlateAssignments = BackupVertexAssignments;
+        VertexVelocities = BackupVertexVelocities;
+        VertexStressValues = BackupVertexStress;
+        VertexTemperatureValues = BackupVertexTemperature;
+        VertexElevationValues = BackupVertexElevation;
+        VertexErosionRates = BackupVertexErosion;
+        VertexSedimentThickness = BackupVertexSediment;
+        VertexCrustAge = BackupVertexCrustAge;
+        VertexAmplifiedElevation = BackupVertexAmplified;
+        VertexRidgeDirections = BackupVertexRidgeDirections;
+        RenderVertexAdjacencyOffsets = BackupAdjOffsets;
+        RenderVertexAdjacency = BackupAdjacency;
+        RenderVertexAdjacencyWeights = BackupAdjWeights;
+        RenderVertexReverseAdjacency = BackupReverseAdjacency;
+        ConvergentNeighborFlags = BackupConvergentFlags;
+        PendingCrustAgeResetSeeds = BackupPendingSeeds;
+        PendingCrustAgeResetMask = BackupPendingMask;
+        SurfaceDataVersion--;
+        TopologyVersion--;
+        return false;
+    }
+
+    BuildRenderVertexAdjacency();
+    BuildRenderVertexReverseAdjacency();
+    UpdateConvergentNeighborFlags();
+
     Terrane->State = ETerraneState::Attached;
     Terrane->TargetPlateID = TargetPlateID;
     Terrane->CarrierPlateID = INDEX_NONE;
     Terrane->ReattachmentTimeMy = CurrentTimeMy;
 
-    // Validate post-reattachment topology
-    if (!ValidateTopology(ValidationError))
-    {
-        UE_LOG(LogPlanetaryCreation, Error, TEXT("ReattachTerrane: Post-reattachment topology invalid: %s"), *ValidationError);
-
-        // Rollback: Unassign vertices
-        for (int32 VertexIdx : Terrane->VertexIndices)
-        {
-            VertexPlateAssignments[VertexIdx] = INDEX_NONE;
-        }
-
-        // Restore terrane state
-        Terrane->State = ETerraneState::Extracted;
-        Terrane->TargetPlateID = INDEX_NONE;
-        Terrane->ReattachmentTimeMy = 0.0;
-
-        return false;
-    }
-
-    // Remove terrane from active list (now fully integrated into target plate)
     Terranes.RemoveAt(TerraneIndex);
-
-    // Increment topology version
-    TopologyVersion++;
-    InvalidateRidgeDirectionCache();
-    MarkAllRidgeDirectionsDirty();
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("ReattachTerrane: Successfully reattached terrane %d to plate %d (%.2f My transport duration)"),
         TerraneID, TargetPlateID, CurrentTimeMy - Terrane->ExtractionTimeMy);
-
     return true;
 }
 
@@ -2987,32 +4704,27 @@ void UTectonicSimulationService::UpdateTerranePositions(double DeltaTimeMy)
         const double SinTheta = FMath::Sin(RotationAngle);
         const double OneMinusCosTheta = 1.0 - CosTheta;
 
-        for (int32 VertexIdx : Terrane.VertexIndices)
+        for (FTerraneVertexRecord& VertexRecord : Terrane.VertexPayload)
         {
-            if (VertexIdx < 0 || VertexIdx >= RenderVertices.Num())
-            {
-                continue;
-            }
-
-            const FVector3d& V = RenderVertices[VertexIdx];
+            FVector3d& V = VertexRecord.Position;
             const FVector3d KCrossV = RotationAxis ^ V;
             const double KDotV = RotationAxis | V;
 
-            RenderVertices[VertexIdx] = V * CosTheta + KCrossV * SinTheta + RotationAxis * KDotV * OneMinusCosTheta;
-            RenderVertices[VertexIdx].Normalize(); // Maintain unit sphere
+            V = V * CosTheta + KCrossV * SinTheta + RotationAxis * KDotV * OneMinusCosTheta;
+            V.Normalize(); // Maintain unit sphere
         }
 
         // Update terrane centroid
         FVector3d NewCentroid = FVector3d::ZeroVector;
-        for (int32 VertexIdx : Terrane.VertexIndices)
+        for (const FTerraneVertexRecord& VertexRecord : Terrane.VertexPayload)
         {
-            if (VertexIdx >= 0 && VertexIdx < RenderVertices.Num())
-            {
-                NewCentroid += RenderVertices[VertexIdx];
-            }
+            NewCentroid += VertexRecord.Position;
         }
-        NewCentroid /= static_cast<double>(Terrane.VertexIndices.Num());
-        Terrane.Centroid = NewCentroid.GetSafeNormal();
+        if (Terrane.VertexPayload.Num() > 0)
+        {
+            NewCentroid /= static_cast<double>(Terrane.VertexPayload.Num());
+            Terrane.Centroid = NewCentroid.GetSafeNormal();
+        }
     }
 
     BumpOceanicAmplificationSerial();
@@ -3231,6 +4943,13 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
     int32 UpdatedVertices = 0;
 
+#if UE_BUILD_DEVELOPMENT
+    int32 RidgeDiagLogged = 0;
+    int32 RidgeDiagMissingTangent = 0;
+    int32 RidgeDiagPoorAlignment = 0;
+    int32 RidgeDiagGradientFallback = 0;
+#endif
+
     for (int32 VertexIdx : DirtyVertices)
     {
         if (!RenderVertices.IsValidIndex(VertexIdx))
@@ -3268,6 +4987,56 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
         const FVector3d VertexNormal = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
 
+        FVector3d AgeGradient = FVector3d::ZeroVector;
+        bool bUsedGradient = false;
+
+        if (VertexCrustAge.IsValidIndex(VertexIdx) && RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1))
+        {
+            const int32 StartAdj = RenderVertexAdjacencyOffsets[VertexIdx];
+            const int32 EndAdj = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+            for (int32 Offset = StartAdj; Offset < EndAdj; ++Offset)
+            {
+                const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
+                if (!RenderVertices.IsValidIndex(NeighborIdx))
+                {
+                    continue;
+                }
+
+                if (!VertexCrustAge.IsValidIndex(NeighborIdx))
+                {
+                    continue;
+                }
+
+                const int32 NeighborPlateID = VertexPlateAssignments.IsValidIndex(NeighborIdx) ? VertexPlateAssignments[NeighborIdx] : INDEX_NONE;
+                if (NeighborPlateID != Plate.PlateID)
+                {
+                    continue;
+                }
+
+                FVector3d Step = RenderVertices[NeighborIdx] - VertexPosition;
+                Step -= (Step | VertexNormal) * VertexNormal;
+                if (Step.IsNearlyZero())
+                {
+                    continue;
+                }
+
+                const double AgeDiff = VertexCrustAge[NeighborIdx] - VertexCrustAge[VertexIdx];
+                AgeGradient += AgeDiff * Step;
+            }
+        }
+
+        const double GradientLength = AgeGradient.Length();
+        if (GradientLength > UE_DOUBLE_SMALL_NUMBER)
+        {
+            const FVector3d GradientDir = (AgeGradient / GradientLength).GetSafeNormal();
+            FVector3d Candidate = FVector3d::CrossProduct(VertexNormal, GradientDir).GetSafeNormal();
+            if (!Candidate.IsNearlyZero())
+            {
+                ResultDirection = Candidate;
+                bUsedGradient = true;
+            }
+        }
+
         double MinDistance = TNumericLimits<double>::Max();
         FVector3d NearestBoundaryTangent = FVector3d::ZAxisVector;
 
@@ -3291,29 +5060,20 @@ void UTectonicSimulationService::ComputeRidgeDirections()
                 continue;
             }
 
-            for (int32 EdgeIdx = 0; EdgeIdx < Boundary.SharedEdgeVertices.Num() - 1; ++EdgeIdx)
+            const int32 EdgeCount = Boundary.SharedEdgeVertices.Num();
+            auto ProcessEdge = [&](const FVector3d& EdgeV0, const FVector3d& EdgeV1)
             {
-                const int32 EdgeV0Idx = Boundary.SharedEdgeVertices[EdgeIdx];
-                const int32 EdgeV1Idx = Boundary.SharedEdgeVertices[EdgeIdx + 1];
-                if (!SharedVertices.IsValidIndex(EdgeV0Idx) || !SharedVertices.IsValidIndex(EdgeV1Idx))
-                {
-                    continue;
-                }
-
-                const FVector3d EdgeV0 = SharedVertices[EdgeV0Idx].GetSafeNormal();
-                const FVector3d EdgeV1 = SharedVertices[EdgeV1Idx].GetSafeNormal();
-
                 const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
                 if (PlaneNormal.IsNearlyZero())
                 {
-                    continue;
+                    return;
                 }
 
                 const double Projection = FVector3d::DotProduct(VertexNormal, PlaneNormal);
                 const FVector3d Projected = (VertexNormal - Projection * PlaneNormal);
                 if (Projected.IsNearlyZero())
                 {
-                    continue;
+                    return;
                 }
 
                 const FVector3d GreatCirclePoint = Projected.GetSafeNormal();
@@ -3324,7 +5084,7 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
                 const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + GreatCircleSegmentAngleToleranceRad);
 
-                auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
+                const auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
                 {
                     const double AngularDistance = FMath::Acos(FMath::Clamp(VertexNormal | PointOnCircle, -1.0, 1.0));
                     if (AngularDistance < MinDistance)
@@ -3343,12 +5103,51 @@ void UTectonicSimulationService::ComputeRidgeDirections()
                     ConsiderPoint(EdgeV0);
                     ConsiderPoint(EdgeV1);
                 }
+            };
+
+            for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount - 1; ++EdgeIdx)
+            {
+                const int32 EdgeV0Idx = Boundary.SharedEdgeVertices[EdgeIdx];
+                const int32 EdgeV1Idx = Boundary.SharedEdgeVertices[EdgeIdx + 1];
+                if (!SharedVertices.IsValidIndex(EdgeV0Idx) || !SharedVertices.IsValidIndex(EdgeV1Idx))
+                {
+                    continue;
+                }
+
+                const FVector3d EdgeV0 = SharedVertices[EdgeV0Idx].GetSafeNormal();
+                const FVector3d EdgeV1 = SharedVertices[EdgeV1Idx].GetSafeNormal();
+                ProcessEdge(EdgeV0, EdgeV1);
+            }
+
+            if (EdgeCount >= 2)
+            {
+                const int32 EdgeV0Idx = Boundary.SharedEdgeVertices[EdgeCount - 1];
+                const int32 EdgeV1Idx = Boundary.SharedEdgeVertices[0];
+                if (SharedVertices.IsValidIndex(EdgeV0Idx) && SharedVertices.IsValidIndex(EdgeV1Idx))
+                {
+                    const FVector3d EdgeV0 = SharedVertices[EdgeV0Idx].GetSafeNormal();
+                    const FVector3d EdgeV1 = SharedVertices[EdgeV1Idx].GetSafeNormal();
+                    ProcessEdge(EdgeV0, EdgeV1);
+                }
             }
         }
 
-        ResultDirection = (MinDistance < TNumericLimits<double>::Max())
-            ? NearestBoundaryTangent
-            : FVector3d::ZAxisVector;
+        const bool bHasBoundaryTangent = (MinDistance < TNumericLimits<double>::Max()) && !NearestBoundaryTangent.IsNearlyZero();
+        if (!bUsedGradient && bHasBoundaryTangent)
+        {
+            const FVector3d Projected = (NearestBoundaryTangent - (NearestBoundaryTangent | VertexNormal) * VertexNormal).GetSafeNormal();
+            ResultDirection = Projected.IsNearlyZero() ? NearestBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector) : Projected;
+        }
+
+        const double DirLength = ResultDirection.Length();
+        if (DirLength < UE_DOUBLE_SMALL_NUMBER)
+        {
+            ResultDirection = FVector3d::CrossProduct(VertexNormal, FVector3d::UpVector).GetSafeNormal();
+            if (ResultDirection.IsNearlyZero())
+            {
+                ResultDirection = FVector3d::ZAxisVector;
+            }
+        }
 
         VertexRidgeDirections[VertexIdx] = ResultDirection;
 
@@ -3358,6 +5157,61 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         RidgeSoA.DirZ[VertexIdx] = static_cast<float>(SafeDir.Z);
 
         ++UpdatedVertices;
+
+#if UE_BUILD_DEVELOPMENT
+        if (VertexCrustAge.IsValidIndex(VertexIdx) && VertexCrustAge[VertexIdx] < 15.0)
+        {
+            const double Alignment = bHasBoundaryTangent
+                ? FMath::Abs(ResultDirection | NearestBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector))
+                : -1.0;
+
+            if (!bHasBoundaryTangent)
+            {
+                ++RidgeDiagMissingTangent;
+                if (RidgeDiagLogged < 50)
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning,
+                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My missing boundary tangent"),
+                        VertexIdx, Plate.PlateID, VertexCrustAge[VertexIdx]);
+                    ++RidgeDiagLogged;
+                }
+            }
+            else if (DirLength < 0.95 || Alignment < 0.95)
+            {
+                ++RidgeDiagPoorAlignment;
+                if (RidgeDiagLogged < 50)
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning,
+                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My |Dir|=%.3f Alignment=%.1f%%"),
+                        VertexIdx,
+                        Plate.PlateID,
+                        VertexCrustAge[VertexIdx],
+                        DirLength,
+                        Alignment * 100.0);
+                    UE_LOG(LogPlanetaryCreation, Warning,
+                        TEXT("    ResultDir=(%.3f, %.3f, %.3f) BoundaryTan=(%.3f, %.3f, %.3f)"),
+                        ResultDirection.X, ResultDirection.Y, ResultDirection.Z,
+                        NearestBoundaryTangent.X, NearestBoundaryTangent.Y, NearestBoundaryTangent.Z);
+                    ++RidgeDiagLogged;
+                }
+            }
+            else if (!bUsedGradient && RidgeDiagLogged < 50)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My gradient fallback (|Grad|=%.3f)"),
+                    VertexIdx,
+                    Plate.PlateID,
+                    VertexCrustAge[VertexIdx],
+                    GradientLength);
+                ++RidgeDiagLogged;
+            }
+
+            if (!bUsedGradient)
+            {
+                ++RidgeDiagGradientFallback;
+            }
+        }
+#endif
     }
 
     for (int32 VertexIdx : DirtyVertices)
@@ -3384,6 +5238,17 @@ void UTectonicSimulationService::ComputeRidgeDirections()
             VertexCount);
         BumpOceanicAmplificationSerial();
     }
+
+#if UE_BUILD_DEVELOPMENT
+    if (RidgeDiagMissingTangent > 0 || RidgeDiagPoorAlignment > 0 || RidgeDiagGradientFallback > 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[RidgeDiag] Summary: Missing=%d PoorAlignment=%d GradientFallback=%d"),
+            RidgeDiagMissingTangent,
+            RidgeDiagPoorAlignment,
+            RidgeDiagGradientFallback);
+    }
+#endif
 }
 
 void UTectonicSimulationService::SetHighlightSeaLevel(bool bEnabled)
@@ -3436,7 +5301,26 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
     checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized (must run oceanic dampening first)"));
     checkf(VertexRidgeDirections.Num() == VertexCount, TEXT("VertexRidgeDirections not initialized (must run ComputeRidgeDirections first)"));
 
+    auto FindPlateByID = [this](int32 LookupPlateID) -> const FTectonicPlate*
+    {
+        if (LookupPlateID == INDEX_NONE)
+        {
+            return nullptr;
+        }
+
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.PlateID == LookupPlateID)
+            {
+                return &Plate;
+            }
+        }
+
+        return nullptr;
+    };
+
     int32 DebugMismatchCount = 0;
+    static int32 ContinentalAmplifiedLogCount = 0;
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
@@ -3446,21 +5330,22 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
         const FVector3d& RidgeDirection = VertexRidgeDirections[VertexIdx];
 
         // Debug Step 1: Verify vertex→plate mapping sanity
-        if (PlateID != INDEX_NONE && Plates.IsValidIndex(PlateID))
+        if (const FTectonicPlate* PlatePtr = FindPlateByID(PlateID))
         {
-            const FTectonicPlate& Plate = Plates[PlateID];
-
             // Flag vertices with oceanic depths (-3500m) but continental plate assignment
-            if (Plate.CrustType != ECrustType::Oceanic &&
+            if (PlatePtr->CrustType != ECrustType::Oceanic &&
                 BaseElevation_m < Parameters.SeaLevel - 10.0 &&
                 DebugMismatchCount < 3)
             {
                 UE_LOG(LogPlanetaryCreation, Warning, TEXT("StageB: vertex %d depth %.1f m but plate %d marked %s"),
                     VertexIdx, BaseElevation_m, PlateID,
-                    Plate.CrustType == ECrustType::Continental ? TEXT("continental") : TEXT("other"));
+                    PlatePtr->CrustType == ECrustType::Continental ? TEXT("continental") : TEXT("other"));
                 DebugMismatchCount++;
             }
         }
+
+        const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+        const bool bPlateIsOceanic = PlatePtr && PlatePtr->CrustType == ECrustType::Oceanic;
 
         // Call amplification function from OceanicAmplification.cpp
         const double AmplifiedElevation = ComputeOceanicAmplification(
@@ -3473,6 +5358,17 @@ void UTectonicSimulationService::ApplyOceanicAmplification()
             Boundaries,
             Parameters
         );
+
+        if (!bPlateIsOceanic)
+        {
+            if (ContinentalAmplifiedLogCount < 5)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB][Skip] Vertex %d PlateID=%d is non-oceanic; forcing base elevation"), VertexIdx, PlateID);
+                ContinentalAmplifiedLogCount++;
+            }
+            VertexAmplifiedElevation[VertexIdx] = BaseElevation_m;
+            continue;
+        }
 
         VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;
     }
@@ -3653,8 +5549,11 @@ void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferRe
     Job.DispatchFence.BeginFence();
 }
 
-void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete)
+void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete, double* OutReadbackSeconds)
 {
+    double AccumulatedSeconds = 0.0;
+    static int32 ContinentalGPUCorrectionLogs = 0;
+
     for (int32 JobIndex = PendingOceanicGPUJobs.Num() - 1; JobIndex >= 0; --JobIndex)
     {
         FOceanicGPUAsyncJob& Job = PendingOceanicGPUJobs[JobIndex];
@@ -3668,7 +5567,9 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
         {
             if (bBlockUntilComplete)
             {
+                const double WaitStart = FPlatformTime::Seconds();
                 Job.DispatchFence.Wait();
+                AccumulatedSeconds += FPlatformTime::Seconds() - WaitStart;
             }
             else
             {
@@ -3680,11 +5581,13 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
         {
             if (bBlockUntilComplete)
             {
+                const double ReadbackWaitStart = FPlatformTime::Seconds();
                 const double Deadline = FPlatformTime::Seconds() + 30.0;
                 while (!Job.Readback->IsReady() && FPlatformTime::Seconds() < Deadline)
                 {
                     FPlatformProcess::SleepNoStats(0.001f);
                 }
+                AccumulatedSeconds += FPlatformTime::Seconds() - ReadbackWaitStart;
                 if (!Job.Readback->IsReady())
                 {
                     continue;
@@ -3701,8 +5604,6 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
         TSharedRef<TArray<float>, ESPMode::ThreadSafe> TempData = MakeShared<TArray<float>, ESPMode::ThreadSafe>();
         TempData->SetNum(NumFloats);
 
-        FRenderCommandFence CopyFence;
-
         ENQUEUE_RENDER_COMMAND(CopyOceanicGPUReadback)(
             [Readback = Job.Readback, NumBytes = Job.NumBytes, TempData](FRHICommandListImmediate& RHICmdList)
             {
@@ -3714,29 +5615,76 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                 const float* GPUData = static_cast<const float*>(Readback->Lock(NumBytes));
                 if (GPUData)
                 {
-                    FMemory::Memcpy(TempData->GetData(), GPUData, NumBytes);
+                FMemory::Memcpy(TempData->GetData(), GPUData, NumBytes);
                 }
                 Readback->Unlock();
             });
 
-        CopyFence.BeginFence();
-        CopyFence.Wait();
+        Job.CopyFence.BeginFence();
+        if (bBlockUntilComplete)
+        {
+            const double CopyWaitStart = FPlatformTime::Seconds();
+            Job.CopyFence.Wait();
+            AccumulatedSeconds += FPlatformTime::Seconds() - CopyWaitStart;
+        }
+        else if (!Job.CopyFence.IsFenceComplete())
+        {
+            continue;
+        }
 
         TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
         Amplified.SetNum(NumFloats);
         for (int32 Index = 0; Index < NumFloats; ++Index)
         {
-            Amplified[Index] = static_cast<double>((*TempData)[Index]);
+            const double GPUValue = static_cast<double>((*TempData)[Index]);
+            const int32 PlateId = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
+            bool bOceanicPlate = false;
+            const double BaseElevation = VertexElevationValues.IsValidIndex(Index) ? VertexElevationValues[Index] : GPUValue;
+            if (PlateId != INDEX_NONE)
+            {
+                for (const FTectonicPlate& Plate : Plates)
+                {
+                    if (Plate.PlateID == PlateId)
+                    {
+                        bOceanicPlate = (Plate.CrustType == ECrustType::Oceanic);
+                        break;
+                    }
+                }
+            }
+
+            if (bOceanicPlate)
+            {
+                Amplified[Index] = GPUValue;
+            }
+            else
+            {
+                Amplified[Index] = BaseElevation;
+                if (ContinentalGPUCorrectionLogs < 5)
+                {
+                    const double Diff = FMath::Abs(GPUValue - BaseElevation);
+                    if (Diff > 1.0)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB][GPU] Continental vertex %d masked out, restoring base elevation (Diff %.3f m)"), Index, Diff);
+                        ContinentalGPUCorrectionLogs++;
+                    }
+                }
+            }
         }
 
         PendingOceanicGPUJobs.RemoveAt(JobIndex);
         BumpOceanicAmplificationSerial();
     }
+
+    if (OutReadbackSeconds)
+    {
+        *OutReadbackSeconds += AccumulatedSeconds;
+    }
 }
 #else
-void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete)
+void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete, double* OutReadbackSeconds)
 {
     (void)bBlockUntilComplete;
+    (void)OutReadbackSeconds;
 }
 #endif
 
@@ -3828,6 +5776,24 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
     Cache.RenderPositions.SetNum(VertexCount);
     Cache.OceanicMask.SetNum(VertexCount);
 
+    auto FindPlateByID = [this](int32 LookupPlateID) -> const FTectonicPlate*
+    {
+        if (LookupPlateID == INDEX_NONE)
+        {
+            return nullptr;
+        }
+
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.PlateID == LookupPlateID)
+            {
+                return &Plate;
+            }
+        }
+
+        return nullptr;
+    };
+
     const bool bHasRidgeSoA =
         RidgeDirectionFloatSoA.CachedTopologyVersion == CachedRidgeDirectionTopologyVersion &&
         RidgeDirectionFloatSoA.CachedVertexCount == VertexCount &&
@@ -3868,9 +5834,12 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
 
         uint32 bIsOceanic = 0;
         const int32 PlateId = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
-        if (PlateId != INDEX_NONE && Plates.IsValidIndex(PlateId) && Plates[PlateId].CrustType == ECrustType::Oceanic)
+        if (const FTectonicPlate* PlatePtr = FindPlateByID(PlateId))
         {
-            bIsOceanic = 1;
+            if (PlatePtr->CrustType == ECrustType::Oceanic)
+            {
+                bIsOceanic = 1;
+            }
         }
         Cache.OceanicMask[Index] = bIsOceanic;
     }
@@ -3883,3 +5852,218 @@ void UTectonicSimulationService::BumpOceanicAmplificationSerial()
     ++OceanicAmplificationDataSerial;
     OceanicAmplificationFloatInputs.CachedDataSerial = 0;
 }
+#if UE_BUILD_DEVELOPMENT
+void UTectonicSimulationService::RunTerraneMeshSurgerySpike()
+{
+    UE_LOG(LogPlanetaryCreation, Display, TEXT("[TerraneSpike] Running mesh surgery spike"));
+
+    // Ensure we are at least Level 3 for meaningful test data.
+    if (Parameters.RenderSubdivisionLevel < 3)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[TerraneSpike] RenderSubdivisionLevel < 3 (current: %d); regenerating Level 3 mesh"),
+            Parameters.RenderSubdivisionLevel);
+
+        FTectonicSimulationParameters TempParams = Parameters;
+        TempParams.RenderSubdivisionLevel = 3;
+        TempParams.bEnableDynamicRetessellation = false;
+        SetParameters(TempParams);
+        GenerateRenderMesh();
+        BuildVoronoiMapping();
+    }
+
+    if (RenderVertices.Num() == 0 || RenderTriangles.Num() == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[TerraneSpike] Render mesh not initialized"));
+        return;
+    }
+
+    const double StartTime = FPlatformTime::Seconds();
+
+    // Step 1: Choose a seed face and gather neighbouring vertices to form a candidate terrane region.
+    const int32 SeedTriangleIndex = RenderTriangles.Num() > 0 ? 0 : INDEX_NONE;
+    if (SeedTriangleIndex == INDEX_NONE)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[TerraneSpike] No triangles available"));
+        return;
+    }
+
+    TSet<int32> CandidateVertices;
+    TQueue<int32> Frontier;
+
+    auto EnqueueVertex = [&](int32 VertexIdx)
+    {
+        if (VertexIdx >= 0 && VertexIdx < RenderVertices.Num() && !CandidateVertices.Contains(VertexIdx))
+        {
+            CandidateVertices.Add(VertexIdx);
+            Frontier.Enqueue(VertexIdx);
+        }
+    };
+
+    // Seed with first triangle (3 vertices)
+    EnqueueVertex(RenderTriangles[0]);
+    EnqueueVertex(RenderTriangles[1]);
+    EnqueueVertex(RenderTriangles[2]);
+
+    // Expand to ~100 vertices using adjacency from RenderTriangles
+    TMap<int32, TArray<int32>> VertexAdjacency;
+    VertexAdjacency.Reserve(RenderVertices.Num());
+
+    for (int32 Tri = 0; Tri < RenderTriangles.Num(); Tri += 3)
+    {
+        const int32 A = RenderTriangles[Tri];
+        const int32 B = RenderTriangles[Tri + 1];
+        const int32 C = RenderTriangles[Tri + 2];
+
+        VertexAdjacency.FindOrAdd(A).Add(B);
+        VertexAdjacency.FindOrAdd(A).Add(C);
+        VertexAdjacency.FindOrAdd(B).Add(A);
+        VertexAdjacency.FindOrAdd(B).Add(C);
+        VertexAdjacency.FindOrAdd(C).Add(A);
+        VertexAdjacency.FindOrAdd(C).Add(B);
+    }
+
+    while (!Frontier.IsEmpty() && CandidateVertices.Num() < 100)
+    {
+        int32 CurrentVertex;
+        Frontier.Dequeue(CurrentVertex);
+
+        const TArray<int32>* Neighbors = VertexAdjacency.Find(CurrentVertex);
+        if (!Neighbors)
+        {
+            continue;
+        }
+
+        for (int32 Neighbor : *Neighbors)
+        {
+            EnqueueVertex(Neighbor);
+        }
+    }
+
+    UE_LOG(LogPlanetaryCreation, Display, TEXT("[TerraneSpike] Selected %d candidate vertices"), CandidateVertices.Num());
+
+    if (CandidateVertices.Num() < 10)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[TerraneSpike] Not enough vertices to run surgery"));
+        return;
+    }
+
+    // Convert to array for processing
+    TArray<int32> CandidateVertexArray = CandidateVertices.Array();
+
+    // Step 2: Build boundary ring using simple adjacency (find edges with exactly one triangle in the region)
+    TSet<TPair<int32, int32>> BoundaryEdges;
+    for (int32 Tri = 0; Tri < RenderTriangles.Num(); Tri += 3)
+    {
+        const int32 A = RenderTriangles[Tri];
+        const int32 B = RenderTriangles[Tri + 1];
+        const int32 C = RenderTriangles[Tri + 2];
+
+        const bool bAIn = CandidateVertices.Contains(A);
+        const bool bBIn = CandidateVertices.Contains(B);
+        const bool bCIn = CandidateVertices.Contains(C);
+
+        const int32 InCount = (bAIn ? 1 : 0) + (bBIn ? 1 : 0) + (bCIn ? 1 : 0);
+        if (InCount == 0)
+        {
+            continue;
+        }
+
+        auto MarkBoundary = [&](int32 V0, int32 V1)
+        {
+            if ((CandidateVertices.Contains(V0) && !CandidateVertices.Contains(V1)) ||
+                (CandidateVertices.Contains(V1) && !CandidateVertices.Contains(V0)))
+            {
+                BoundaryEdges.Add(MakeTuple(FMath::Min(V0, V1), FMath::Max(V0, V1)));
+            }
+        };
+
+        MarkBoundary(A, B);
+        MarkBoundary(B, C);
+        MarkBoundary(C, A);
+    }
+
+    UE_LOG(LogPlanetaryCreation, Display, TEXT("[TerraneSpike] Detected %d boundary edges"), BoundaryEdges.Num());
+
+    // Step 3: Clone vertex/triangle data for terrane region
+    struct FTerraneMesh
+    {
+        TArray<FVector3d> Vertices;
+        TArray<int32> Indices;
+    };
+
+    FTerraneMesh TerraneMesh;
+    TerraneMesh.Vertices.SetNum(CandidateVertexArray.Num());
+
+    TMap<int32, int32> GlobalToLocal;
+    for (int32 LocalIdx = 0; LocalIdx < CandidateVertexArray.Num(); ++LocalIdx)
+    {
+        const int32 GlobalIdx = CandidateVertexArray[LocalIdx];
+        GlobalToLocal.Add(GlobalIdx, LocalIdx);
+        TerraneMesh.Vertices[LocalIdx] = RenderVertices[GlobalIdx];
+    }
+
+    for (int32 Tri = 0; Tri < RenderTriangles.Num(); Tri += 3)
+    {
+        const int32 A = RenderTriangles[Tri];
+        const int32 B = RenderTriangles[Tri + 1];
+        const int32 C = RenderTriangles[Tri + 2];
+        if (GlobalToLocal.Contains(A) && GlobalToLocal.Contains(B) && GlobalToLocal.Contains(C))
+        {
+            TerraneMesh.Indices.Add(GlobalToLocal[A]);
+            TerraneMesh.Indices.Add(GlobalToLocal[B]);
+            TerraneMesh.Indices.Add(GlobalToLocal[C]);
+        }
+    }
+
+    UE_LOG(LogPlanetaryCreation, Display, TEXT("[TerraneSpike] Terrane mesh: %d verts, %d tris"),
+        TerraneMesh.Vertices.Num(), TerraneMesh.Indices.Num() / 3);
+
+    // Step 4: Simple validation using existing topology validator (on terrane mesh)
+    auto ValidateMesh = [&](const TArray<FVector3d>& MeshVerts, const TArray<int32>& MeshIndices, const TCHAR* Label)
+    {
+        TSet<TPair<int32, int32>> UniqueEdges;
+        TMap<TPair<int32, int32>, int32> EdgeCounts;
+        const int32 V = MeshVerts.Num();
+        const int32 F = MeshIndices.Num() / 3;
+
+        for (int32 Tri = 0; Tri < MeshIndices.Num(); Tri += 3)
+        {
+            const int32 V0 = MeshIndices[Tri];
+            const int32 V1 = MeshIndices[Tri + 1];
+            const int32 V2 = MeshIndices[Tri + 2];
+
+            auto AddEdge = [&](int32 X, int32 Y)
+            {
+                const TPair<int32, int32> Edge(FMath::Min(X, Y), FMath::Max(X, Y));
+                UniqueEdges.Add(Edge);
+                EdgeCounts.FindOrAdd(Edge)++;
+            };
+
+            AddEdge(V0, V1);
+            AddEdge(V1, V2);
+            AddEdge(V2, V0);
+        }
+
+        const int32 E = UniqueEdges.Num();
+        const int32 Euler = V - E + F;
+        UE_LOG(LogPlanetaryCreation, Display, TEXT("[TerraneSpike][%s] Euler characteristic: %d (V=%d, E=%d, F=%d)"), Label, Euler, V, E, F);
+
+        int32 NonManifold = 0;
+        for (const auto& Pair : EdgeCounts)
+        {
+            if (Pair.Value != 2)
+            {
+                NonManifold++;
+            }
+        }
+
+        UE_LOG(LogPlanetaryCreation, Display, TEXT("[TerraneSpike][%s] Non-manifold edges: %d"), Label, NonManifold);
+    };
+
+    ValidateMesh(TerraneMesh.Vertices, TerraneMesh.Indices, TEXT("Terrane"));
+
+    // Step 5: Report timing
+    const double EndTime = FPlatformTime::Seconds();
+    UE_LOG(LogPlanetaryCreation, Display, TEXT("[TerraneSpike] Completed spike in %.2f ms"), (EndTime - StartTime) * 1000.0);
+}
+#endif

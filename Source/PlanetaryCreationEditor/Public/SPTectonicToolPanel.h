@@ -1,11 +1,13 @@
 #pragma once
 
 #include "Widgets/SCompoundWidget.h"
+#include "Widgets/Input/SComboBox.h"
 #include "TectonicPlaybackController.h"
 #include "Templates/Function.h"
 
 class FTectonicSimulationController;
 struct FTectonicSimulationParameters;
+enum class ETectonicVisualizationMode : uint8;
 
 /** Editor Slate panel exposing tectonic simulation controls. */
 class SPTectonicToolPanel : public SCompoundWidget
@@ -57,10 +59,6 @@ private:
     void OnSubdivisionValueChanged(int32 NewValue);
     void OnSubdivisionValueCommitted(int32 NewValue, ETextCommit::Type CommitType);
 
-    // Velocity visualization toggle (Milestone 3 Task 2.2)
-    ECheckBoxState GetVelocityVisualizationState() const;
-    void OnVelocityVisualizationChanged(ECheckBoxState NewState);
-
     // Elevation mode toggle (Milestone 3 Task 2.4)
     ECheckBoxState GetElevationModeState() const;
     void OnElevationModeChanged(ECheckBoxState NewState);
@@ -77,9 +75,13 @@ private:
     ECheckBoxState GetGPUPreviewState() const;
     void OnGPUPreviewChanged(ECheckBoxState NewState);
 
-    // Heightmap visualization toggle (Milestone 6 Task 2.3)
-    ECheckBoxState GetHeightmapVisualizationState() const;
-    void OnHeightmapVisualizationChanged(ECheckBoxState NewState);
+    // Visualization mode picker (plate/elevation/velocity/stress)
+    void InitializeVisualizationOptions();
+    void RefreshSelectedVisualizationOption();
+    TSharedRef<SWidget> GenerateVisualizationOptionWidget(TSharedPtr<ETectonicVisualizationMode> InOption) const;
+    void OnVisualizationModeChanged(TSharedPtr<ETectonicVisualizationMode> NewSelection, ESelectInfo::Type SelectInfo);
+    FText GetVisualizationModeLabel(TSharedPtr<ETectonicVisualizationMode> InOption) const;
+    FText GetCurrentVisualizationText() const;
 
     // Sea level emphasis toggle
     ECheckBoxState GetSeaLevelHighlightState() const;
@@ -128,4 +130,8 @@ private:
     // Cached parameter values (updated on regenerate)
     int32 CachedSeed = 42;
     int32 CachedSubdivisionLevel = 0;
+
+    TArray<TSharedPtr<ETectonicVisualizationMode>> VisualizationOptions;
+    TSharedPtr<ETectonicVisualizationMode> SelectedVisualizationOption;
+    TSharedPtr<SComboBox<TSharedPtr<ETectonicVisualizationMode>>> VisualizationCombo;
 };

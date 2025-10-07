@@ -179,9 +179,9 @@ bool FTerraneSerializationTest::RunTest(const FString& Parameters)
     if (TerranesAfterRedo.Num() > 0)
     {
         TestEqual(TEXT("Terrane ID preserved"), TerranesAfterRedo[0].TerraneID, TerraneID);
-        TestEqual(TEXT("Terrane vertex count preserved"), TerranesAfterRedo[0].VertexIndices.Num(), TerraneVertices.Num());
+        TestEqual(TEXT("Terrane vertex count preserved"), TerranesAfterRedo[0].VertexPayload.Num(), TerraneVertices.Num());
         UE_LOG(LogPlanetaryCreation, Log, TEXT("  Terrane %d restored with %d vertices"),
-            TerranesAfterRedo[0].TerraneID, TerranesAfterRedo[0].VertexIndices.Num());
+            TerranesAfterRedo[0].TerraneID, TerranesAfterRedo[0].VertexPayload.Num());
     }
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("  After redo: %.1f My, %d terranes"), Service->GetCurrentTimeMy(), TerranesAfterRedo.Num());

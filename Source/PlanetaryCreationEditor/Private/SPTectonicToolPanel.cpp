@@ -42,6 +42,9 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
         }
     }
 
+    InitializeVisualizationOptions();
+    RefreshSelectedVisualizationOption();
+
     ChildSlot
     [
         SNew(SBorder)
@@ -418,19 +421,33 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 .OnClicked(this, &SPTectonicToolPanel::HandleExportMetricsClicked)
             ]
 
-            // Velocity visualization toggle (Milestone 3 Task 2.2)
+            // Visualization mode selector (plate colors, elevation, velocity, stress)
             + SVerticalBox::Slot()
             .AutoHeight()
             .Padding(0.0f, 12.0f)
             [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetVelocityVisualizationState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnVelocityVisualizationChanged)
-                .Content()
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .VAlign(VAlign_Center)
+                .Padding(FMargin(0.f, 0.f, 8.f, 0.f))
                 [
                     SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "VelocityOverlayLabel", "Show Velocity Field"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "VelocityOverlayTooltip", "Visualize plate velocity magnitude as vertex colors (blue=slow, red=fast)"))
+                    .Text(NSLOCTEXT("PlanetaryCreation", "VisualizationLabel", "Visualization"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "VisualizationTooltip", "Choose the active vertex color overlay (plates, elevation heatmap, velocity, or stress)."))
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(1.0f)
+                [
+                    SAssignNew(VisualizationCombo, SComboBox<TSharedPtr<ETectonicVisualizationMode>>)
+                    .OptionsSource(&VisualizationOptions)
+                    .OnGenerateWidget(this, &SPTectonicToolPanel::GenerateVisualizationOptionWidget)
+                    .OnSelectionChanged(this, &SPTectonicToolPanel::OnVisualizationModeChanged)
+                    .Content()
+                    [
+                        SNew(STextBlock)
+                        .Text(this, &SPTectonicToolPanel::GetCurrentVisualizationText)
+                    ]
                 ]
             ]
 
@@ -495,22 +512,6 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                     SNew(STextBlock)
                     .Text(NSLOCTEXT("PlanetaryCreation", "GPUPreviewLabel", "GPU Preview Mode"))
                     .ToolTipText(NSLOCTEXT("PlanetaryCreation", "GPUPreviewTooltip", "Use the GPU height texture preview path (World Position Offset) to eliminate CPU readback stalls. Visualization-only; collision stays CPU-side."))
-                ]
-            ]
-
-            // Heightmap visualization toggle (Milestone 6 Task 2.3)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetHeightmapVisualizationState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnHeightmapVisualizationChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationLabel", "Heightmap Visualization"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HeightmapVisualizationTooltip", "Color vertices by elevation (deep ocean blue → alpine red), scaled to the current elevation range."))
                 ]
             ]
 
@@ -634,6 +635,8 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
             ]
         ]
     ];
+
+    RefreshSelectedVisualizationOption();
 }
 
 FReply SPTectonicToolPanel::HandleStepClicked()
@@ -774,6 +777,97 @@ FReply SPTectonicToolPanel::HandleExportMetricsClicked()
     return FReply::Handled();
 }
 
+void SPTectonicToolPanel::InitializeVisualizationOptions()
+{
+    VisualizationOptions.Reset();
+    VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::PlateColors));
+    VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::Elevation));
+    VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::Velocity));
+    VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::Stress));
+}
+
+void SPTectonicToolPanel::RefreshSelectedVisualizationOption()
+{
+    if (VisualizationOptions.Num() == 0)
+    {
+        InitializeVisualizationOptions();
+    }
+
+    ETectonicVisualizationMode CurrentMode = ETectonicVisualizationMode::PlateColors;
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        CurrentMode = Controller->GetVisualizationMode();
+    }
+
+    SelectedVisualizationOption.Reset();
+    for (const TSharedPtr<ETectonicVisualizationMode>& Option : VisualizationOptions)
+    {
+        if (Option.IsValid() && *Option == CurrentMode)
+        {
+            SelectedVisualizationOption = Option;
+            break;
+        }
+    }
+
+    if (!SelectedVisualizationOption.IsValid() && VisualizationOptions.Num() > 0)
+    {
+        SelectedVisualizationOption = VisualizationOptions[0];
+    }
+
+    if (VisualizationCombo.IsValid())
+    {
+        VisualizationCombo->SetSelectedItem(SelectedVisualizationOption);
+    }
+}
+
+TSharedRef<SWidget> SPTectonicToolPanel::GenerateVisualizationOptionWidget(TSharedPtr<ETectonicVisualizationMode> InOption) const
+{
+    return SNew(STextBlock)
+        .Text(GetVisualizationModeLabel(InOption));
+}
+
+void SPTectonicToolPanel::OnVisualizationModeChanged(TSharedPtr<ETectonicVisualizationMode> NewSelection, ESelectInfo::Type SelectInfo)
+{
+    if (!NewSelection.IsValid())
+    {
+        return;
+    }
+
+    SelectedVisualizationOption = NewSelection;
+
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->SetVisualizationMode(*NewSelection);
+    }
+}
+
+FText SPTectonicToolPanel::GetVisualizationModeLabel(TSharedPtr<ETectonicVisualizationMode> InOption) const
+{
+    if (!InOption.IsValid())
+    {
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationUnknown", "Unknown");
+    }
+
+    switch (*InOption)
+    {
+    case ETectonicVisualizationMode::PlateColors:
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationPlate", "Plate Colors");
+    case ETectonicVisualizationMode::Elevation:
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationElevation", "Elevation Heatmap");
+    case ETectonicVisualizationMode::Velocity:
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationVelocity", "Velocity Field");
+    case ETectonicVisualizationMode::Stress:
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationStress", "Stress Gradient");
+    default:
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationDefault", "Plate Colors");
+    }
+}
+
+FText SPTectonicToolPanel::GetCurrentVisualizationText() const
+{
+    return GetVisualizationModeLabel(SelectedVisualizationOption);
+}
+
 int32 SPTectonicToolPanel::GetSubdivisionValue() const
 {
     return CachedSubdivisionLevel;
@@ -802,25 +896,6 @@ void SPTectonicToolPanel::OnSubdivisionValueCommitted(int32 NewValue, ETextCommi
 
             UE_LOG(LogPlanetaryCreation, Log, TEXT("Updated render subdivision level to %d"), CachedSubdivisionLevel);
         }
-    }
-}
-
-ECheckBoxState SPTectonicToolPanel::GetVelocityVisualizationState() const
-{
-    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
-    {
-        return Controller->IsVelocityVisualizationEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-    }
-    return ECheckBoxState::Unchecked;
-}
-
-void SPTectonicToolPanel::OnVelocityVisualizationChanged(ECheckBoxState NewState)
-{
-    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
-    {
-        const bool bEnabled = (NewState == ECheckBoxState::Checked);
-        Controller->SetVelocityVisualizationEnabled(bEnabled);
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("Velocity visualization %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
     }
 }
 
@@ -903,37 +978,6 @@ void SPTectonicToolPanel::OnGPUPreviewChanged(ECheckBoxState NewState)
         const bool bEnabled = (NewState == ECheckBoxState::Checked);
         Controller->SetGPUPreviewMode(bEnabled);
         UE_LOG(LogPlanetaryCreation, Log, TEXT("GPU preview mode %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
-    }
-}
-
-ECheckBoxState SPTectonicToolPanel::GetHeightmapVisualizationState() const
-{
-    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
-    {
-        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
-        {
-            return Service->GetParameters().bEnableHeightmapVisualization ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-        }
-    }
-    return ECheckBoxState::Unchecked; // Default to unchecked
-}
-
-void SPTectonicToolPanel::OnHeightmapVisualizationChanged(ECheckBoxState NewState)
-{
-    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
-    {
-        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
-        {
-            const bool bEnabled = (NewState == ECheckBoxState::Checked);
-            Service->SetHeightmapVisualizationEnabled(bEnabled);
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("Heightmap visualization %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
-
-            // Trigger mesh refresh to apply new coloring immediately
-            if (!Controller->RefreshPreviewColors())
-            {
-                Controller->RebuildPreview(); // warm preview mesh after reset
-            }
-        }
     }
 }
 
@@ -1343,6 +1387,12 @@ void SPTectonicToolPanel::Tick(const FGeometry& AllottedGeometry, const double I
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
         Controller->TickCamera(InDeltaTime);
+
+        const ETectonicVisualizationMode CurrentMode = Controller->GetVisualizationMode();
+        if (!SelectedVisualizationOption.IsValid() || *SelectedVisualizationOption != CurrentMode)
+        {
+            RefreshSelectedVisualizationOption();
+        }
     }
 }
 

@@ -6,6 +6,32 @@
 #include "Containers/BitArray.h"
 #include "TectonicSimulationService.generated.h"
 
+UENUM(BlueprintType)
+enum class ETectonicVisualizationMode : uint8
+{
+    PlateColors UMETA(DisplayName = "Plate Colors"),
+    Elevation UMETA(DisplayName = "Elevation Heatmap"),
+    Velocity UMETA(DisplayName = "Velocity Field"),
+    Stress UMETA(DisplayName = "Stress Gradient")
+};
+
+struct FStageBProfile
+{
+    double BaselineMs = 0.0;
+    double RidgeMs = 0.0;
+    double OceanicCPUMs = 0.0;
+    double OceanicGPUMs = 0.0;
+    double ContinentalCPUMs = 0.0;
+    double ContinentalGPUMs = 0.0;
+    double GpuReadbackMs = 0.0;
+    double CacheInvalidationMs = 0.0;
+
+    double TotalMs() const
+    {
+        return BaselineMs + RidgeMs + OceanicCPUMs + OceanicGPUMs + ContinentalCPUMs + ContinentalGPUMs + GpuReadbackMs + CacheInvalidationMs;
+    }
+};
+
 /**
  * Paper-compliant elevation constants (Appendix A).
  * Reference: "Procedural Tectonic Planets" paper, Table in Appendix A.
@@ -221,6 +247,50 @@ enum class ETerraneState : uint8
     Colliding       // At convergent boundary, ready for reattachment
 };
 
+/** Per-vertex payload stored for detached terranes. */
+USTRUCT()
+struct FTerraneVertexRecord
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FVector3d Position = FVector3d::ZeroVector;
+
+    UPROPERTY()
+    FVector3d Velocity = FVector3d::ZeroVector;
+
+    UPROPERTY()
+    FVector3d RidgeDirection = FVector3d::ZeroVector;
+
+    UPROPERTY()
+    double Stress = 0.0;
+
+    UPROPERTY()
+    double Temperature = 0.0;
+
+    UPROPERTY()
+    double Elevation = 0.0;
+
+    UPROPERTY()
+    double ErosionRate = 0.0;
+
+    UPROPERTY()
+    double SedimentThickness = 0.0;
+
+    UPROPERTY()
+    double CrustAge = 0.0;
+
+    UPROPERTY()
+    double AmplifiedElevation = 0.0;
+
+    UPROPERTY()
+    int32 PlateID = INDEX_NONE;
+
+    /** Duplicate vertex index injected into render mesh when terrane is extracted (INDEX_NONE for interior vertices). */
+    UPROPERTY()
+    int32 ReplacementVertexIndex = INDEX_NONE;
+};
+
 /** Milestone 6 Task 1.1: Continental terrane (accreted microcontinent fragment). */
 USTRUCT()
 struct FContinentalTerrane
@@ -234,8 +304,13 @@ struct FContinentalTerrane
     UPROPERTY()
     ETerraneState State = ETerraneState::Attached;
 
-    /** Render vertex indices comprising this terrane (subset of RenderVertices). */
-    TArray<int32> VertexIndices;
+    /** Original render vertex indices comprising this terrane (for diagnostics/snapshots). */
+    UPROPERTY()
+    TArray<int32> OriginalVertexIndices;
+
+    /** Detached vertex payload retained while terrane is extracted. */
+    UPROPERTY()
+    TArray<FTerraneVertexRecord> VertexPayload;
 
     /** Source plate ID (where terrane was extracted from, INDEX_NONE if not yet extracted). */
     int32 SourcePlateID = INDEX_NONE;
@@ -257,6 +332,18 @@ struct FContinentalTerrane
 
     /** Reattachment timestamp (My) for suturing/collision tracking. */
     double ReattachmentTimeMy = 0.0;
+
+    /** Triangles removed from the base mesh during extraction (triplets of local vertex indices into VertexPayload). */
+    UPROPERTY()
+    TArray<int32> ExtractedTriangles;
+
+    /** Global vertex indices generated to cap the extraction hole (duplicates + optional centers). */
+    UPROPERTY()
+    TArray<int32> PatchVertexIndices;
+
+    /** Triangles added to cap the extraction hole (triplets referencing PatchVertexIndices). */
+    UPROPERTY()
+    TArray<int32> PatchTriangles;
 };
 
 /** Simulation parameters (Phase 3 - UI integration). */
@@ -368,6 +455,10 @@ struct FTectonicSimulationParameters
     /** Thermal diffusion constant (placeholder - used in Milestone 3). */
     UPROPERTY()
     double ThermalDiffusion = 1.0;
+
+    /** Visualization overlay applied to preview mesh. */
+    UPROPERTY()
+    ETectonicVisualizationMode VisualizationMode = ETectonicVisualizationMode::PlateColors;
 
     /**
      * Milestone 4 Task 1.2: Plate split velocity threshold (rad/My).
@@ -534,7 +625,7 @@ struct FTectonicSimulationParameters
      * When true, mesh vertex colors encode elevation (blue=low, red=high).
      * Default false (normal plate boundary visualization).
      */
-    UPROPERTY()
+    UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Use VisualizationMode instead."))
     bool bEnableHeightmapVisualization = false;
 
     /**
@@ -679,6 +770,7 @@ public:
 
     /** Returns the last step time in milliseconds (Milestone 3 Task 4.5). */
     double GetLastStepTimeMs() const { return LastStepTimeMs; }
+    const FStageBProfile& GetLatestStageBProfile() const { return LatestStageBProfile; }
 
     /** Accessor for the base sphere samples used to visualize placeholder geometry. */
     const TArray<FVector3d>& GetBaseSphereSamples() const { return BaseSphereSamples; }
@@ -764,6 +856,8 @@ public:
      * and leaves tectonic history untouched.
      */
     void SetHeightmapVisualizationEnabled(bool bEnabled);
+    void SetVisualizationMode(ETectonicVisualizationMode Mode);
+    ETectonicVisualizationMode GetVisualizationMode() const { return Parameters.VisualizationMode; }
 
     void SetHighlightSeaLevel(bool bEnabled);
     bool IsHighlightSeaLevelEnabled() const { return bHighlightSeaLevel; }
@@ -877,6 +971,11 @@ public:
     void EnqueueCrustAgeResetSeeds(const TArray<int32>& SeedVertices);
     void ResetCrustAgeForSeeds(int32 RingDepth);
 
+    /** Utility helpers for terrane surgery and render mesh maintenance. */
+    void CompactRenderVertexData(const TArray<int32>& VerticesToRemove, TArray<int32>& OutOldToNew);
+    int32 AppendRenderVertexFromRecord(const FTerraneVertexRecord& Record, int32 OverridePlateID);
+    void InvalidateRenderVertexCaches();
+
     /** Milestone 4 Task 1.1: Re-tessellation performance tracking (public for tests). */
     double LastRetessellationTimeMs = 0.0;
     int32 RetessellationCount = 0;
@@ -896,6 +995,7 @@ public:
     void BuildRenderVertexAdjacency();
     void BuildRenderVertexReverseAdjacency();
     void UpdateConvergentNeighborFlags();
+    void BuildRenderVertexBoundaryCache();
 
     /** Milestone 5 Task 1.3: Full simulation history snapshot for undo/redo. */
     struct FSimulationHistorySnapshot
@@ -1025,7 +1125,7 @@ public:
         const TArray<uint32>*& OutOceanicMask) const;
 
     /** Pump pending GPU readbacks; optionally block until all are ready. */
-    void ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete = false);
+    void ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
 
 #if WITH_EDITOR
     void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount);
@@ -1057,6 +1157,14 @@ public:
      * Called each step after collision detection to complete terrane lifecycle.
      */
     void ProcessTerraneReattachments();
+
+#if UE_BUILD_DEVELOPMENT
+    /** Development-only spike hook: perform terrane mesh surgery on the current render mesh. */
+    void RunTerraneMeshSurgerySpike();
+
+    /** Development helper: log plate/elevation mismatches for early diagnostics. */
+    void LogPlateElevationMismatches(const TCHAR* ContextLabel, int32 SampleCount = 128, int32 MaxLogged = 16) const;
+#endif
 
     /**
      * Export heightmap visualization as color-coded PNG with elevation gradient.
@@ -1174,6 +1282,7 @@ private:
 
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
+    FStageBProfile LatestStageBProfile;
     int64 TotalStepsSimulated = 0;
     FRetessellationCadenceStats RetessellationCadenceStats;
     TArray<FVector3d> BaseSphereSamples;
@@ -1219,12 +1328,24 @@ private:
     TArray<int32> RenderVertexAdjacencyOffsets;
     TArray<int32> RenderVertexAdjacency;
     TArray<float> RenderVertexAdjacencyWeights;
+    TArray<float> RenderVertexAdjacencyWeightTotals;
     TArray<int32> RenderVertexReverseAdjacency;
     TArray<uint8> ConvergentNeighborFlags;
 
     /** Pending seeds for crust age reset near divergent boundaries. */
     TArray<int32> PendingCrustAgeResetSeeds;
     TBitArray<> PendingCrustAgeResetMask;
+
+    /** Render-vertex level boundary cache for ridge direction reconstruction. */
+    struct FRenderVertexBoundaryInfo
+    {
+        float DistanceRadians = TNumericLimits<float>::Max();
+        FVector3d BoundaryTangent = FVector3d::ZeroVector;
+        int32 SourcePlateID = INDEX_NONE;
+        bool bHasBoundary = false;
+    };
+
+    TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;
 
     /** Cadence counter for Voronoi refresh. */
     int32 StepsSinceLastVoronoiRefresh = 0;
@@ -1325,11 +1446,15 @@ private:
     {
         TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
         FRenderCommandFence DispatchFence;
+        FRenderCommandFence CopyFence;
         int32 NumBytes = 0;
         int32 VertexCount = 0;
+        uint64 JobId = 0;
+        bool bCopySubmitted = false;
     };
 
     TArray<FOceanicGPUAsyncJob> PendingOceanicGPUJobs;
+    uint64 NextOceanicGPUJobId = 1;
 #endif
 
     void RefreshRenderVertexFloatSoA() const;
