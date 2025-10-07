@@ -44,6 +44,7 @@
     -project="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
     -WaitMutex -FromMsBuild
   ```
+- When invoking that command from the Codex CLI, set `with_escalated_permissions=true` on the shell call; otherwise WSL denies it with `UtilBindVsockAnyPort`. Expect build logs under `%LOCALAPPDATA%\UnrealBuildTool\Log.txt`.
 - Confirm the build **succeeds** before proceeding. If the command fails in the sandbox, rerun it immediately and include the failure reason in your summary.
 
 ## Commit & Pull Request Guidelines

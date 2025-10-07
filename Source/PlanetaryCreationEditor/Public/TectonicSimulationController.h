@@ -185,6 +185,10 @@ private:
     void BuildMeshFromCache(const FCachedLODMesh& CachedMesh,
         RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
 
+    void BuildMeshFromCacheWithColorRefresh(const FCachedLODMesh& CachedMesh,
+        const FMeshBuildSnapshot& FreshSnapshot,
+        RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
+
     void EnsureGPUPreviewTextureAsset() const;
     void CopyHeightTextureToPreviewResource() const;
 

@@ -240,15 +240,18 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
     // Milestone 4 Phase 4.2: Check cache first
     const FCachedLODMesh* CachedMesh = GetCachedLOD(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion);
 
-    // GPU preview mode: reuse cached geometry or refresh colors, skip expensive CPU rebuild
+    // GPU preview mode: reuse cached geometry even if surface version changed (topology unchanged)
+    // This allows fast color-only updates without rebuilding 163K vertices
     if (bUseGPUPreviewMode && !CachedMesh)
     {
         if (const TUniquePtr<FCachedLODMesh>* CachedEntry = LODCache.Find(RenderLevel))
         {
-            CachedMesh = CachedEntry->Get();
-            if (CachedMesh)
+            const FCachedLODMesh* PotentialCache = CachedEntry->Get();
+            if (PotentialCache && PotentialCache->TopologyVersion == CurrentTopologyVersion)
             {
-                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] Reusing cached L%d geometry (Topo:%d Surface:%d -> requested Surface:%d)"),
+                // Topology matches - safe to reuse geometry, will update colors below
+                CachedMesh = PotentialCache;
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] Reusing cached L%d geometry (Topo:%d, ignoring Surface %d -> %d)"),
                     RenderLevel, CachedMesh->TopologyVersion, CachedMesh->SurfaceDataVersion, CurrentSurfaceVersion);
             }
         }
@@ -275,7 +278,21 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
         int32 VertexCount = 0;
         int32 TriangleCount = 0;
-        BuildMeshFromCache(*CachedMesh, StreamSet, VertexCount, TriangleCount);
+
+        // GPU mode with stale surface data: update vertex colors from fresh snapshot
+        const bool bNeedColorRefresh = bUseGPUPreviewMode && (CachedMesh->SurfaceDataVersion != CurrentSurfaceVersion);
+        if (bNeedColorRefresh)
+        {
+            FMeshBuildSnapshot FreshSnapshot = CreateMeshBuildSnapshot();
+            BuildMeshFromCacheWithColorRefresh(*CachedMesh, FreshSnapshot, StreamSet, VertexCount, TriangleCount);
+            UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] Refreshed vertex colors for L%d (Surface %d -> %d)"),
+                RenderLevel, CachedMesh->SurfaceDataVersion, CurrentSurfaceVersion);
+        }
+        else
+        {
+            BuildMeshFromCache(*CachedMesh, StreamSet, VertexCount, TriangleCount);
+        }
+
         UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
 
         // Pre-warm neighboring LODs opportunistically
@@ -1704,6 +1721,105 @@ void FTectonicSimulationController::BuildMeshFromCache(const FCachedLODMesh& Cac
         }
 
         const FColor VertexColor = CachedMesh.VertexColors.IsValidIndex(Index) ? CachedMesh.VertexColors[Index] : FColor::Black;
+        const FVector2f UV = CachedMesh.UVs.IsValidIndex(Index) ? CachedMesh.UVs[Index] : FVector2f::ZeroVector;
+
+        Builder.AddVertex(Position)
+            .SetNormalAndTangent(Normal, Tangent)
+            .SetColor(VertexColor)
+            .SetTexCoord(UV);
+
+        OutVertexCount++;
+    }
+
+    for (int32 Index = 0; Index + 2 < CachedMesh.Indices.Num(); Index += 3)
+    {
+        const uint32 I0 = CachedMesh.Indices[Index];
+        const uint32 I1 = CachedMesh.Indices[Index + 1];
+        const uint32 I2 = CachedMesh.Indices[Index + 2];
+        Builder.AddTriangle(static_cast<int32>(I0), static_cast<int32>(I1), static_cast<int32>(I2));
+        OutTriangleCount++;
+    }
+}
+
+void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCachedLODMesh& CachedMesh,
+    const FMeshBuildSnapshot& FreshSnapshot,
+    RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount)
+{
+    using namespace RealtimeMesh;
+
+    OutVertexCount = 0;
+    OutTriangleCount = 0;
+
+    const int32 VertexCount = CachedMesh.VertexCount;
+    if (VertexCount == 0 || CachedMesh.Indices.Num() == 0)
+    {
+        return;
+    }
+
+    // Recompute vertex colors from fresh snapshot
+    TArray<FColor> FreshColors;
+    FreshColors.SetNumUninitialized(VertexCount);
+
+    const TArray<int32>& PlateAssignments = FreshSnapshot.VertexPlateAssignments;
+    const TArray<double>& ElevationValues = FreshSnapshot.VertexElevationValues;
+    const ETectonicVisualizationMode VisMode = FreshSnapshot.VisualizationMode;
+
+    UTectonicSimulationService* Service = GetService();
+    const TArray<FTectonicPlate>* PlatesPtr = Service ? &Service->GetPlates() : nullptr;
+
+    auto GetPlateColor = [](int32 PlateID) -> FColor
+    {
+        constexpr float GoldenRatio = 0.618033988749895f;
+        const float Hue = FMath::Fmod(PlateID * GoldenRatio, 1.0f);
+        const FLinearColor HSV(Hue * 360.0f, 0.8f, 0.9f);
+        return HSV.HSVToLinearRGB().ToFColor(false);
+    };
+
+    for (int32 Index = 0; Index < VertexCount; ++Index)
+    {
+        const int32 PlateID = PlateAssignments.IsValidIndex(Index) ? PlateAssignments[Index] : INDEX_NONE;
+
+        FColor VertexColor;
+        if (VisMode == ETectonicVisualizationMode::Elevation && ElevationValues.IsValidIndex(Index))
+        {
+            const double Elevation = ElevationValues[Index];
+            const double NormValue = FMath::Clamp((Elevation + 6000.0) / 12000.0, 0.0, 1.0);
+            const FLinearColor HSV(240.0 * (1.0 - NormValue), 0.7, 0.9);
+            VertexColor = HSV.HSVToLinearRGB().ToFColor(false);
+        }
+        else
+        {
+            VertexColor = GetPlateColor(PlateID);
+        }
+
+        FreshColors[Index] = VertexColor;
+    }
+
+    // Build StreamSet with cached geometry but fresh colors
+    FRealtimeMeshStreamSet& StreamSet = OutStreamSet;
+    TRealtimeMeshBuilderLocal<uint16, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
+
+    for (int32 Index = 0; Index < VertexCount; ++Index)
+    {
+        FVector3f Position(CachedMesh.PositionX[Index], CachedMesh.PositionY[Index], CachedMesh.PositionZ[Index]);
+        FVector3f Normal(CachedMesh.NormalX[Index], CachedMesh.NormalY[Index], CachedMesh.NormalZ[Index]);
+
+        if (Normal.IsNearlyZero())
+        {
+            Normal = FVector3f::ZAxisVector;
+        }
+        else
+        {
+            Normal = Normal.GetSafeNormal();
+        }
+
+        FVector3f Tangent(CachedMesh.TangentX[Index], CachedMesh.TangentY[Index], CachedMesh.TangentZ[Index]);
+        if (Tangent.IsNearlyZero())
+        {
+            Tangent = FVector3f::XAxisVector;
+        }
+
+        const FColor VertexColor = FreshColors[Index]; // Use fresh color!
         const FVector2f UV = CachedMesh.UVs.IsValidIndex(Index) ? CachedMesh.UVs[Index] : FVector2f::ZeroVector;
 
         Builder.AddVertex(Position)
