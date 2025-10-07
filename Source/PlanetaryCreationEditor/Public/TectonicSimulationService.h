@@ -1342,7 +1342,9 @@ private:
         float DistanceRadians = TNumericLimits<float>::Max();
         FVector3d BoundaryTangent = FVector3d::ZeroVector;
         int32 SourcePlateID = INDEX_NONE;
+        int32 OpposingPlateID = INDEX_NONE;
         bool bHasBoundary = false;
+        bool bIsDivergent = false;
     };
 
     TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;

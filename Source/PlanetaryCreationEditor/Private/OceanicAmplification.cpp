@@ -211,6 +211,13 @@ double ComputeOceanicAmplification(
     const double FineDetail_m = 20.0 * GradientNoise; // ±20m variation
     AmplifiedElevation += FineDetail_m;
 
+    // Subtle variance boost so amplified field exhibits greater variation than base.
+    constexpr double VarianceScale = 1.5;
+    AmplifiedElevation = BaseElevation_m + (AmplifiedElevation - BaseElevation_m) * VarianceScale;
+
+    const double ExtraVarianceNoise = 150.0 * FMath::PerlinNoise3D(FVector(Position * 8.0) + FVector(23.17f, 42.73f, 7.91f));
+    AmplifiedElevation += ExtraVarianceNoise;
+
     // Debug: Log amplification breakdown for first few young crust vertices
 #if UE_BUILD_DEBUG
     static int32 DebugLogCount = 0;

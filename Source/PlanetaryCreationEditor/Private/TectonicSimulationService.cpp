@@ -231,6 +231,12 @@ void UTectonicSimulationService::MarkAllRidgeDirectionsDirty()
     CachedRidgeDirectionTopologyVersion = INDEX_NONE;
     CachedRidgeDirectionVertexCount = 0;
     LastRidgeDirectionUpdateCount = 0;
+
+#if UE_BUILD_DEVELOPMENT
+    UE_LOG(LogPlanetaryCreation, VeryVerbose,
+        TEXT("[MarkAllRidgeDirectionsDirty] DirtyMask.Num=%d DirtyCount=%d"),
+        RidgeDirectionDirtyMask.Num(), RidgeDirectionDirtyCount);
+#endif
 }
 
 void UTectonicSimulationService::MarkRidgeRingDirty(const TArray<int32>& SeedVertices, int32 RingDepth)
@@ -466,6 +472,9 @@ void UTectonicSimulationService::ResetSimulation()
     BuildBoundaryAdjacencyMap();
     ValidateSolidAngleCoverage();
 
+    // Classify boundaries before building caches so divergent edges seed ridge tangents immediately.
+    UpdateBoundaryClassifications();
+
     // Milestone 3: Generate high-density render mesh
     GenerateRenderMesh();
 
@@ -512,6 +521,7 @@ void UTectonicSimulationService::ResetSimulation()
     VertexAmplifiedElevation.SetNumZeroed(VertexCount);
 
     MarkAllRidgeDirectionsDirty();
+    ComputeRidgeDirections();
 
     // M5 Phase 3 fix: Seed elevation baselines from plate crust type for order independence
     // This ensures oceanic dampening/erosion work regardless of execution order
@@ -612,14 +622,67 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         ProcessPendingOceanicGPUReadbacks(false, &GpuReadbackSeconds);
 #endif
 
+#if UE_BUILD_DEVELOPMENT
+        auto LogBoundaryCacheState = [this, AbsoluteStep](const TCHAR* PhaseLabel)
+        {
+            const int32 EntryCount = RenderVertexBoundaryCache.Num();
+            int32 ValidTangents = 0;
+            int32 DivergentCount = 0;
+            int32 PlateMatchCount = 0;
+
+            if (EntryCount > 0)
+            {
+                for (int32 VertexIdx = 0; VertexIdx < EntryCount; ++VertexIdx)
+                {
+                    const FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[VertexIdx];
+                    if (!Info.bHasBoundary || Info.BoundaryTangent.IsNearlyZero())
+                    {
+                        continue;
+                    }
+
+                    ++ValidTangents;
+                    if (Info.bIsDivergent)
+                    {
+                        ++DivergentCount;
+                    }
+
+                    if (VertexPlateAssignments.IsValidIndex(VertexIdx) &&
+                        Info.SourcePlateID == VertexPlateAssignments[VertexIdx])
+                    {
+                        ++PlateMatchCount;
+                    }
+                }
+            }
+
+            UE_LOG(LogPlanetaryCreation, VeryVerbose,
+                TEXT("[BoundaryCache][Step %d] %s: Entries=%d Valid=%d Divergent=%d PlateMatch=%d"),
+                AbsoluteStep,
+                PhaseLabel,
+                EntryCount,
+                ValidTangents,
+                DivergentCount,
+                PlateMatchCount);
+        };
+
+        LogBoundaryCacheState(TEXT("StartOfStep"));
+#endif
+
         // Phase 2 Task 4: Migrate plate centroids via Euler pole rotation
         MigratePlateCentroids(StepDurationMy);
+
+#if UE_BUILD_DEVELOPMENT
+        LogBoundaryCacheState(TEXT("AfterMigratePlateCentroids"));
+#endif
 
         // Milestone 6 Task 1.2: Update terrane positions (migrate with carrier plates)
         UpdateTerranePositions(StepDurationMy);
 
         // Phase 2 Task 5: Update boundary classifications based on relative velocities
         UpdateBoundaryClassifications();
+
+#if UE_BUILD_DEVELOPMENT
+        LogBoundaryCacheState(TEXT("AfterUpdateBoundaryClassifications"));
+#endif
 
         // Milestone 6 Task 1.2: Detect terrane collisions (after boundary updates)
         DetectTerraneCollisions();
@@ -718,6 +781,10 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
             }
 
+#if UE_BUILD_DEVELOPMENT
+            LogBoundaryCacheState(TEXT("AfterComputeRidgeDirections"));
+#endif
+
             if (!Parameters.bSkipCPUAmplification)
             {
                 bool bUsedGPU = false;
@@ -793,11 +860,41 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             TRACE_CPUPROFILER_EVENT_SCOPE(VoronoiRefresh);
             const double VoronoiStart = FPlatformTime::Seconds();
             BuildVoronoiMapping();
+#if UE_BUILD_DEVELOPMENT
+            LogBoundaryCacheState(TEXT("AfterBuildVoronoiMapping"));
+#endif
             ComputeVelocityField();
             InterpolateStressToVertices();
             StepsSinceLastVoronoiRefresh = 0;
             bSurfaceDataChanged = true;
             MarkAllRidgeDirectionsDirty();
+#if UE_BUILD_DEVELOPMENT
+            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[AdvanceSteps] Recomputing ridge directions after Voronoi refresh"));
+#endif
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirectionsPostVoronoi);
+                ComputeRidgeDirections();
+            }
+
+            // Re-run Stage B amplification with refreshed ridge vectors so stored elevations match final directions.
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiAmplificationBaseline);
+                InitializeAmplifiedElevationBaseline();
+            }
+
+            if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiOceanicAmplification);
+                ApplyOceanicAmplification();
+            }
+
+            if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiContinentalAmplification);
+                ApplyContinentalAmplification();
+            }
+
+            bSurfaceDataChanged = true;
             UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[Voronoi] Refresh completed in %.2f ms (interval=%d)"),
                 (FPlatformTime::Seconds() - VoronoiStart) * 1000.0,
                 VoronoiInterval);
@@ -2101,6 +2198,9 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     }
 
     BuildRenderVertexBoundaryCache();
+
+    // Ensure subsequent Stage B passes recompute ridge directions against the refreshed cache.
+    MarkAllRidgeDirectionsDirty();
 }
 
 void UTectonicSimulationService::BuildRenderVertexAdjacency()
@@ -2251,12 +2351,203 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
         BuildRenderVertexAdjacency();
     }
 
+    TArray<FVector3d> VertexNormals;
+    VertexNormals.SetNum(VertexCount);
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        VertexNormals[VertexIdx] = RenderVertices[VertexIdx].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+    }
+
+    const auto GetPlateID = [&](int32 Index) -> int32
+    {
+        return VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
+    };
+
+    const auto MakeBoundaryKey = [](int32 PlateA, int32 PlateB)
+    {
+        return (PlateA < PlateB)
+            ? TPair<int32, int32>(PlateA, PlateB)
+            : TPair<int32, int32>(PlateB, PlateA);
+    };
+
+    const auto GetBoundary = [&](int32 PlateA, int32 PlateB) -> const FPlateBoundary*
+    {
+        if (PlateA == INDEX_NONE || PlateB == INDEX_NONE || PlateA == PlateB)
+        {
+            return nullptr;
+        }
+        return Boundaries.Find(MakeBoundaryKey(PlateA, PlateB));
+    };
+
+    auto ResetInfo = [&](int32 Index)
+    {
+        FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[Index];
+        Info.DistanceRadians = TNumericLimits<float>::Max();
+        Info.BoundaryTangent = FVector3d::ZeroVector;
+        Info.SourcePlateID = GetPlateID(Index);
+        Info.OpposingPlateID = INDEX_NONE;
+        Info.bHasBoundary = false;
+        Info.bIsDivergent = false;
+    };
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        ResetInfo(VertexIdx);
+    }
+
+    const double QuantizeScale = 10000.0;
+    auto QuantizeKey = [&](const FVector3d& Position) -> FIntVector
+    {
+        const FVector3d Unit = Position.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        return FIntVector(
+            FMath::RoundToInt(Unit.X * QuantizeScale),
+            FMath::RoundToInt(Unit.Y * QuantizeScale),
+            FMath::RoundToInt(Unit.Z * QuantizeScale));
+    };
+
+    TMap<FIntVector, TArray<int32>> PositionBuckets;
+    PositionBuckets.Reserve(VertexCount / 2);
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        PositionBuckets.FindOrAdd(QuantizeKey(RenderVertices[VertexIdx])).Add(VertexIdx);
+    }
+
+    TArray<FVector3d> SeedTangents;
+    SeedTangents.SetNumZeroed(VertexCount);
+    TArray<int32> SeedOpposingPlate;
+    SeedOpposingPlate.Init(INDEX_NONE, VertexCount);
+    TBitArray<> SeedMask(false, VertexCount);
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 PlateID = GetPlateID(VertexIdx);
+        if (PlateID == INDEX_NONE)
+        {
+            continue;
+        }
+
+        const FVector3d& VertexNormal = VertexNormals[VertexIdx];
+        const int32 Start = RenderVertexAdjacencyOffsets[VertexIdx];
+        const int32 End = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+
+        FVector3d TangentSum = FVector3d::ZeroVector;
+        int32 DivergentNeighborCount = 0;
+        int32 OpposingPlateID = INDEX_NONE;
+
+        for (int32 Offset = Start; Offset < End; ++Offset)
+        {
+            const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
+            if (!RenderVertices.IsValidIndex(NeighborIdx))
+            {
+                continue;
+            }
+
+            const int32 NeighborPlateID = GetPlateID(NeighborIdx);
+            if (NeighborPlateID == INDEX_NONE || NeighborPlateID == PlateID)
+            {
+                continue;
+            }
+
+            const FPlateBoundary* Boundary = GetBoundary(PlateID, NeighborPlateID);
+            if (!Boundary || Boundary->BoundaryType != EBoundaryType::Divergent)
+            {
+                continue;
+            }
+
+            const FVector3d& NeighborNormal = VertexNormals[NeighborIdx];
+            const FVector3d PlaneNormal = FVector3d::CrossProduct(VertexNormal, NeighborNormal).GetSafeNormal();
+            if (PlaneNormal.IsNearlyZero())
+            {
+                continue;
+            }
+
+            FVector3d Candidate = FVector3d::CrossProduct(PlaneNormal, VertexNormal).GetSafeNormal();
+            if (Candidate.IsNearlyZero())
+            {
+                continue;
+            }
+
+            if (!TangentSum.IsNearlyZero() && (TangentSum | Candidate) < 0.0)
+            {
+                Candidate *= -1.0;
+            }
+
+            TangentSum += Candidate;
+            ++DivergentNeighborCount;
+
+            if (OpposingPlateID == INDEX_NONE)
+            {
+                OpposingPlateID = NeighborPlateID;
+            }
+            else if (OpposingPlateID != NeighborPlateID)
+            {
+                OpposingPlateID = INDEX_NONE; // Multiple opposing plates at junction
+            }
+        }
+
+        if (DivergentNeighborCount > 0 && !TangentSum.IsNearlyZero())
+        {
+            SeedTangents[VertexIdx] = TangentSum.GetSafeNormal();
+            SeedOpposingPlate[VertexIdx] = OpposingPlateID;
+            SeedMask[VertexIdx] = true;
+        }
+    }
+
+    for (const TPair<FIntVector, TArray<int32>>& BucketPair : PositionBuckets)
+    {
+        const TArray<int32>& BucketVertices = BucketPair.Value;
+        if (BucketVertices.Num() < 2)
+        {
+            continue;
+        }
+
+        for (int32 IndexA = 0; IndexA < BucketVertices.Num(); ++IndexA)
+        {
+            const int32 VertexA = BucketVertices[IndexA];
+            const int32 PlateA = GetPlateID(VertexA);
+            if (PlateA == INDEX_NONE)
+            {
+                continue;
+            }
+
+            for (int32 IndexB = 0; IndexB < BucketVertices.Num(); ++IndexB)
+            {
+                if (IndexA == IndexB)
+                {
+                    continue;
+                }
+
+                const int32 VertexB = BucketVertices[IndexB];
+                const int32 PlateB = GetPlateID(VertexB);
+                if (PlateB == INDEX_NONE || PlateA == PlateB)
+                {
+                    continue;
+                }
+
+                const FPlateBoundary* Boundary = GetBoundary(PlateA, PlateB);
+                if (!Boundary || Boundary->BoundaryType != EBoundaryType::Divergent)
+                {
+                    continue;
+                }
+
+                if (SeedMask[VertexA] && !SeedMask[VertexB] && !SeedTangents[VertexA].IsNearlyZero())
+                {
+                    SeedMask[VertexB] = true;
+                    SeedTangents[VertexB] = SeedTangents[VertexA];
+                    SeedOpposingPlate[VertexB] = PlateA;
+                }
+            }
+        }
+    }
+
     struct FPropagationNode
     {
         int32 VertexIdx;
-        double Distance;
-        int32 SourcePlateID;
-        FVector3d Tangent;
+        double Distance = 0.0;
+        int32 SourcePlateID = INDEX_NONE;
+        int32 OpposingPlateID = INDEX_NONE;
+        FVector3d Tangent = FVector3d::ZeroVector;
+        bool bIsDivergent = false;
     };
 
     struct FPropagationCompare
@@ -2270,60 +2561,16 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
     std::priority_queue<FPropagationNode, std::vector<FPropagationNode>, FPropagationCompare> Frontier;
 
     TArray<double> Distance;
-    Distance.Init(std::numeric_limits<double>::infinity(), VertexCount);
+    Distance.Init(TNumericLimits<double>::Max(), VertexCount);
 
-    auto ResetInfo = [&](int32 Index)
+    auto AddBoundarySeed = [&](int32 VertexIdx, int32 PlateID, int32 OpposingPlateID, const FVector3d& Tangent)
     {
-        FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[Index];
-        Info.DistanceRadians = TNumericLimits<float>::Max();
-        Info.BoundaryTangent = FVector3d::ZeroVector;
-        Info.SourcePlateID = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
-        Info.bHasBoundary = false;
-    };
-
-    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
-    {
-        ResetInfo(VertexIdx);
-    }
-
-    const auto GetPlateID = [&](int32 Index) -> int32
-    {
-        return VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
-    };
-
-    // Quantize render normals for fast lookup when seeding from shared boundaries
-    TMap<FIntVector, TArray<int32>> PositionBuckets;
-    PositionBuckets.Reserve(VertexCount);
-
-    const double QuantizeScale = 10000.0;
-    auto QuantizeKey = [&](const FVector3d& Normal) -> FIntVector
-    {
-        const FVector3d Unit = Normal.GetSafeNormal();
-        return FIntVector(
-            FMath::RoundToInt(Unit.X * QuantizeScale),
-            FMath::RoundToInt(Unit.Y * QuantizeScale),
-            FMath::RoundToInt(Unit.Z * QuantizeScale));
-    };
-
-    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
-    {
-        PositionBuckets.FindOrAdd(QuantizeKey(RenderVertices[VertexIdx])).Add(VertexIdx);
-    }
-
-    TSet<int32> SeededVertices;
-    SeededVertices.Reserve(VertexCount / 4);
-
-    auto AddBoundarySeed = [&](int32 VertexIdx, int32 PlateID, const FVector3d& Tangent)
-    {
-        if (VertexIdx == INDEX_NONE || !RenderVertices.IsValidIndex(VertexIdx))
+        if (!RenderVertices.IsValidIndex(VertexIdx))
         {
             return;
         }
+
         if (PlateID == INDEX_NONE)
-        {
-            return;
-        }
-        if (SeededVertices.Contains(VertexIdx))
         {
             return;
         }
@@ -2334,11 +2581,11 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
             return;
         }
 
-        SeededVertices.Add(VertexIdx);
-
         FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[VertexIdx];
         Info.bHasBoundary = true;
+        Info.bIsDivergent = true;
         Info.SourcePlateID = PlateID;
+        Info.OpposingPlateID = OpposingPlateID;
         Info.BoundaryTangent = NormalizedTangent;
         Info.DistanceRadians = 0.0f;
 
@@ -2348,241 +2595,61 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
         Node.VertexIdx = VertexIdx;
         Node.Distance = 0.0;
         Node.SourcePlateID = PlateID;
+        Node.OpposingPlateID = OpposingPlateID;
         Node.Tangent = NormalizedTangent;
+        Node.bIsDivergent = true;
         Frontier.push(Node);
     };
 
-    auto GatherCandidates = [&](const FVector3d& TargetNormal, int32 PlateID, TArray<int32>& OutCandidates)
-    {
-        const FIntVector BaseKey = QuantizeKey(TargetNormal);
-        for (int32 dx = -1; dx <= 1 && OutCandidates.IsEmpty(); ++dx)
-        {
-            for (int32 dy = -1; dy <= 1 && OutCandidates.IsEmpty(); ++dy)
-            {
-                for (int32 dz = -1; dz <= 1 && OutCandidates.IsEmpty(); ++dz)
-                {
-                    const FIntVector Key(BaseKey.X + dx, BaseKey.Y + dy, BaseKey.Z + dz);
-                    if (const TArray<int32>* Bucket = PositionBuckets.Find(Key))
-                    {
-                        for (int32 CandidateIdx : *Bucket)
-                        {
-                            if (GetPlateID(CandidateIdx) == PlateID)
-                            {
-                                OutCandidates.Add(CandidateIdx);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!OutCandidates.IsEmpty())
-        {
-            return;
-        }
-
-        // Fallback search using global scan (rare)
-        double BestDot = -1.0;
-        int32 BestIdx = INDEX_NONE;
-        const FVector3d Target = TargetNormal.GetSafeNormal();
-        for (int32 CandidateIdx = 0; CandidateIdx < VertexCount; ++CandidateIdx)
-        {
-            if (GetPlateID(CandidateIdx) != PlateID)
-            {
-                continue;
-            }
-
-            const double Dot = RenderVertices[CandidateIdx].GetSafeNormal() | Target;
-            if (Dot > BestDot)
-            {
-                BestDot = Dot;
-                BestIdx = CandidateIdx;
-            }
-        }
-
-        if (BestIdx != INDEX_NONE)
-        {
-            OutCandidates.Add(BestIdx);
-        }
-    };
-
-    // Seed from shared boundary vertices
-    for (const auto& BoundaryPair : Boundaries)
-    {
-        const FPlateBoundary& Boundary = BoundaryPair.Value;
-        if (Boundary.BoundaryType != EBoundaryType::Divergent)
-        {
-            continue;
-        }
-
-        const int32 PlateA = BoundaryPair.Key.Key;
-        const int32 PlateB = BoundaryPair.Key.Value;
-        const TArray<int32>& Shared = Boundary.SharedEdgeVertices;
-        const int32 EdgeCount = Shared.Num();
-        if (EdgeCount < 2)
-        {
-            continue;
-        }
-
-        for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount; ++EdgeIdx)
-        {
-            const int32 NextIdx = (EdgeIdx + 1) % EdgeCount;
-            if (!SharedVertices.IsValidIndex(Shared[EdgeIdx]) || !SharedVertices.IsValidIndex(Shared[NextIdx]))
-            {
-                continue;
-            }
-
-            const FVector3d EdgeV0 = SharedVertices[Shared[EdgeIdx]].GetSafeNormal();
-            const FVector3d EdgeV1 = SharedVertices[Shared[NextIdx]].GetSafeNormal();
-            const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
-            if (PlaneNormal.IsNearlyZero())
-            {
-                continue;
-            }
-
-            const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, EdgeV0).GetSafeNormal();
-            if (Tangent.IsNearlyZero())
-            {
-                continue;
-            }
-
-            auto SeedPlate = [&](int32 PlateID)
-            {
-                if (PlateID == INDEX_NONE)
-                {
-                    return;
-                }
-
-                TArray<int32> Candidates;
-                GatherCandidates(EdgeV0, PlateID, Candidates);
-                if (Candidates.Num() == 0)
-                {
-                    return;
-                }
-
-                double BestDot = -1.0;
-                int32 BestIdx = INDEX_NONE;
-                const FVector3d Target = EdgeV0;
-                for (int32 CandidateIdx : Candidates)
-                {
-                    const double Dot = RenderVertices[CandidateIdx].GetSafeNormal() | Target;
-                    if (Dot > BestDot)
-                    {
-                        BestDot = Dot;
-                        BestIdx = CandidateIdx;
-                    }
-                }
-
-                if (BestIdx != INDEX_NONE)
-                {
-                    AddBoundarySeed(BestIdx, PlateID, Tangent);
-                }
-            };
-
-            SeedPlate(PlateA);
-            SeedPlate(PlateB);
-        }
-    }
-
-    // Fallback using adjacency for any remaining unseeded boundary vertices
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
-        if (SeededVertices.Contains(VertexIdx))
+        if (!SeedMask[VertexIdx])
         {
             continue;
         }
 
-        const int32 PlateID = GetPlateID(VertexIdx);
-        if (PlateID == INDEX_NONE)
-        {
-            continue;
-        }
-
-        const FVector3d VertexNormal = RenderVertices[VertexIdx].GetSafeNormal();
-        FVector3d Tangent = FVector3d::ZeroVector;
-        bool bIsBoundary = false;
-
-        // Detect overlapping vertices with different plate assignments (seam duplication)
-        const FIntVector BucketKey = QuantizeKey(RenderVertices[VertexIdx]);
-        if (const TArray<int32>* Bucket = PositionBuckets.Find(BucketKey))
-        {
-            for (int32 OtherIdx : *Bucket)
-            {
-                if (OtherIdx == VertexIdx)
-                {
-                    continue;
-                }
-
-                const int32 OtherPlate = GetPlateID(OtherIdx);
-                if (OtherPlate == INDEX_NONE || OtherPlate == PlateID)
-                {
-                    continue;
-                }
-
-                const FVector3d OtherNormal = RenderVertices[OtherIdx].GetSafeNormal();
-                FVector3d PlaneNormal = FVector3d::CrossProduct(VertexNormal, OtherNormal).GetSafeNormal();
-                if (!PlaneNormal.IsNearlyZero())
-                {
-                    Tangent = FVector3d::CrossProduct(PlaneNormal, VertexNormal).GetSafeNormal();
-                    if (!Tangent.IsNearlyZero())
-                    {
-                        bIsBoundary = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Fallback to adjacency-based detection if duplicates were not found
-        if (!bIsBoundary)
-        {
-            const int32 Start = RenderVertexAdjacencyOffsets[VertexIdx];
-            const int32 End = RenderVertexAdjacencyOffsets[VertexIdx + 1];
-            FVector3d TangentSum = FVector3d::ZeroVector;
-            FVector3d LastValidTangent = FVector3d::ZeroVector;
-
-            for (int32 Offset = Start; Offset < End; ++Offset)
-            {
-                const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
-                if (!RenderVertices.IsValidIndex(NeighborIdx))
-                {
-                    continue;
-                }
-
-                const int32 NeighborPlateID = GetPlateID(NeighborIdx);
-                if (NeighborPlateID == INDEX_NONE || NeighborPlateID == PlateID)
-                {
-                    continue;
-                }
-
-                bIsBoundary = true;
-
-                FVector3d Edge = RenderVertices[NeighborIdx] - RenderVertices[VertexIdx];
-                FVector3d Candidate = (Edge - (Edge | VertexNormal) * VertexNormal).GetSafeNormal();
-                if (!Candidate.IsNearlyZero())
-                {
-                    TangentSum += Candidate;
-                    LastValidTangent = Candidate;
-                }
-            }
-
-            if (bIsBoundary)
-            {
-                Tangent = TangentSum.IsNearlyZero() ? LastValidTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector) : TangentSum.GetSafeNormal();
-            }
-        }
-
-        if (bIsBoundary)
-        {
-            AddBoundarySeed(VertexIdx, PlateID, Tangent);
-        }
+        AddBoundarySeed(VertexIdx, GetPlateID(VertexIdx), SeedOpposingPlate[VertexIdx], SeedTangents[VertexIdx]);
     }
 
     const double SmallNumber = 1e-8;
 
+    auto ParallelTransportTangent = [](const FVector3d& Tangent, const FVector3d& FromNormal, const FVector3d& ToNormal)
+    {
+        if (Tangent.IsNearlyZero() || FromNormal.IsNearlyZero() || ToNormal.IsNearlyZero())
+        {
+            return Tangent;
+        }
+
+        const double CosTheta = FMath::Clamp(FromNormal | ToNormal, -1.0, 1.0);
+        const double Angle = FMath::Acos(CosTheta);
+
+        if (!FMath::IsFinite(Angle) || Angle < UE_DOUBLE_SMALL_NUMBER)
+        {
+            FVector3d Projected = Tangent - (Tangent | ToNormal) * ToNormal;
+            return Projected.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, Tangent);
+        }
+
+        FVector3d Axis = FVector3d::CrossProduct(FromNormal, ToNormal);
+        if (!Axis.Normalize())
+        {
+            FVector3d Projected = Tangent - (Tangent | ToNormal) * ToNormal;
+            return Projected.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, Tangent);
+        }
+
+        const double SinTheta = FMath::Sin(Angle);
+        const double OneMinusCos = 1.0 - FMath::Cos(Angle);
+
+        FVector3d Rotated = Tangent * FMath::Cos(Angle)
+            + FVector3d::CrossProduct(Axis, Tangent) * SinTheta
+            + Axis * ((Axis | Tangent) * OneMinusCos);
+
+        FVector3d Projected = Rotated - (Rotated | ToNormal) * ToNormal;
+        return Projected.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, Rotated);
+    };
+
     while (!Frontier.empty())
     {
-        FPropagationNode Current = Frontier.top();
+        const FPropagationNode Current = Frontier.top();
         Frontier.pop();
 
         if (Current.VertexIdx < 0 || Current.VertexIdx >= VertexCount)
@@ -2603,7 +2670,7 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
 
         const int32 Start = RenderVertexAdjacencyOffsets[Current.VertexIdx];
         const int32 End = RenderVertexAdjacencyOffsets[Current.VertexIdx + 1];
-        const FVector3d CurrentNormal = RenderVertices[Current.VertexIdx].GetSafeNormal();
+        const FVector3d& CurrentNormal = VertexNormals[Current.VertexIdx];
 
         for (int32 Offset = Start; Offset < End; ++Offset)
         {
@@ -2618,7 +2685,7 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
                 continue;
             }
 
-            const FVector3d NeighborNormal = RenderVertices[NeighborIdx].GetSafeNormal();
+            const FVector3d& NeighborNormal = VertexNormals[NeighborIdx];
             double EdgeCost = FMath::Acos(FMath::Clamp(CurrentNormal | NeighborNormal, -1.0, 1.0));
             if (!FMath::IsFinite(EdgeCost))
             {
@@ -2626,45 +2693,58 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
             }
 
             const double NewDistance = Current.Distance + EdgeCost;
-
-            if (NewDistance + SmallNumber < Distance[NeighborIdx])
+            if (NewDistance + SmallNumber >= Distance[NeighborIdx])
             {
-                Distance[NeighborIdx] = NewDistance;
-
-                FRenderVertexBoundaryInfo& NeighborInfo = RenderVertexBoundaryCache[NeighborIdx];
-                NeighborInfo.bHasBoundary = !Current.Tangent.IsNearlyZero();
-                NeighborInfo.SourcePlateID = Current.SourcePlateID;
-                NeighborInfo.BoundaryTangent = NeighborInfo.bHasBoundary ? Current.Tangent : FVector3d::ZeroVector;
-                NeighborInfo.DistanceRadians = static_cast<float>(NewDistance);
-
-                FPropagationNode Next;
-                Next.VertexIdx = NeighborIdx;
-                Next.Distance = NewDistance;
-                Next.SourcePlateID = Current.SourcePlateID;
-                Next.Tangent = Current.Tangent;
-                Frontier.push(Next);
+                continue;
             }
+
+            Distance[NeighborIdx] = NewDistance;
+
+            FRenderVertexBoundaryInfo& NeighborInfo = RenderVertexBoundaryCache[NeighborIdx];
+            NeighborInfo.bHasBoundary = true;
+            NeighborInfo.bIsDivergent = Current.bIsDivergent;
+            NeighborInfo.SourcePlateID = Current.SourcePlateID;
+            NeighborInfo.OpposingPlateID = Current.OpposingPlateID;
+
+            FVector3d TransportedTangent = Current.Tangent;
+            if (!TransportedTangent.IsNearlyZero())
+            {
+                TransportedTangent = ParallelTransportTangent(Current.Tangent, CurrentNormal, NeighborNormal);
+            }
+
+            NeighborInfo.BoundaryTangent = TransportedTangent;
+            NeighborInfo.DistanceRadians = static_cast<float>(NewDistance);
+
+            FPropagationNode Next = Current;
+            Next.VertexIdx = NeighborIdx;
+            Next.Distance = NewDistance;
+            Next.Tangent = TransportedTangent;
+            Frontier.push(Next);
         }
     }
 
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
-        if (!RenderVertexBoundaryCache[VertexIdx].bHasBoundary)
+        const FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[VertexIdx];
+        if (!Info.bHasBoundary || !Info.bIsDivergent)
         {
             ResetInfo(VertexIdx);
         }
     }
 
 #if UE_BUILD_DEVELOPMENT
-    int32 TaggedCount = 0;
+    int32 DivergentCount = 0;
     for (const FRenderVertexBoundaryInfo& Info : RenderVertexBoundaryCache)
     {
-        if (Info.bHasBoundary)
+        if (Info.bIsDivergent)
         {
-            ++TaggedCount;
+            ++DivergentCount;
         }
     }
-    UE_LOG(LogPlanetaryCreation, Log, TEXT("[BoundaryCache] Boundary tangents assigned to %d/%d vertices"), TaggedCount, VertexCount);
+
+    UE_LOG(LogPlanetaryCreation, Log,
+        TEXT("[BoundaryCache] Divergent boundary tangents assigned to %d/%d vertices"),
+        DivergentCount, VertexCount);
 #endif
 }
 
@@ -4861,6 +4941,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, int32 PlateID,
     const TArray<FTectonicPlate>& Plates, const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
     double OrogenyAge_My, EBoundaryType NearestBoundaryType, const FString& ProjectContentDir, int32 Seed);
 
+
 void UTectonicSimulationService::ComputeRidgeDirections()
 {
     // Paper Section 5: "using the recorded parameters r_c, i.e. the local direction parallel to the ridge"
@@ -4928,18 +5009,16 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         return;
     }
 
-    const auto IsPlateInBoundary = [](const TPair<int32, int32>& BoundaryKey, int32 PlateID)
-    {
-        return BoundaryKey.Key == PlateID || BoundaryKey.Value == PlateID;
-    };
+#if UE_BUILD_DEVELOPMENT
+    UE_LOG(LogPlanetaryCreation, VeryVerbose,
+        TEXT("[RidgeCompute] DirtyMask.Num=%d DirtyCount=%d DirtyVertices.Num=%d"),
+        RidgeDirectionDirtyMask.Num(), RidgeDirectionDirtyCount, DirtyVertices.Num());
+#endif
 
-    const auto ComputeSegmentTangent = [](const FVector3d& PlaneNormal, const FVector3d& PointOnGreatCircle)
+    if (RenderVertexBoundaryCache.Num() != VertexCount)
     {
-        const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, PointOnGreatCircle).GetSafeNormal();
-        return Tangent.IsNearlyZero() ? FVector3d::ZAxisVector : Tangent;
-    };
-
-    constexpr double GreatCircleSegmentAngleToleranceRad = 1e-3; // Radians (approx 0.057°)
+        BuildRenderVertexBoundaryCache();
+    }
 
     int32 UpdatedVertices = 0;
 
@@ -4948,7 +5027,117 @@ void UTectonicSimulationService::ComputeRidgeDirections()
     int32 RidgeDiagMissingTangent = 0;
     int32 RidgeDiagPoorAlignment = 0;
     int32 RidgeDiagGradientFallback = 0;
+    int32 RidgeDiagCacheHits = 0;
 #endif
+
+    const TArray<FVector3d>& SharedVerts = SharedVertices;
+
+    auto ComputeNearestBoundaryTangent = [&](const FVector3d& VertexNormal, int32 PlateID, double& OutDistance) -> FVector3d
+    {
+        FVector3d BestTangent = FVector3d::ZeroVector;
+        OutDistance = TNumericLimits<double>::Max();
+
+        const auto ComputeSegmentTangent = [](const FVector3d& PlaneNormal, const FVector3d& PointOnGreatCircle)
+        {
+            const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, PointOnGreatCircle).GetSafeNormal();
+            return Tangent.IsNearlyZero() ? FVector3d::ZeroVector : Tangent;
+        };
+
+        for (const auto& BoundaryPair : Boundaries)
+        {
+            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+            const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+            if (Boundary.BoundaryType != EBoundaryType::Divergent)
+            {
+                continue;
+            }
+
+            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+            {
+                continue;
+            }
+
+            const TArray<int32>& SharedEdge = Boundary.SharedEdgeVertices;
+            const int32 EdgeCount = SharedEdge.Num();
+            if (EdgeCount < 2)
+            {
+                continue;
+            }
+
+            auto ConsiderEdge = [&](const FVector3d& EdgeV0, const FVector3d& EdgeV1)
+            {
+                const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
+                if (PlaneNormal.IsNearlyZero())
+                {
+                    return;
+                }
+
+                const double Projection = FVector3d::DotProduct(VertexNormal, PlaneNormal);
+                const FVector3d Projected = (VertexNormal - Projection * PlaneNormal);
+                if (Projected.IsNearlyZero())
+                {
+                    return;
+                }
+
+                const FVector3d GreatCirclePoint = Projected.GetSafeNormal();
+
+                const double ArcAB = FMath::Acos(FMath::Clamp(EdgeV0 | EdgeV1, -1.0, 1.0));
+                const double ArcAC = FMath::Acos(FMath::Clamp(EdgeV0 | GreatCirclePoint, -1.0, 1.0));
+                const double ArcCB = FMath::Acos(FMath::Clamp(GreatCirclePoint | EdgeV1, -1.0, 1.0));
+
+                const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + 1e-3);
+
+                auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
+                {
+                    const double AngularDistance = FMath::Acos(FMath::Clamp(VertexNormal | PointOnCircle, -1.0, 1.0));
+                    if (AngularDistance < OutDistance)
+                    {
+                        const FVector3d CandidateTangent = ComputeSegmentTangent(PlaneNormal, PointOnCircle);
+                        if (!CandidateTangent.IsNearlyZero())
+                        {
+                            OutDistance = AngularDistance;
+                            BestTangent = CandidateTangent;
+                        }
+                    }
+                };
+
+                if (bWithinSegment)
+                {
+                    ConsiderPoint(GreatCirclePoint);
+                }
+                else
+                {
+                    ConsiderPoint(EdgeV0);
+                    ConsiderPoint(EdgeV1);
+                }
+            };
+
+            for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount - 1; ++EdgeIdx)
+            {
+                const int32 EdgeV0Idx = SharedEdge[EdgeIdx];
+                const int32 EdgeV1Idx = SharedEdge[EdgeIdx + 1];
+                if (!SharedVerts.IsValidIndex(EdgeV0Idx) || !SharedVerts.IsValidIndex(EdgeV1Idx))
+                {
+                    continue;
+                }
+
+                ConsiderEdge(SharedVerts[EdgeV0Idx].GetSafeNormal(), SharedVerts[EdgeV1Idx].GetSafeNormal());
+            }
+
+            if (EdgeCount >= 2)
+            {
+                const int32 EdgeV0Idx = SharedEdge[EdgeCount - 1];
+                const int32 EdgeV1Idx = SharedEdge[0];
+                if (SharedVerts.IsValidIndex(EdgeV0Idx) && SharedVerts.IsValidIndex(EdgeV1Idx))
+                {
+                    ConsiderEdge(SharedVerts[EdgeV0Idx].GetSafeNormal(), SharedVerts[EdgeV1Idx].GetSafeNormal());
+                }
+            }
+        }
+
+        return BestTangent;
+    };
 
     for (int32 VertexIdx : DirtyVertices)
     {
@@ -4987,160 +5176,76 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
         const FVector3d VertexNormal = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
 
-        FVector3d AgeGradient = FVector3d::ZeroVector;
+        bool bUsedBoundaryCache = false;
         bool bUsedGradient = false;
 
-        if (VertexCrustAge.IsValidIndex(VertexIdx) && RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1))
+        double BoundaryDistance = TNumericLimits<double>::Max();
+        FVector3d SelectedBoundaryTangent = ComputeNearestBoundaryTangent(VertexNormal, Plate.PlateID, BoundaryDistance);
+        bool bBoundaryWithinInfluence = !SelectedBoundaryTangent.IsNearlyZero();
+
+        if (bBoundaryWithinInfluence)
         {
-            const int32 StartAdj = RenderVertexAdjacencyOffsets[VertexIdx];
-            const int32 EndAdj = RenderVertexAdjacencyOffsets[VertexIdx + 1];
-            for (int32 Offset = StartAdj; Offset < EndAdj; ++Offset)
-            {
-                const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
-                if (!RenderVertices.IsValidIndex(NeighborIdx))
-                {
-                    continue;
-                }
-
-                if (!VertexCrustAge.IsValidIndex(NeighborIdx))
-                {
-                    continue;
-                }
-
-                const int32 NeighborPlateID = VertexPlateAssignments.IsValidIndex(NeighborIdx) ? VertexPlateAssignments[NeighborIdx] : INDEX_NONE;
-                if (NeighborPlateID != Plate.PlateID)
-                {
-                    continue;
-                }
-
-                FVector3d Step = RenderVertices[NeighborIdx] - VertexPosition;
-                Step -= (Step | VertexNormal) * VertexNormal;
-                if (Step.IsNearlyZero())
-                {
-                    continue;
-                }
-
-                const double AgeDiff = VertexCrustAge[NeighborIdx] - VertexCrustAge[VertexIdx];
-                AgeGradient += AgeDiff * Step;
-            }
+            ResultDirection = SelectedBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+            bUsedBoundaryCache = true;
+#if UE_BUILD_DEVELOPMENT
+            ++RidgeDiagCacheHits;
+#endif
         }
 
-        const double GradientLength = AgeGradient.Length();
-        if (GradientLength > UE_DOUBLE_SMALL_NUMBER)
+        FVector3d AgeGradient = FVector3d::ZeroVector;
+        double GradientLength = 0.0;
+
+        if (!bUsedBoundaryCache)
         {
-            const FVector3d GradientDir = (AgeGradient / GradientLength).GetSafeNormal();
-            FVector3d Candidate = FVector3d::CrossProduct(VertexNormal, GradientDir).GetSafeNormal();
-            if (!Candidate.IsNearlyZero())
+            if (VertexCrustAge.IsValidIndex(VertexIdx) && RenderVertexAdjacencyOffsets.IsValidIndex(VertexIdx + 1))
             {
-                ResultDirection = Candidate;
-                bUsedGradient = true;
-            }
-        }
-
-        double MinDistance = TNumericLimits<double>::Max();
-        FVector3d NearestBoundaryTangent = FVector3d::ZAxisVector;
-
-        for (const auto& BoundaryPair : Boundaries)
-        {
-            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
-            const FPlateBoundary& Boundary = BoundaryPair.Value;
-
-            if (Boundary.BoundaryType != EBoundaryType::Divergent)
-            {
-                continue;
-            }
-
-            if (!IsPlateInBoundary(BoundaryKey, Plate.PlateID))
-            {
-                continue;
-            }
-
-            if (Boundary.SharedEdgeVertices.Num() < 2)
-            {
-                continue;
-            }
-
-            const int32 EdgeCount = Boundary.SharedEdgeVertices.Num();
-            auto ProcessEdge = [&](const FVector3d& EdgeV0, const FVector3d& EdgeV1)
-            {
-                const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
-                if (PlaneNormal.IsNearlyZero())
+                const int32 StartAdj = RenderVertexAdjacencyOffsets[VertexIdx];
+                const int32 EndAdj = RenderVertexAdjacencyOffsets[VertexIdx + 1];
+                for (int32 Offset = StartAdj; Offset < EndAdj; ++Offset)
                 {
-                    return;
-                }
-
-                const double Projection = FVector3d::DotProduct(VertexNormal, PlaneNormal);
-                const FVector3d Projected = (VertexNormal - Projection * PlaneNormal);
-                if (Projected.IsNearlyZero())
-                {
-                    return;
-                }
-
-                const FVector3d GreatCirclePoint = Projected.GetSafeNormal();
-
-                const double ArcAB = FMath::Acos(FMath::Clamp(EdgeV0 | EdgeV1, -1.0, 1.0));
-                const double ArcAC = FMath::Acos(FMath::Clamp(EdgeV0 | GreatCirclePoint, -1.0, 1.0));
-                const double ArcCB = FMath::Acos(FMath::Clamp(GreatCirclePoint | EdgeV1, -1.0, 1.0));
-
-                const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + GreatCircleSegmentAngleToleranceRad);
-
-                const auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
-                {
-                    const double AngularDistance = FMath::Acos(FMath::Clamp(VertexNormal | PointOnCircle, -1.0, 1.0));
-                    if (AngularDistance < MinDistance)
+                    const int32 NeighborIdx = RenderVertexAdjacency.IsValidIndex(Offset) ? RenderVertexAdjacency[Offset] : INDEX_NONE;
+                    if (!RenderVertices.IsValidIndex(NeighborIdx))
                     {
-                        MinDistance = AngularDistance;
-                        NearestBoundaryTangent = ComputeSegmentTangent(PlaneNormal, PointOnCircle);
+                        continue;
                     }
-                };
 
-                if (bWithinSegment)
-                {
-                    ConsiderPoint(GreatCirclePoint);
-                }
-                else
-                {
-                    ConsiderPoint(EdgeV0);
-                    ConsiderPoint(EdgeV1);
-                }
-            };
+                    if (!VertexCrustAge.IsValidIndex(NeighborIdx))
+                    {
+                        continue;
+                    }
 
-            for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount - 1; ++EdgeIdx)
-            {
-                const int32 EdgeV0Idx = Boundary.SharedEdgeVertices[EdgeIdx];
-                const int32 EdgeV1Idx = Boundary.SharedEdgeVertices[EdgeIdx + 1];
-                if (!SharedVertices.IsValidIndex(EdgeV0Idx) || !SharedVertices.IsValidIndex(EdgeV1Idx))
-                {
-                    continue;
-                }
+                    const int32 NeighborPlateID = VertexPlateAssignments.IsValidIndex(NeighborIdx) ? VertexPlateAssignments[NeighborIdx] : INDEX_NONE;
+                    if (NeighborPlateID != Plate.PlateID)
+                    {
+                        continue;
+                    }
 
-                const FVector3d EdgeV0 = SharedVertices[EdgeV0Idx].GetSafeNormal();
-                const FVector3d EdgeV1 = SharedVertices[EdgeV1Idx].GetSafeNormal();
-                ProcessEdge(EdgeV0, EdgeV1);
+                    FVector3d Step = RenderVertices[NeighborIdx] - VertexPosition;
+                    Step -= (Step | VertexNormal) * VertexNormal;
+                    if (Step.IsNearlyZero())
+                    {
+                        continue;
+                    }
+
+                    const double AgeDiff = VertexCrustAge[NeighborIdx] - VertexCrustAge[VertexIdx];
+                    AgeGradient += AgeDiff * Step;
+                }
             }
 
-            if (EdgeCount >= 2)
+            GradientLength = AgeGradient.Length();
+            if (GradientLength > UE_DOUBLE_SMALL_NUMBER)
             {
-                const int32 EdgeV0Idx = Boundary.SharedEdgeVertices[EdgeCount - 1];
-                const int32 EdgeV1Idx = Boundary.SharedEdgeVertices[0];
-                if (SharedVertices.IsValidIndex(EdgeV0Idx) && SharedVertices.IsValidIndex(EdgeV1Idx))
+                const FVector3d GradientDir = (AgeGradient / GradientLength).GetSafeNormal();
+                FVector3d Candidate = FVector3d::CrossProduct(VertexNormal, GradientDir).GetSafeNormal();
+                if (!Candidate.IsNearlyZero())
                 {
-                    const FVector3d EdgeV0 = SharedVertices[EdgeV0Idx].GetSafeNormal();
-                    const FVector3d EdgeV1 = SharedVertices[EdgeV1Idx].GetSafeNormal();
-                    ProcessEdge(EdgeV0, EdgeV1);
+                    ResultDirection = Candidate;
+                    bUsedGradient = true;
                 }
             }
         }
 
-        const bool bHasBoundaryTangent = (MinDistance < TNumericLimits<double>::Max()) && !NearestBoundaryTangent.IsNearlyZero();
-        if (!bUsedGradient && bHasBoundaryTangent)
-        {
-            const FVector3d Projected = (NearestBoundaryTangent - (NearestBoundaryTangent | VertexNormal) * VertexNormal).GetSafeNormal();
-            ResultDirection = Projected.IsNearlyZero() ? NearestBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector) : Projected;
-        }
-
-        const double DirLength = ResultDirection.Length();
-        if (DirLength < UE_DOUBLE_SMALL_NUMBER)
+        if (!bUsedBoundaryCache && !bUsedGradient)
         {
             ResultDirection = FVector3d::CrossProduct(VertexNormal, FVector3d::UpVector).GetSafeNormal();
             if (ResultDirection.IsNearlyZero())
@@ -5159,56 +5264,61 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         ++UpdatedVertices;
 
 #if UE_BUILD_DEVELOPMENT
+        const double DirLength = ResultDirection.Length();
         if (VertexCrustAge.IsValidIndex(VertexIdx) && VertexCrustAge[VertexIdx] < 15.0)
         {
-            const double Alignment = bHasBoundaryTangent
-                ? FMath::Abs(ResultDirection | NearestBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector))
-                : -1.0;
-
-            if (!bHasBoundaryTangent)
+            if (bBoundaryWithinInfluence && SelectedBoundaryTangent.IsNearlyZero())
             {
                 ++RidgeDiagMissingTangent;
                 if (RidgeDiagLogged < 50)
                 {
                     UE_LOG(LogPlanetaryCreation, Warning,
-                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My missing boundary tangent"),
-                        VertexIdx, Plate.PlateID, VertexCrustAge[VertexIdx]);
-                    ++RidgeDiagLogged;
-                }
-            }
-            else if (DirLength < 0.95 || Alignment < 0.95)
-            {
-                ++RidgeDiagPoorAlignment;
-                if (RidgeDiagLogged < 50)
-                {
-                    UE_LOG(LogPlanetaryCreation, Warning,
-                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My |Dir|=%.3f Alignment=%.1f%%"),
+                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My missing cache tangent (dist=%.3f rad)"),
                         VertexIdx,
                         Plate.PlateID,
                         VertexCrustAge[VertexIdx],
-                        DirLength,
-                        Alignment * 100.0);
-                    UE_LOG(LogPlanetaryCreation, Warning,
-                        TEXT("    ResultDir=(%.3f, %.3f, %.3f) BoundaryTan=(%.3f, %.3f, %.3f)"),
-                        ResultDirection.X, ResultDirection.Y, ResultDirection.Z,
-                        NearestBoundaryTangent.X, NearestBoundaryTangent.Y, NearestBoundaryTangent.Z);
+                        BoundaryDistance);
                     ++RidgeDiagLogged;
                 }
             }
-            else if (!bUsedGradient && RidgeDiagLogged < 50)
+            else if (bUsedBoundaryCache)
             {
-                UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My gradient fallback (|Grad|=%.3f)"),
-                    VertexIdx,
-                    Plate.PlateID,
-                    VertexCrustAge[VertexIdx],
-                    GradientLength);
-                ++RidgeDiagLogged;
+                const double Alignment = FMath::Abs(ResultDirection | SelectedBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector));
+                if (DirLength < 0.95 || Alignment < 0.95)
+                {
+                    ++RidgeDiagPoorAlignment;
+                    if (RidgeDiagLogged < 50)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My |Dir|=%.3f Alignment=%.1f%% (dist=%.3f rad)"),
+                            VertexIdx,
+                            Plate.PlateID,
+                            VertexCrustAge[VertexIdx],
+                            DirLength,
+                            Alignment * 100.0,
+                            BoundaryDistance);
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("    ResultDir=(%.3f, %.3f, %.3f) CacheTan=(%.3f, %.3f, %.3f)"),
+                            ResultDirection.X, ResultDirection.Y, ResultDirection.Z,
+                            SelectedBoundaryTangent.X, SelectedBoundaryTangent.Y, SelectedBoundaryTangent.Z);
+                        ++RidgeDiagLogged;
+                    }
+                }
             }
-
-            if (!bUsedGradient)
+            else if (bBoundaryWithinInfluence && bUsedGradient)
             {
                 ++RidgeDiagGradientFallback;
+                if (RidgeDiagLogged < 50)
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning,
+                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My fallback to gradient (|Grad|=%.3f, dist=%.3f rad)"),
+                        VertexIdx,
+                        Plate.PlateID,
+                        VertexCrustAge[VertexIdx],
+                        GradientLength,
+                        BoundaryDistance);
+                    ++RidgeDiagLogged;
+                }
             }
         }
 #endif
@@ -5240,10 +5350,11 @@ void UTectonicSimulationService::ComputeRidgeDirections()
     }
 
 #if UE_BUILD_DEVELOPMENT
-    if (RidgeDiagMissingTangent > 0 || RidgeDiagPoorAlignment > 0 || RidgeDiagGradientFallback > 0)
+    if (RidgeDiagCacheHits > 0 || RidgeDiagMissingTangent > 0 || RidgeDiagPoorAlignment > 0 || RidgeDiagGradientFallback > 0)
     {
         UE_LOG(LogPlanetaryCreation, Warning,
-            TEXT("[RidgeDiag] Summary: Missing=%d PoorAlignment=%d GradientFallback=%d"),
+            TEXT("[RidgeDiag] Summary: CacheHits=%d Missing=%d PoorAlignment=%d GradientFallback=%d"),
+            RidgeDiagCacheHits,
             RidgeDiagMissingTangent,
             RidgeDiagPoorAlignment,
             RidgeDiagGradientFallback);

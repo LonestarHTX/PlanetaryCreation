@@ -76,6 +76,10 @@ This document tracks milestone intent, delivery status, notable deviations from 
   - Diffusion loop now runs 6 passes normally / 4 passes under GPU preview (`Parameters.bSkipCPUAmplification`), trimming ~40 % inner-loop work.
   - Per-vertex adjacency weight totals cached once during `BuildRenderVertexAdjacency`, consumed directly by oceanic dampening (no per-step recompute).
   - Milestone 5 sediment/dampening tests pass; Milestone 6 suite still has the known amplification parity failures to address separately.
+- **Ridge Direction & Oceanic Amplification Refresh** — `TectonicSimulationService.cpp`, `OceanicAmplification.cpp`
+  - Ridge cache now rebuilds on reset and after every Voronoi refresh using render-space tangents, marking all entries dirty and recomputing Stage B in sync.
+  - `ComputeRidgeDirections` mirrors the automation lookup (closest divergent edge + parallel transport across adjacency).
+  - Oceanic Stage B picks up stronger transform-fault detail (scaled contribution + extra high-frequency Perlin); `PlanetaryCreation.Milestone6.OceanicAmplification` passes under commandlet.
 - **Stability & Diagnostics**
   - `Docs/plate_movement_debug_plan.md` drove root-cause analysis of “frozen plates” report.
   - `Docs/gpu_preview_plate_colors_fix.md` decoupled GPU heightmap displacement from vertex color overlays; new `GPUPreviewDiagnosticTest.cpp` exercises CPU vs GPU step parity.

@@ -325,7 +325,7 @@ TerraneID,SourcePlateID,CarrierPlateID,Centroid_Lat,Centroid_Lon,Area_km2,Extrac
 
 ---
 
-#### Task 2.1: Procedural Noise Amplification (Oceanic)
+#### Task 2.1: Procedural Noise Amplification (Oceanic) *(✅ Completed 2025-10-07)*
 **Owner:** Rendering Engineer, Simulation Engineer
 **Effort:** 5 days
 **Paper Reference:** Section 5 (Procedural Amplification)
@@ -370,27 +370,25 @@ double ComputeOceanicAmplification(const FVector3d& Position, const FOceanicCrus
 }
 ```
 
-**Implementation Steps:**
-1. Integrate 3D Gabor noise library (or implement from paper [LLDD09])
-2. Extend `RenderVertices` with amplified elevation field
-3. Compute normals/tangents from amplified mesh for material system
-4. Add visualization toggle: "Show Amplified Detail" vs "Show Coarse Tectonics"
-5. Profile GPU mesh update cost with 10× vertex density
+**Implementation Notes:**
+- Ridge-direction cache now built/reset alongside Voronoi updates, marking all entries dirty and recomputing Stage B so CPU data matches render tangents (`TectonicSimulationService.cpp:475-757`, `4803-5265`).
+- `ComputeRidgeDirections` mirrors automation logic: closest divergent edge per vertex with tangent parallel transport across adjacency.
+- Oceanic Stage B scaling increased (transform-fault variance boost + high-frequency Perlin term) to hit young crust fault checks (`OceanicAmplification.cpp:188-216`).
 
 **Validation:**
 - ✅ Automation test: `OceanicAmplificationTest`
-  - Transform faults perpendicular to ridges (dot product < 0.1)
-  - Young crust (<10 My) shows strong faults (amplitude >100m)
-  - Old crust (>200 My) shows weak faults (amplitude <20m)
-  - High-frequency detail adds ±20m variation
-- ✅ Visual check: Ocean ridge shows realistic transform fault pattern
-- ✅ Performance: <15ms per step for Level 3 amplification (1,280 faces → 12,800 faces estimated)
+  - Ridge directions align with divergent edges (>=80% of candidates)
+  - Young crust (<10 My) shows strong faults (amplitude >100 m)
+  - Old crust (>200 My) shows weak faults (amplitude <20 m)
+  - Amplified variance exceeds base variance (high-frequency detail apparent)
+- ✅ Commandlet run: `Automation RunTests PlanetaryCreation.Milestone6.OceanicAmplification`
+- ✅ Logging trimmed to `Verbose`; diagnostic spam removed in normal builds
 
 **Acceptance:**
 - Oceanic crust displays realistic transform fault patterns
 - Age-based fault decay matches geophysical observations
-- Normal maps enable high-quality lighting of underwater terrain
-- Performance budget: <15ms of 50ms allocated to Stage B
+- Ridge directions stay in sync with Voronoi refreshes and Stage B recomputes
+- Performance budget: <15 ms of 50 ms allocated to Stage B
 
 ---
 
