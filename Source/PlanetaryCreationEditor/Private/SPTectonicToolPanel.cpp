@@ -5,6 +5,7 @@
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
 #include "TectonicPlaybackController.h"
+#include "HAL/IConsoleManager.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SSpinBox.h"
 #include "Widgets/Input/SSlider.h"
@@ -627,6 +628,16 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
 
             + SVerticalBox::Slot()
             .AutoHeight()
+            .Padding(0.0f, 6.0f, 0.0f, 2.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonLabel", "Prime GPU Stage B"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonTooltip", "Enable both Stage B passes, keep CPU fallbacks active, and switch the GPU path on in one click (resets simulation if Stage B settings change)."))
+                .OnClicked(this, &SPTectonicToolPanel::HandlePrimeGPUStageBClicked)
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
             [
                 SNew(STextBlock)
                 .Text(NSLOCTEXT("PlanetaryCreation", "BatchHint", "Batch stepping and fast-forward presets will arrive in later milestones."))
@@ -1140,6 +1151,47 @@ void SPTectonicToolPanel::ApplySurfaceProcessMutation(TFunctionRef<bool(FTectoni
             UE_LOG(LogPlanetaryCreation, Log, TEXT("%s toggled, simulation reset."), ChangeLabel);
         }
     }
+}
+
+FReply SPTectonicToolPanel::HandlePrimeGPUStageBClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            FTectonicSimulationParameters Params = Service->GetParameters();
+            const bool bOriginalOceanic = Params.bEnableOceanicAmplification;
+            const bool bOriginalContinental = Params.bEnableContinentalAmplification;
+            const bool bOriginalSkip = Params.bSkipCPUAmplification;
+
+            Params.bEnableOceanicAmplification = true;
+            Params.bEnableContinentalAmplification = true;
+            Params.bSkipCPUAmplification = false;
+
+            const bool bParamsChanged = (bOriginalOceanic != Params.bEnableOceanicAmplification) ||
+                (bOriginalContinental != Params.bEnableContinentalAmplification) ||
+                (bOriginalSkip != Params.bSkipCPUAmplification);
+
+            if (bParamsChanged)
+            {
+                Service->SetParameters(Params);
+                Controller->RebuildPreview();
+            }
+
+            if (IConsoleVariable* UseGPU = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.UseGPUAmplification")))
+            {
+                UseGPU->Set(1, ECVF_SetByCode);
+            }
+            if (IConsoleVariable* SkipCPU = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.SkipCPUAmplification")))
+            {
+                SkipCPU->Set(0, ECVF_SetByCode);
+            }
+
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB] GPU pipeline primed: oceanic+continental amplification enabled, CPU fallback active, GPU amplification cvar set."));
+        }
+    }
+
+    return FReply::Handled();
 }
 
 // Milestone 5 Task 1.1: Playback control handlers

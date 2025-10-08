@@ -89,7 +89,7 @@ while (FPlatformTime::Seconds() < Deadline)
 
 This ensures dispatch happens once, then polling proceeds asynchronously.
 
-✅ **Status (2025-10-06):** Implemented. `ProcessPendingOceanicGPUReadbacks` now owns dispatch/copy fences, the forced mode waits once during automation, and Stage B profiling records readback stall time for logs/Insights.
+✅ **Status (2025-10-07):** Dispatch/copy fences are live, forced submit waits once during automation, Stage B profiling records readback stalls, and replay snapshots now bump their serial + hash after mutation so `ProcessPendingOceanicGPUReadbacks()` stays on the async path instead of tripping the fallback every frame.
 
 ---
 

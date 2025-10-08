@@ -196,7 +196,9 @@ private:
         RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
 
     bool UpdateCachedMeshFromSnapshot(FCachedLODMesh& CachedMesh, const FMeshBuildSnapshot& Snapshot, int32 NewSurfaceDataVersion);
+    bool TryUpdatePreviewMeshInPlace(const FCachedLODMesh& CachedMesh);
     void ApplyCachedMeshToPreview(const FCachedLODMesh& CachedMesh);
+    void FinalizePreviewMeshUpdate(int32 VertexCount, int32 TriangleCount);
 
     void EnsureGPUPreviewTextureAsset() const;
     void CopyHeightTextureToPreviewResource() const;

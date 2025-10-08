@@ -6,6 +6,12 @@
 #include "Containers/BitArray.h"
 #include "TectonicSimulationService.generated.h"
 
+namespace PlanetaryCreation::GPU
+{
+    bool ApplyOceanicAmplificationGPU(class UTectonicSimulationService& Service);
+    bool ApplyContinentalAmplificationGPU(class UTectonicSimulationService& Service);
+}
+
 UENUM(BlueprintType)
 enum class ETectonicVisualizationMode : uint8
 {
@@ -25,6 +31,12 @@ struct FStageBProfile
     double ContinentalGPUMs = 0.0;
     double GpuReadbackMs = 0.0;
     double CacheInvalidationMs = 0.0;
+    int32 RidgeDirtyVertices = 0;
+    int32 RidgeUpdatedVertices = 0;
+    int32 RidgeCacheHits = 0;
+    int32 RidgeMissingTangents = 0;
+    int32 RidgePoorAlignment = 0;
+    int32 RidgeGradientFallbacks = 0;
 
     double TotalMs() const
     {
@@ -927,6 +939,7 @@ public:
     /** Advance the simulation by the requested number of steps (each 2 My). */
     void AdvanceSteps(int32 StepCount);
 
+
     /** Returns the accumulated tectonic time in mega-years. */
     double GetCurrentTimeMy() const { return CurrentTimeMy; }
 
@@ -987,9 +1000,24 @@ public:
     const TArray<int32>& GetRenderVertexAdjacencyOffsets() const { return RenderVertexAdjacencyOffsets; }
     const TArray<int32>& GetRenderVertexAdjacency() const { return RenderVertexAdjacency; }
 
+    struct FRenderVertexBoundaryInfo
+    {
+        float DistanceRadians = TNumericLimits<float>::Max();
+        FVector3d BoundaryTangent = FVector3d::ZeroVector;
+        int32 SourcePlateID = INDEX_NONE;
+        int32 OpposingPlateID = INDEX_NONE;
+        bool bHasBoundary = false;
+        bool bIsDivergent = false;
+    };
+
     /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
     const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
     int32 GetLastRidgeDirectionUpdateCount() const { return LastRidgeDirectionUpdateCount; }
+    int32 GetLastRidgeDirtyVertexCount() const { return LastRidgeDirtyVertexCount; }
+    int32 GetLastRidgeCacheHitCount() const { return LastRidgeCacheHitCount; }
+    int32 GetLastRidgeMissingTangentCount() const { return LastRidgeMissingTangentCount; }
+    int32 GetLastRidgePoorAlignmentCount() const { return LastRidgePoorAlignmentCount; }
+    int32 GetLastRidgeGradientFallbackCount() const { return LastRidgeGradientFallbackCount; }
 
     /** Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification. */
     void InitializeGPUExemplarResources();
@@ -1190,6 +1218,8 @@ public:
         /** Milestone 6 Task 1.1: Terrane state (for undo/redo). */
         TArray<FContinentalTerrane> Terranes;
         int32 NextTerraneID;
+        TArray<FVector3d> VertexRidgeDirections;
+        TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;
 
         FSimulationHistorySnapshot() : CurrentTimeMy(0.0), TopologyVersion(0), SurfaceDataVersion(0), NextTerraneID(0) {}
     };
@@ -1223,6 +1253,7 @@ public:
 
     /** Milestone 5 Task 1.3: Jump to specific history index (for timeline scrubbing). */
     bool JumpToHistoryIndex(int32 Index);
+    void RestoreRidgeCacheFromSnapshot(const FSimulationHistorySnapshot& Snapshot);
 
     /**
      * Milestone 6 Task 1.1: Extract terrane from continental plate.
@@ -1450,6 +1481,8 @@ private:
 
     /** Milestone 6 Task 2.1: Compute ridge directions for all oceanic vertices. */
     void ComputeRidgeDirections();
+    /** Milestone 6 Task 2.1: Recompute ridge directions if dirty or topology changed. Returns true when recomputed. */
+    bool RefreshRidgeDirectionsIfNeeded();
 
     /** Milestone 6 Task 2.1: Apply Stage B oceanic amplification (transform faults, fine detail). */
     void ApplyOceanicAmplification();
@@ -1516,17 +1549,6 @@ private:
     TArray<int32> PendingCrustAgeResetSeeds;
     TBitArray<> PendingCrustAgeResetMask;
 
-    /** Render-vertex level boundary cache for ridge direction reconstruction. */
-    struct FRenderVertexBoundaryInfo
-    {
-        float DistanceRadians = TNumericLimits<float>::Max();
-        FVector3d BoundaryTangent = FVector3d::ZeroVector;
-        int32 SourcePlateID = INDEX_NONE;
-        int32 OpposingPlateID = INDEX_NONE;
-        bool bHasBoundary = false;
-        bool bIsDivergent = false;
-    };
-
     TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;
 
     /** Cadence counter for Voronoi refresh. */
@@ -1567,6 +1589,7 @@ public:
     void SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure = false, const FString& InOverrideOutputDirectory = FString());
 
     void ForceRidgeRecomputeForTest() { ComputeRidgeDirections(); }
+    int32 GetPendingOceanicGPUJobCount() const;
 
 private:
     bool bForceHeightmapModuleFailure = false;
@@ -1593,8 +1616,13 @@ private:
     mutable TBitArray<> RidgeDirectionDirtyMask;
     mutable int32 RidgeDirectionDirtyCount = 0;
     mutable int32 CachedRidgeDirectionTopologyVersion = INDEX_NONE;
-    mutable int32 CachedRidgeDirectionVertexCount = 0;
-    mutable int32 LastRidgeDirectionUpdateCount = 0;
+   mutable int32 CachedRidgeDirectionVertexCount = 0;
+   mutable int32 LastRidgeDirectionUpdateCount = 0;
+    mutable int32 LastRidgeDirtyVertexCount = 0;
+    mutable int32 LastRidgeCacheHitCount = 0;
+    mutable int32 LastRidgeMissingTangentCount = 0;
+    mutable int32 LastRidgePoorAlignmentCount = 0;
+    mutable int32 LastRidgeGradientFallbackCount = 0;
 
 #if WITH_EDITOR
     struct FOceanicGPUAsyncJob
@@ -1606,11 +1634,14 @@ private:
         int32 VertexCount = 0;
         uint64 JobId = 0;
         bool bCopySubmitted = false;
+        bool bCpuReplayApplied = false;
         FOceanicAmplificationSnapshot Snapshot;
     };
 
     TArray<FOceanicGPUAsyncJob> PendingOceanicGPUJobs;
     uint64 NextOceanicGPUJobId = 1;
+    TArray<TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>> OceanicReadbackPool;
+    int32 NextOceanicReadbackIndex = 0;
 
     struct FContinentalGPUAsyncJob
     {
@@ -1626,6 +1657,23 @@ private:
 
     TArray<FContinentalGPUAsyncJob> PendingContinentalGPUJobs;
     uint64 NextContinentalGPUJobId = 1;
+    TArray<TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>> ContinentalReadbackPool;
+    int32 NextContinentalReadbackIndex = 0;
+
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer();
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer();
+    bool EnsureLatestOceanicSnapshotApplied();
+    bool IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
+    bool IsContinentalReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
+
+    friend bool PlanetaryCreation::GPU::ApplyOceanicAmplificationGPU(UTectonicSimulationService& Service);
+    friend bool PlanetaryCreation::GPU::ApplyContinentalAmplificationGPU(UTectonicSimulationService& Service);
+#else
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer() { return nullptr; }
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer() { return nullptr; }
+    bool EnsureLatestOceanicSnapshotApplied() { return false; }
+    bool IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>&) const { return false; }
+    bool IsContinentalReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>&) const { return false; }
 #endif
 
     void RefreshRenderVertexFloatSoA() const;

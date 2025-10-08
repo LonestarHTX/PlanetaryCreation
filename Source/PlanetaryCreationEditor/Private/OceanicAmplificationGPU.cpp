@@ -280,7 +280,12 @@ namespace PlanetaryCreation::GPU
         const TArray<FVector3f>* PositionArray = PositionFloatPtr;
         const TArray<uint32>* MaskArray = OceanicMaskPtr;
 
-        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("PlanetaryCreation.OceanicGPU.Readback"));
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = Service.AcquireOceanicGPUReadbackBuffer();
+        if (!Readback.IsValid())
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Unable to acquire readback buffer; falling back to CPU amplification."));
+            return false;
+        }
 
         // Execute GPU compute on render thread
         ENQUEUE_RENDER_COMMAND(OceanicAmplificationGPU)(
@@ -433,7 +438,12 @@ namespace PlanetaryCreation::GPU
             return false;
         }
 
-        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("PlanetaryCreation.ContinentalGPU.Readback"));
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = Service.AcquireContinentalGPUReadbackBuffer();
+        if (!Readback.IsValid())
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ContinentalGPU] Unable to acquire readback buffer; falling back to CPU amplification."));
+            return false;
+        }
 
         ENQUEUE_RENDER_COMMAND(ContinentalAmplificationGPU)(
             [BaselineArray, PositionArray, PackedInfoArray, ExemplarIndexArray, ExemplarWeightArray,

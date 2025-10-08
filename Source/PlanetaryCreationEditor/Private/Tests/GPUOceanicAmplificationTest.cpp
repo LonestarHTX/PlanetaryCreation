@@ -5,6 +5,7 @@
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/ScopeExit.h"
 
 double ComputeOceanicAmplification(const FVector3d& Position, int32 PlateID, double CrustAge_My, double BaseElevation_m,
     const FVector3d& RidgeDirection, const TArray<FTectonicPlate>& Plates,
@@ -424,6 +425,70 @@ bool FGPUOceanicAmplificationTest::RunTest(const FString& Parameters)
         UE_LOG(LogPlanetaryCreation, Error, TEXT("[GPUOceanicParity] CVar 'r.PlanetaryCreation.UseGPUAmplification' not found"));
         return false;
     }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGPUOceanicDoubleDispatchTest,
+    "PlanetaryCreation.Milestone6.GPU.OceanicDoubleDispatch",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGPUOceanicDoubleDispatchTest::RunTest(const FString& Parameters)
+{
+    UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
+    TestNotNull(TEXT("TectonicSimulationService must exist"), Service);
+    if (!Service)
+    {
+        return false;
+    }
+
+    Service->ResetSimulation();
+    Service->ProcessPendingOceanicGPUReadbacks(true);
+    Service->ProcessPendingContinentalGPUReadbacks(true);
+
+    FTectonicSimulationParameters Params = Service->GetParameters();
+    Params.RenderSubdivisionLevel = 5;
+    Params.MinAmplificationLOD = 5;
+    Params.bEnableOceanicAmplification = true;
+    Params.bEnableContinentalAmplification = false;
+    Params.bSkipCPUAmplification = false;
+    Service->SetParameters(Params);
+
+    IConsoleVariable* CVarGPUAmplification = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.UseGPUAmplification"));
+    const int32 OriginalGPUValue = CVarGPUAmplification ? CVarGPUAmplification->GetInt() : 1;
+    if (CVarGPUAmplification)
+    {
+        CVarGPUAmplification->Set(1, ECVF_SetByCode);
+    }
+
+    ON_SCOPE_EXIT
+    {
+        if (CVarGPUAmplification)
+        {
+            CVarGPUAmplification->Set(OriginalGPUValue, ECVF_SetByCode);
+        }
+    };
+
+    const uint64 SerialBefore = Service->GetOceanicAmplificationDataSerial();
+
+    Service->AdvanceSteps(1);
+    const int32 PendingAfterFirst = Service->GetPendingOceanicGPUJobCount();
+    TestTrue(TEXT("[GPUOceanicDoubleDispatch] Pending readback expected after first GPU dispatch"), PendingAfterFirst >= 1);
+
+    Service->AdvanceSteps(1);
+    const int32 PendingAfterSecond = Service->GetPendingOceanicGPUJobCount();
+    TestTrue(TEXT("[GPUOceanicDoubleDispatch] No more than two readbacks should be live"), PendingAfterSecond <= 2);
+    TestTrue(TEXT("[GPUOceanicDoubleDispatch] Readbacks should remain pending after second dispatch"), PendingAfterSecond >= 1);
+
+    const uint64 SerialAfterDispatches = Service->GetOceanicAmplificationDataSerial();
+    TestTrue(TEXT("[GPUOceanicDoubleDispatch] Oceanic data serial should advance after async CPU replay"), SerialAfterDispatches > SerialBefore);
+
+    Service->ProcessPendingOceanicGPUReadbacks(true);
+    const int32 PendingAfterDrain = Service->GetPendingOceanicGPUJobCount();
+    TestEqual(TEXT("[GPUOceanicDoubleDispatch] All readbacks must drain"), PendingAfterDrain, 0);
+
+    const uint64 SerialAfterDrain = Service->GetOceanicAmplificationDataSerial();
+    TestTrue(TEXT("[GPUOceanicDoubleDispatch] Oceanic data serial remains monotonic"), SerialAfterDrain >= SerialAfterDispatches);
 
     return true;
 }

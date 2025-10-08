@@ -25,15 +25,18 @@ Logs for every run are written to `Saved/Logs/PlanetaryCreation.log`. The Stage�
 
 | Step | Total (ms) | Stage B Total (ms) | Baseline | Ridge | Oceanic | Continental | Readback |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 5 | 475.53 | 40.16 | 0.10 | 21.22 | 18.84 | 0.00 | 0.00 |
-| 6 | 188.67 | 41.57 | 0.10 | 22.26 | 19.20 | 0.00 | 0.00 |
-| 7 | 187.23 | 40.79 | 0.10 | 21.88 | 18.81 | 0.00 | 0.00 |
-| 8 | 194.68 | **33.05** | 0.12 | **21.90** | **9.26** | 0.00 | **1.77** |
+| 5 | 419.69 | 19.42 | 0.10 | 0.04 | 19.28 | 0.00 | 0.00 |
+| 6 | 162.65 | 19.67 | 0.10 | 0.04 | 19.53 | 0.00 | 0.00 |
+| 7 | 165.78 | 23.64 | 0.10 | 4.31 | 19.23 | 0.00 | 0.00 |
+| 8 | 240.12 | **14.50** | 0.10 | **4.35** | **10.05** | 0.00 | **0.00** |
 
 **Key takeaways**
-- Stage B is currently in the mid–30 ms range after GPU readback, well within the 50 ms M6 allocation.
-- Ridge cache dominates the CPU portion (≈22 ms); the oceanic shader + readback adds ≈11 ms.
-- CPU parity replay detected no mismatches; GPU parity exited with max delta **0.000 m**.
+- Stage B now lands at **14.50 ms** on the GPU path with readback eliminated, comfortably under the 50 ms M6 allocation.
+- Undoing to the cached snapshot dirties the ridge cache once (Step 7), explaining the 4.31 ms spike before the steady-state 4.35 ms ridge cost on the GPU pass.
+- CPU baseline/replay remain ~19–24 ms with ridge work minimal unless the topology cache invalidates.
+- No `[StageB][GPU] … hash mismatch` warnings after the snapshot serial/hash fix; GPU parity exits with max delta **0.0003 m**.
+- `[StepTiming]` now prints ridge dirty/update counts and cache statistics; the L7 undo replay only touched **192 vertices**, while the continental parity pass still reports full-mesh dirties (expected until exemplar caching lands).
+- Navigation-system repository ensure is now intercepted by the editor module handler; parity logs show a single warning (`NavigationSystem.cpp:3808`) without repeated error spam.
 
 ### Level 3 Baseline (M5 Regression Harness)
 

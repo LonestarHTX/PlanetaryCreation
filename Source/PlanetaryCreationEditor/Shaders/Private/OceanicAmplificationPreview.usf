@@ -155,6 +155,16 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     if (InOceanicMask[Index] == 0u)
     {
         OutHeightTexture[PixelCoord] = Baseline;
+        if (PixelCoord.x == 0)
+        {
+            uint2 WrapCoord = uint2(TextureSize.x - 1, PixelCoord.y);
+            OutHeightTexture[WrapCoord] = Baseline;
+        }
+        else if (PixelCoord.x == TextureSize.x - 1)
+        {
+            uint2 WrapCoord = uint2(0, PixelCoord.y);
+            OutHeightTexture[WrapCoord] = Baseline;
+        }
         return;
     }
 
@@ -206,6 +216,16 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     HeightValue += ExtraVarianceNoise;
 
     OutHeightTexture[PixelCoord] = HeightValue;
+    if (PixelCoord.x == 0)
+    {
+        uint2 WrapCoord = uint2(TextureSize.x - 1, PixelCoord.y);
+        OutHeightTexture[WrapCoord] = HeightValue;
+    }
+    else if (PixelCoord.x == TextureSize.x - 1)
+    {
+        uint2 WrapCoord = uint2(0, PixelCoord.y);
+        OutHeightTexture[WrapCoord] = HeightValue;
+    }
 
     if (TextureSize.x > 1u)
     {

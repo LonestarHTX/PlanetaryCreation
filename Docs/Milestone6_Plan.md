@@ -381,8 +381,8 @@ double ComputeOceanicAmplification(const FVector3d& Position, const FOceanicCrus
 ```
 
 **Implementation Notes:**
-- Ridge-direction cache now built/reset alongside Voronoi updates, marking all entries dirty and recomputing Stage B so CPU data matches render tangents (`TectonicSimulationService.cpp:475-757`, `4803-5265`).
-- `ComputeRidgeDirections` mirrors automation logic: closest divergent edge per vertex with tangent parallel transport across adjacency.
+- Ridge-direction cache now refreshes through `RefreshRidgeDirectionsIfNeeded()`, which monitors Voronoi/topology stamps before rebuilding and ensures Stage B only recomputes when cached tangents go dirty (`TectonicSimulationService.cpp:993`, `5404-5730`).
+- `ComputeRidgeDirections` mirrors automation logic: closest divergent edge per vertex with tangent parallel transport across adjacency while sourcing render-space tangents from `RenderVertexBoundaryCache`.
 - Oceanic Stage B scaling increased (transform-fault variance boost + high-frequency Perlin term) to hit young crust fault checks (`OceanicAmplification.cpp:188-216`).
 
 **Validation:**

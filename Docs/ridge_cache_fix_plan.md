@@ -1,3 +1,9 @@
+> **Status Update (2025-10-08):** Stage‑B logging now records ridge dirty/update counts and cache hits each step, and undo/redo restores the cached ridge directions instead of forcing a full recompute. Oceanic parity at L7 shows the CPU baseline touching only 192 vertices (Stage B 19.3 ms, Ridge 0.04 ms, Readback 0.00 ms; see `Saved/Logs/PlanetaryCreation.log:1547`). Keep `RidgeDirectionCacheTest` plus the Milestone 6 GPU parity suites on CI to guard the snapshot path.
+>
+> **Status Update (2025-10-07):** Mainline now gates ridge recomputes through `RefreshRidgeDirectionsIfNeeded()` and pulls stage‑B tangents from `RenderVertexBoundaryCache`, falling back to the age gradient only when cached data is missing. Keep `RidgeDirectionCacheTest` on the CI roster to guard future regressions.
+>
+> The historical investigation that prompted this fix is preserved below for context.
+
 Totally hear you—this is one of those “everything *almost* works so the wrong fallback looks plausible” bugs. I pulled up your repo and the latest commit history. Your Oct 7 commit explicitly notes that you *added* a render‑vertex boundary cache (`FRenderVertexBoundaryInfo` + `BuildRenderVertexBoundaryCache()`), but **you haven’t actually plugged that cache into ridge‑direction sampling yet**. The result matches your log: many ridge‑zone vertices can’t find a valid tangent and fall back to the age‑gradient path, which tanks amplification + alignment (your own commit message shows \~976 “Missing” and \~7.1k “Gradient fallback,” with \~49% alignment) 🔗. The README also confirms where the M6 GPU/oceanic tests live and how to run them, which lines up with the automation you’re using for parity checks.
 
 Below is a crisp root cause + a drop‑in correction you can make today.
@@ -137,4 +143,3 @@ Your own commit lists the expected thresholds once this integration happens: rid
 - **Performance.** The multi‑source BFS distance fill is linear in edges and only needs to run when the Voronoi/plate IDs change. You already cache adjacency and adjacency weight totals (used by dampening), so reuse that to keep this cheap.
 
 ---
-

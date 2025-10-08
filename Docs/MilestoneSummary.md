@@ -69,22 +69,28 @@ This document tracks milestone intent, delivery status, notable deviations from 
   - Introduced `ETectonicVisualizationMode` enum, console hook (`r.PlanetaryCreation.VisualizationMode`), and combo UI replacing heightmap/velocity checkboxes.
   - Controller/velocity overlay now clear arrows when mode ≠ Velocity; GPU preview diagnostics updated to assert enum flow (`PlanetaryCreation.Milestone6.GPU.PreviewDiagnostic`).
 - **Terrane Mesh Surgery Refactor** — `UTectonicSimulationService::ExtractTerrane`, `UTectonicSimulationService::ReattachTerrane`, and `FContinentalTerrane`
-- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and pools readback buffers, keeping Stage B under ~18 ms with ≈0 ms readback cost
+- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and pools readback buffers, keeping Stage B at ~14.5 ms with ≈0 ms readback cost during the L7 GPU pass
   - Extraction snapshots full vertex payloads (position, velocity, stress, sediment, amplified elevation, duplicate mapping) and compacts render SoA arrays without orphaned vertices.
   - Reattachment removes patch triangles via sorted-key sets, restores duplicates, rebuilds adjacency, and keeps the mesh manifold; `TerraneMeshSurgeryTest` expanded to confirm no `INDEX_NONE` assignments remain.
   - Build + automation coverage: Win64 Development UBT (≈3 s incremental) and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` now succeed.
+  - Async replay snapshots now bump the serial and recompute the hash immediately after mutation, preventing `ProcessPendingOceanicGPUReadbacks()` from dropping into the fallback path each frame.
+  - Stage B profiling output now reports ridge-cache health (dirty counts, updates, cache hits, fallback counters) per step; undo/redo restores cached ridge data so temporal jumps only touch the affected vertices (e.g., L7 Step 7 dirty count 192).
 - **Sediment & Dampening Optimizations** — `SedimentTransport.cpp`, `OceanicDampening.cpp`, `TectonicSimulationService.cpp`
   - Diffusion loop now runs 6 passes normally / 4 passes under GPU preview (`Parameters.bSkipCPUAmplification`), trimming ~40 % inner-loop work.
   - Per-vertex adjacency weight totals cached once during `BuildRenderVertexAdjacency`, consumed directly by oceanic dampening (no per-step recompute).
   - Milestone 5 sediment/dampening tests pass; Milestone 6 suite still has the known amplification parity failures to address separately.
 - **Ridge Direction & Oceanic Amplification Refresh** — `TectonicSimulationService.cpp`, `OceanicAmplification.cpp`
-  - Ridge cache now rebuilds on reset and after every Voronoi refresh using render-space tangents, marking all entries dirty and recomputing Stage B in sync.
-  - `ComputeRidgeDirections` mirrors the automation lookup (closest divergent edge + parallel transport across adjacency).
+  - Stage B now calls `RefreshRidgeDirectionsIfNeeded()` each step, so the cache only rebuilds when Voronoi/topology stamps change instead of forcing a full recompute.
+  - New helper guards `ComputeRidgeDirections()` behind dirty/topology checks and feeds render-tangent data from `RenderVertexBoundaryCache`, only falling back to the age gradient when cached tangents are missing or stale.
   - Oceanic Stage B picks up stronger transform-fault detail (scaled contribution + extra high-frequency Perlin); `PlanetaryCreation.Milestone6.OceanicAmplification` passes under commandlet.
 - **Stability & Diagnostics**
   - `Docs/plate_movement_debug_plan.md` drove root-cause analysis of “frozen plates” report.
   - `Docs/gpu_preview_plate_colors_fix.md` decoupled GPU heightmap displacement from vertex color overlays; new `GPUPreviewDiagnosticTest.cpp` exercises CPU vs GPU step parity.
   - `Docs/gpu_system_review.md` confirms Stage B cost ~0.1 ms at L7, highlighting sediment/dampening as new hot spots.
+  - Commandlet automation now installs a scoped ensure handler so the navigation-system repo ensure is downgraded to a single warning instead of repeated errors during parity runs.
+- **Stage B Steady-State Mesh Refresh** — `TectonicSimulationController.cpp`
+  - Added an in-place mesh update path that writes positions, tangents, and colors directly to existing realtime-mesh streams when topology is unchanged, reusing the shared post-update flow.
+  - Stage B steady-state frames now skip the costly rebuild call while keeping cached amplification data in sync with the viewport.
 - **Automation** — `Docs/GPU_Test_Suite.md`
   - `PlanetaryCreation.Milestone6.GPU.OceanicParity` and `.GPU.IntegrationSmoke` green; continental parity scaffolded pending shader.
   - Full M6 suite stands at 15 tests / 12 passing with GPU preview enabled.

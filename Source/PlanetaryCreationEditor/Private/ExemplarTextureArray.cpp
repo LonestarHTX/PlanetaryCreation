@@ -14,6 +14,7 @@
 #include "TextureResource.h"
 #include "RenderingThread.h"
 #include "RHICommandList.h"
+#include "UObject/UObjectBaseUtility.h"
 
 namespace PlanetaryCreation::GPU
 {
@@ -192,20 +193,20 @@ namespace PlanetaryCreation::GPU
 
 		UE_LOG(LogPlanetaryCreation, Log, TEXT("[ExemplarGPU] Shutting down Texture2DArray"));
 
-		if (TextureArray)
+	if (TextureArray)
+	{
+		if (TextureArray->IsValidLowLevelFast())
 		{
-			if (IsValid(TextureArray))
-			{
-				TextureArray->ConditionalBeginDestroy();
-			}
-#if UE_BUILD_DEVELOPMENT
-			else
-			{
-				UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[ExemplarGPU] TextureArray already invalid at shutdown (skipping destroy)"));
-			}
-#endif
-			TextureArray = nullptr;
+			TextureArray->ConditionalBeginDestroy();
 		}
+#if UE_BUILD_DEVELOPMENT
+		else
+		{
+			UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[ExemplarGPU] TextureArray already invalid at shutdown (skipping destroy)"));
+		}
+#endif
+		TextureArray = nullptr;
+	}
 
 		ExemplarInfo.Empty();
 		ExemplarCount = 0;

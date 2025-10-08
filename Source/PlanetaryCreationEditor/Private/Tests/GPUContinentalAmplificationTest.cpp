@@ -140,6 +140,7 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] CPU baseline captured (%d vertices)"), CPUResults.Num());
         Service->Undo();
         Service->ResetAmplifiedElevationForTests();
+        Service->ResetAmplifiedElevationForTests();
 
         // ========================================================================
         // Snapshot-backed GPU path

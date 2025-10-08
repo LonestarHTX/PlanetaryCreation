@@ -13,6 +13,7 @@
 #include "RealtimeMeshComponent/Public/RealtimeMeshComponent.h"
 #include "RealtimeMeshComponent/Public/RealtimeMeshSimple.h"
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshBuilder.h"
+#include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshDataTypes.h"
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshSectionConfig.h"
 #include "RealtimeMeshComponent/Public/Interface/Core/RealtimeMeshStreamRange.h"
 #include "UObject/UObjectGlobals.h"
@@ -126,6 +127,10 @@ void FTectonicSimulationController::StepSimulation(int32 Steps)
         UpdateLOD();
 
         Service->AdvanceSteps(Steps);
+#if WITH_EDITOR
+        Service->ProcessPendingOceanicGPUReadbacks(true);
+        Service->ProcessPendingContinentalGPUReadbacks(true);
+#endif
         BuildAndUpdateMesh();
     }
 }
@@ -283,7 +288,10 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         if (UpdateCachedMeshFromSnapshot(*MutableCachedMesh, Snapshot, CurrentSurfaceVersion))
         {
             UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD Cache] Updated cached L%d from snapshot (Surface %d)"), RenderLevel, CurrentSurfaceVersion);
-            ApplyCachedMeshToPreview(*MutableCachedMesh);
+            if (!TryUpdatePreviewMeshInPlace(*MutableCachedMesh))
+            {
+                ApplyCachedMeshToPreview(*MutableCachedMesh);
+            }
             PreWarmNeighboringLODs();
             return;
         }
@@ -889,59 +897,7 @@ void FTectonicSimulationController::UpdatePreviewMesh(RealtimeMesh::FRealtimeMes
         Mesh->UpdateSectionGroup(GroupKey, MoveTemp(StreamSet));
     }
 
-    const int32 ClampedVertices = FMath::Max(VertexCount, 0);
-    const int32 ClampedTriangles = FMath::Max(TriangleCount, 0);
-    const FRealtimeMeshStreamRange Range(0, ClampedVertices, 0, ClampedTriangles * 3);
-    Mesh->UpdateSectionRange(SectionKey, Range);
-
-    // Milestone 4 Task 3.1: Refresh high-res boundary overlay after mesh update
-    DrawHighResolutionBoundaryOverlay();
-
-    // Milestone 6: Generate GPU height texture and bind to material when GPU preview mode is enabled
-    if (bUseGPUPreviewMode)
-    {
-        UTectonicSimulationService* Service = GetService();
-        if (Service && PreviewActor.IsValid())
-        {
-            // Generate GPU height texture (no readback - stays on device)
-            if (PlanetaryCreation::GPU::ApplyOceanicAmplificationGPUPreview(*Service, GPUHeightTexture, HeightTextureSize))
-            {
-                EnsureGPUPreviewTextureAsset();
-
-                if (GPUHeightTextureAsset.IsValid())
-                {
-                    CopyHeightTextureToPreviewResource();
-
-                    // Bind texture to material dynamic instance
-                    if (URealtimeMeshComponent* Component = PreviewActor->GetRealtimeMeshComponent())
-                    {
-                        if (UMaterialInterface* CurrentMaterial = Component->GetMaterial(0))
-                        {
-                            UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(CurrentMaterial);
-                            if (!MID)
-                            {
-                                MID = UMaterialInstanceDynamic::Create(CurrentMaterial, Component);
-                                Component->SetMaterial(0, MID);
-                            }
-
-                            if (MID)
-                            {
-                                MID->SetTextureParameterValue(PlanetaryCreation::Preview::HeightTextureParamName, GPUHeightTextureAsset.Get());
-                                MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, 100.0f); // meters → cm
-                                MID->SetScalarParameterValue(TEXT("DebugOverlayOpacity"), 0.5f);
-
-                                UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Height texture bound to material (%dx%d)"),
-                                    HeightTextureSize.X, HeightTextureSize.Y);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Milestone 4 Task 3.2: Refresh velocity vector field after mesh update
-    DrawVelocityVectorField();
+    FinalizePreviewMeshUpdate(VertexCount, TriangleCount);
 }
 
 void FTectonicSimulationController::DrawBoundaryLines()
@@ -2132,6 +2088,125 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
     return true;
 }
 
+bool FTectonicSimulationController::TryUpdatePreviewMeshInPlace(const FCachedLODMesh& CachedMesh)
+{
+    using namespace RealtimeMesh;
+
+    if (!PreviewMesh.IsValid() || !bPreviewInitialized)
+    {
+        return false;
+    }
+
+    URealtimeMeshSimple* Mesh = PreviewMesh.Get();
+    if (!Mesh)
+    {
+        return false;
+    }
+
+    const int32 VertexCount = CachedMesh.VertexCount;
+    const int32 TriangleCount = CachedMesh.TriangleCount;
+    if (VertexCount <= 0 || TriangleCount <= 0)
+    {
+        return false;
+    }
+
+    const bool bStreamsValid =
+        CachedMesh.PositionX.Num() == VertexCount &&
+        CachedMesh.PositionY.Num() == VertexCount &&
+        CachedMesh.PositionZ.Num() == VertexCount &&
+        CachedMesh.NormalX.Num() == VertexCount &&
+        CachedMesh.NormalY.Num() == VertexCount &&
+        CachedMesh.NormalZ.Num() == VertexCount &&
+        CachedMesh.TangentX.Num() == VertexCount &&
+        CachedMesh.TangentY.Num() == VertexCount &&
+        CachedMesh.TangentZ.Num() == VertexCount &&
+        CachedMesh.VertexColors.Num() == VertexCount;
+
+    if (!bStreamsValid)
+    {
+        return false;
+    }
+
+    const FRealtimeMeshSectionGroupKey GroupKey = FRealtimeMeshSectionGroupKey::Create(0, FName(TEXT("TectonicPreview")));
+
+    bool bUpdateSucceeded = true;
+    Mesh->EditMeshInPlace(GroupKey, [this, &CachedMesh, VertexCount, &bUpdateSucceeded](FRealtimeMeshStreamSet& StreamSet)
+    {
+        using namespace RealtimeMesh;
+
+        TSet<FRealtimeMeshStreamKey> DirtyStreams;
+        if (!bUpdateSucceeded)
+        {
+            return DirtyStreams;
+        }
+
+        FRealtimeMeshStream* const PositionStream = StreamSet.Find(FRealtimeMeshStreams::Position);
+        FRealtimeMeshStream* const TangentStream = StreamSet.Find(FRealtimeMeshStreams::Tangents);
+        FRealtimeMeshStream* const ColorStream = StreamSet.Find(FRealtimeMeshStreams::Color);
+
+        if (!PositionStream || !TangentStream || !ColorStream)
+        {
+            bUpdateSucceeded = false;
+            return TSet<FRealtimeMeshStreamKey>();
+        }
+
+        TRealtimeMeshStreamBuilder<FVector3f, FVector3f> Positions(*PositionStream);
+        if (Positions.Num() != VertexCount)
+        {
+            Positions.SetNumUninitialized(VertexCount);
+        }
+
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            Positions[Index] = FVector3f(
+                CachedMesh.PositionX[Index],
+                CachedMesh.PositionY[Index],
+                CachedMesh.PositionZ[Index]);
+        }
+        DirtyStreams.Add(FRealtimeMeshStreams::Position);
+
+        TRealtimeMeshStreamBuilder<TRealtimeMeshTangents<FVector4f>, FRealtimeMeshTangentsNormalPrecision> Tangents(*TangentStream);
+        if (Tangents.Num() != VertexCount)
+        {
+            Tangents.SetNumUninitialized(VertexCount);
+        }
+
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            const FVector3f Normal(CachedMesh.NormalX[Index], CachedMesh.NormalY[Index], CachedMesh.NormalZ[Index]);
+            const FVector3f TangentVec(CachedMesh.TangentX[Index], CachedMesh.TangentY[Index], CachedMesh.TangentZ[Index]);
+
+            TRealtimeMeshTangents<FVector4f> TangentData;
+            TangentData.SetNormalAndTangent(Normal, TangentVec);
+            Tangents[Index] = TangentData;
+        }
+        DirtyStreams.Add(FRealtimeMeshStreams::Tangents);
+
+        TRealtimeMeshStreamBuilder<FColor, FColor> Colors(*ColorStream);
+        if (Colors.Num() != VertexCount)
+        {
+            Colors.SetNumUninitialized(VertexCount);
+        }
+
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            Colors[Index] = CachedMesh.VertexColors[Index];
+        }
+        DirtyStreams.Add(FRealtimeMeshStreams::Color);
+
+        return DirtyStreams;
+    });
+
+    if (!bUpdateSucceeded)
+    {
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[LOD Cache] In-place mesh update unavailable; falling back to full rebuild"));
+        return false;
+    }
+
+    FinalizePreviewMeshUpdate(VertexCount, TriangleCount);
+    return true;
+}
+
 void FTectonicSimulationController::ApplyCachedMeshToPreview(const FCachedLODMesh& CachedMesh)
 {
     RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
@@ -2140,6 +2215,77 @@ void FTectonicSimulationController::ApplyCachedMeshToPreview(const FCachedLODMes
 
     BuildMeshFromCache(CachedMesh, StreamSet, VertexCount, TriangleCount);
     UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
+}
+
+void FTectonicSimulationController::FinalizePreviewMeshUpdate(int32 VertexCount, int32 TriangleCount)
+{
+    if (!PreviewMesh.IsValid())
+    {
+        return;
+    }
+
+    URealtimeMeshSimple* Mesh = PreviewMesh.Get();
+    if (!Mesh)
+    {
+        return;
+    }
+
+    const FRealtimeMeshSectionGroupKey GroupKey = FRealtimeMeshSectionGroupKey::Create(0, FName(TEXT("TectonicPreview")));
+    const FRealtimeMeshSectionKey SectionKey = FRealtimeMeshSectionKey::CreateForPolyGroup(GroupKey, 0);
+
+    const int32 ClampedVertices = FMath::Max(VertexCount, 0);
+    const int32 ClampedTriangles = FMath::Max(TriangleCount, 0);
+    const FRealtimeMeshStreamRange Range(0, ClampedVertices, 0, ClampedTriangles * 3);
+    Mesh->UpdateSectionRange(SectionKey, Range);
+
+    DrawHighResolutionBoundaryOverlay();
+
+    if (bUseGPUPreviewMode)
+    {
+        UTectonicSimulationService* Service = GetService();
+        if (Service && PreviewActor.IsValid())
+        {
+            if (PlanetaryCreation::GPU::ApplyOceanicAmplificationGPUPreview(*Service, GPUHeightTexture, HeightTextureSize))
+            {
+                EnsureGPUPreviewTextureAsset();
+
+                if (GPUHeightTextureAsset.IsValid())
+                {
+                    CopyHeightTextureToPreviewResource();
+
+                    if (URealtimeMeshComponent* Component = PreviewActor->GetRealtimeMeshComponent())
+                    {
+                        if (UMaterialInterface* CurrentMaterial = Component->GetMaterial(0))
+                        {
+                            UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(CurrentMaterial);
+                            if (!MID)
+                            {
+                                MID = UMaterialInstanceDynamic::Create(CurrentMaterial, Component);
+                                Component->SetMaterial(0, MID);
+                            }
+
+                            if (MID)
+                            {
+                                MID->SetTextureParameterValue(PlanetaryCreation::Preview::HeightTextureParamName, GPUHeightTextureAsset.Get());
+                                MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, 100.0f);
+                                MID->SetScalarParameterValue(TEXT("DebugOverlayOpacity"), 0.5f);
+
+                                UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Height texture bound to material (%dx%d)"),
+                                    HeightTextureSize.X, HeightTextureSize.Y);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] ApplyOceanicAmplificationGPUPreview skipped (no update applied)"));
+            }
+        }
+    }
+
+    // Milestone 4 Task 3.2: Refresh velocity vector field after mesh update
+    DrawVelocityVectorField();
 }
 
 void FTectonicSimulationController::InvalidateLODCache()

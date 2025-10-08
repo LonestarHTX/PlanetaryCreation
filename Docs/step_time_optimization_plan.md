@@ -11,8 +11,8 @@ Now that the simulation pipeline is stable, the next step is reducing **step-tim
 Cache ridge directions to eliminate redundant calculations in steady-state steps. Only refresh when topological changes occur (after re-tessellation or plate reassignment).
 
 ### Implementation
-- **Cache + Stamp:** Maintain a `RidgeDirCache` (SoA floats) and a `TopologyStamp` that increments on re-tessellation, boundary merges/splits, or plate remaps.
-- **Dirty Ring Update:** Track a small ring of vertices near active boundaries using a bitset. Recompute ridge directions for those vertices only, allowing localized kinematic adjustments without full cache rebuild.
+- **Status (2025-10-07):** Mainline now routes Stage B through `RefreshRidgeDirectionsIfNeeded()`, which checks topology/dirty state before calling `ComputeRidgeDirections()` and feeds render-space tangents from `RenderVertexBoundaryCache`.
+- **Dirty Ring Update (Next):** Track a small ring of vertices near active boundaries using a bitset. Recompute ridge directions for those vertices only, allowing localized kinematic adjustments without full cache rebuild.
 - **Parity Test:** Add an automation test that recomputes ridge directions after 10 steps without re-tessellation and verifies RMS angular error < 2°.
 
 ### Expected Impact
@@ -75,21 +75,37 @@ Eliminate costly GPU readbacks by rendering directly from GPU buffers.
 
 ---
 
-## 4. Suggested Order of Implementation
+## 4. Stage B Steady-State Mesh Refresh
+
+### Objective
+Avoid rebuilding realtime-mesh sections when topology is unchanged so Stage B updates stay in the sub-10 ms window even under continuous playback.
+
+### Implementation
+- **Status (2025-10-07):** `UTectonicSimulationController` now pushes positions/tangents/colors in place when the render topology stamp matches, reusing the shared post-update path and bypassing the expensive rebuild.
+- **Next:** Instrument Insights markers around the in-place path vs. full rebuild to quantify savings at L6/L7 and surface the delta in `Docs/Performance_M6.md`.
+- **Parity Test:** Extend the GPU parity suite to cover the in-place refresh path (toggle amplification twice without triggering a topology change) and confirm render buffers stay in sync.
+
+### Expected Impact
+- Removes redundant mesh rebuilds during steady-state Stage B playback.
+- Keeps the render thread budget stable once amplification settles, tightening variance for automation captures.
+
+---
+
+## 5. Suggested Order of Implementation
 1. Implement **Re-Tessellation Throttling** (immediate, low risk).
 2. Add **Ridge Direction Caching** with topology stamping.
 3. Develop **GPU-Only Preview Path** (WPO method first, then vertex factory approach).
 
 ---
 
-## 5. Risks and Guardrails
+## 6. Risks and Guardrails
 - **Ridge Cache Drift:** Regular parity tests ensure scientific accuracy.
 - **Visual Mismatch:** When switching to WPO preview, verify shading parity with CPU normals.
 - **Async GPU Sync:** Continue using per-job `FRenderCommandFence` to ensure render-thread submission without blocking the GPU.
 
 ---
 
-## 6. Summary for Agents
+## 7. Summary for Agents
 - **Step-Time Focus Areas:** Ridge caching, re-tessellation throttling, GPU preview.
 - **Acceptance Criteria:**
   - Ridge cache reduces per-step cost by ≥20%.
@@ -97,4 +113,3 @@ Eliminate costly GPU readbacks by rendering directly from GPU buffers.
   - Preview mode eliminates readback and maintains <0.1 m elevation delta at L7.
 
 Once these optimizations land, we can benchmark new steady-state step times and begin fine-tuning GPU amplification parameters for even tighter frame budgets.
-

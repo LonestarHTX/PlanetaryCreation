@@ -104,6 +104,7 @@ private:
     void OnContinentalAmplificationChanged(ECheckBoxState NewState);
 
     void ApplySurfaceProcessMutation(TFunctionRef<bool(FTectonicSimulationParameters&)> Mutator, const TCHAR* ChangeLabel) const;
+    FReply HandlePrimeGPUStageBClicked();
 
     // Milestone 5 Task 1.3: Undo/Redo controls
     FReply HandleUndoClicked();

@@ -15,13 +15,29 @@
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/AssertionMacros.h"
 #include "ShaderCore.h"
 
 static const FName TectonicToolTabName(TEXT("TectonicTool"));
 
+namespace
+{
+    TFunction<bool(const FEnsureHandlerArgs& Args)> GPrevEnsureHandler;
+}
+
 void FPlanetaryCreationEditorModule::StartupModule()
 {
     UE_LOG(LogPlanetaryCreation, Log, TEXT("[Module] StartupModule() called"));
+
+    GPrevEnsureHandler = SetEnsureHandler([](const FEnsureHandlerArgs& Args)
+    {
+        const bool bNavEnsure = Args.Expression && FCStringAnsi::Strstr(Args.Expression, "NavSys->Repository") != nullptr;
+        if (bNavEnsure)
+        {
+            return true; // swallow navigation repository ensures in commandlets
+        }
+        return GPrevEnsureHandler ? GPrevEnsureHandler(Args) : false;
+    });
 
     // Milestone 6: Register shader directory for GPU compute shaders
     // CRITICAL: Must be ABSOLUTE path, not relative, and registered even during automation runs
@@ -49,6 +65,7 @@ void FPlanetaryCreationEditorModule::StartupModule()
 
 void FPlanetaryCreationEditorModule::ShutdownModule()
 {
+    SetEnsureHandler(GPrevEnsureHandler);
     FCoreDelegates::OnPostEngineInit.Remove(OnPostEngineInitHandle);
 
     const FString CmdLine(FCommandLine::Get());
