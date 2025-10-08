@@ -14,11 +14,19 @@
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
 - Run Milestone 3 automation suite: `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
 - GPU preview parity suites (Milestone 6): launch from Windows PowerShell via `Automation RunTests PlanetaryCreation.Milestone6.GPU`.
-- When driving Windows commandlets from WSL, invoke the editor commandlet exactly like this (quotes and casing matter):
+- When driving Windows commandlets from WSL, follow this five-step template. **Execute each step in order; do not omit any part.**
+  1. **Executable (WSL path):** `"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"`
+  2. **Project path (Windows-style, quoted):** `"C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject"`
+  3. **Optional CVars:** append any console variables with `-SetCVar="Name=Value"` (e.g., `-SetCVar="r.PlanetaryCreation.StageBProfiling=1"`).
+  4. **Exec commands:** `-ExecCmds="Automation RunTests <ExactTestPath>; Quit"` — replace `<ExactTestPath>` with the suite name (ex: `PlanetaryCreation.Milestone6.GPU.OceanicParity`). Always include `; Quit`.
+  5. **Required flags:** `-unattended -nop4 -nosplash`
+
+  Example (Milestone 6 oceanic parity + profiling):
   ```
   "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
     "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
-    -ExecCmds="Automation RunTests PlanetaryCreation.Milestone6.GPU.ContinentalParity; Quit" \
+    -SetCVar="r.PlanetaryCreation.StageBProfiling=1" \
+    -ExecCmds="Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit" \
     -unattended -nop4 -nosplash
   ```
 
@@ -41,7 +49,7 @@
   ```
   Running the Windows binary directly inside WSL fails with `UtilBindVsockAnyPort`; always shell out through PowerShell or `cmd.exe` on Windows when you need GPU automation.
 - Guard GPU-reliant automation with a NullRHI check so tests auto-skip when `GDynamicRHI` reports `NullDrv`.
-- After GPU preview runs, verify the log for `[OceanicGPUPreview] ... seam mirrors=` and the parity test summaries (`Seam column 2047 coverage`) to confirm height-map coverage.
+- After GPU preview runs, verify the log for `[OceanicGPUPreview] ... SeamLeft=...`/`SeamRight=...` (and the parity test summaries) to confirm height-map coverage.
 
 ## Build Expectations
 - After **any** change to Unreal C++ or Slate, run the WSL-friendly build command from `CLAUDE.md` (see below).

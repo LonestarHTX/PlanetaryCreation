@@ -64,6 +64,7 @@ namespace PlanetaryCreation::GPU
 			float ElevationMax_m;
 			float ElevationMean_m;
 			int32 ArrayIndex;  // Index in Texture2DArray
+			int32 LibraryIndex = INDEX_NONE;  // Index within CPU exemplar library (may include skipped textures)
 #if UE_BUILD_DEVELOPMENT
 			TArray<uint16> DebugHeightData;
 			int32 DebugWidth = 0;

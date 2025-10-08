@@ -16,11 +16,41 @@
 #include "ShaderParameterUtils.h"
 #include "VectorTypes.h"
 #include "RHIGPUReadback.h"
+#include "Misc/Crc.h"
 
 namespace PlanetaryCreation::GPU
 {
     namespace
     {
+        inline uint32 HashSnapshotMemory(uint32 ExistingHash, const void* Data, SIZE_T NumBytes)
+        {
+            if (Data && NumBytes > 0)
+            {
+                return FCrc::MemCrc32(Data, NumBytes, ExistingHash);
+            }
+            return ExistingHash;
+        }
+
+        uint32 HashOceanicSnapshot(const FOceanicAmplificationSnapshot& Snapshot)
+        {
+            if (!Snapshot.IsConsistent())
+            {
+                return 0;
+            }
+
+            uint32 Hash = 0;
+            Hash = HashSnapshotMemory(Hash, Snapshot.BaselineElevation.GetData(), Snapshot.BaselineElevation.Num() * sizeof(float));
+            Hash = HashSnapshotMemory(Hash, Snapshot.RidgeDirections.GetData(), Snapshot.RidgeDirections.Num() * sizeof(FVector4f));
+            Hash = HashSnapshotMemory(Hash, Snapshot.CrustAge.GetData(), Snapshot.CrustAge.Num() * sizeof(float));
+            Hash = HashSnapshotMemory(Hash, Snapshot.RenderPositions.GetData(), Snapshot.RenderPositions.Num() * sizeof(FVector3f));
+            Hash = HashSnapshotMemory(Hash, Snapshot.OceanicMask.GetData(), Snapshot.OceanicMask.Num() * sizeof(uint32));
+            Hash = HashSnapshotMemory(Hash, Snapshot.PlateAssignments.GetData(), Snapshot.PlateAssignments.Num() * sizeof(int32));
+            Hash = HashSnapshotMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
+            Hash = HashSnapshotMemory(Hash, &Snapshot.DataSerial, sizeof(uint64));
+            Hash = HashSnapshotMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
+            return Hash;
+        }
+
         class FOceanicAmplificationCS : public FGlobalShader
         {
         public:
@@ -111,10 +141,11 @@ namespace PlanetaryCreation::GPU
             return IsFeatureLevelSupported(GMaxRHIShaderPlatform, ERHIFeatureLevel::SM5);
         }
 
-        static void ComputeSeamCoverageMetrics(const TArray<FVector3f>& Positions, int32 TextureWidth, int32& OutLeftCoverage, int32& OutRightCoverage)
+        static void ComputeSeamCoverageMetrics(const TArray<FVector3f>& Positions, int32 TextureWidth, int32& OutLeftCoverage, int32& OutRightCoverage, int32& OutMirroredCoverage)
         {
             OutLeftCoverage = 0;
             OutRightCoverage = 0;
+            OutMirroredCoverage = 0;
 
             if (TextureWidth <= 1)
             {
@@ -122,6 +153,7 @@ namespace PlanetaryCreation::GPU
             }
 
             const int32 LastColumn = TextureWidth - 1;
+            const float LastColumnFloat = static_cast<float>(LastColumn);
 
             for (const FVector3f& Position : Positions)
             {
@@ -139,25 +171,31 @@ namespace PlanetaryCreation::GPU
                     U += 1.0f;
                 }
 
-                const float ColumnPosition = U * static_cast<float>(TextureWidth);
-                const float DistanceToLeft = FMath::Abs(ColumnPosition);
-                const float DistanceToRight = FMath::Abs(static_cast<float>(LastColumn) - ColumnPosition);
+                const float ColumnPosition = U * LastColumnFloat;
+                const float NormalizedU = LastColumnFloat > 0.0f
+                    ? FMath::Clamp(ColumnPosition / LastColumnFloat, 0.0f, 1.0f)
+                    : 0.0f;
 
-                // Treat anything within ~1 pixel of a seam column as coverage.
-                constexpr float SeamThreshold = 1.5f;
-                const bool bNearLeft = DistanceToLeft <= SeamThreshold;
-                const bool bNearRight = DistanceToRight <= SeamThreshold;
+                constexpr float SeamCoverageThreshold = 0.1f;
+                const bool bCountsLeft = NormalizedU <= SeamCoverageThreshold;
+                const bool bCountsRight = NormalizedU >= (1.0f - SeamCoverageThreshold);
 
-                if (!bNearLeft && !bNearRight)
+                if (!bCountsLeft && !bCountsRight)
                 {
                     continue;
                 }
 
-                if (bNearLeft && (!bNearRight || DistanceToLeft <= DistanceToRight))
+                if (bCountsLeft && bCountsRight)
+                {
+                    ++OutMirroredCoverage;
+                }
+
+                if (bCountsLeft)
                 {
                     ++OutLeftCoverage;
                 }
-                else
+
+                if (bCountsRight)
                 {
                     ++OutRightCoverage;
                 }
@@ -212,13 +250,35 @@ namespace PlanetaryCreation::GPU
             return false;
         }
 
+        const FTectonicSimulationParameters SimParams = Service.GetParameters();
+        const TArray<int32>& PlateAssignments = Service.GetVertexPlateAssignments();
+        if (PlateAssignments.Num() != VertexCount)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Plate assignment size mismatch (%d vs expected %d)"), PlateAssignments.Num(), VertexCount);
+            return false;
+        }
+
+        FOceanicAmplificationSnapshot Snapshot;
+        Snapshot.VertexCount = VertexCount;
+        Snapshot.Parameters = SimParams;
+        Snapshot.DataSerial = Service.GetOceanicAmplificationDataSerial();
+        Snapshot.BaselineElevation = BaselineFloat;
+        Snapshot.RidgeDirections = RidgeDirFloat;
+        Snapshot.CrustAge = CrustAgeFloat;
+        Snapshot.RenderPositions = PositionFloat;
+        Snapshot.OceanicMask = OceanicMask;
+        Snapshot.PlateAssignments = PlateAssignments;
+        Snapshot.Hash = HashOceanicSnapshot(Snapshot);
+        if (!Snapshot.Hash)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Snapshot hash is zero; validation safeguards may be limited this run."));
+        }
+
         const TArray<float>* BaselineArray = BaselineFloatPtr;
         const TArray<FVector4f>* RidgeArray = RidgeDirFloatPtr;
         const TArray<float>* CrustArray = CrustAgeFloatPtr;
         const TArray<FVector3f>* PositionArray = PositionFloatPtr;
         const TArray<uint32>* MaskArray = OceanicMaskPtr;
-
-        const FTectonicSimulationParameters SimParams = Service.GetParameters();
 
         TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("PlanetaryCreation.OceanicGPU.Readback"));
 
@@ -285,7 +345,7 @@ namespace PlanetaryCreation::GPU
 
         FlushRenderingCommands();
 
-        Service.EnqueueOceanicGPUJob(Readback, VertexCount);
+        Service.EnqueueOceanicGPUJob(Readback, VertexCount, MoveTemp(Snapshot));
 
         return true;
     }
@@ -366,6 +426,13 @@ namespace PlanetaryCreation::GPU
             return false;
         }
 
+        FContinentalAmplificationSnapshot Snapshot;
+        if (!Service.CreateContinentalAmplificationSnapshot(Snapshot))
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ContinentalGPU] Failed to capture snapshot; falling back to CPU path."));
+            return false;
+        }
+
         TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("PlanetaryCreation.ContinentalGPU.Readback"));
 
         ENQUEUE_RENDER_COMMAND(ContinentalAmplificationGPU)(
@@ -437,7 +504,7 @@ namespace PlanetaryCreation::GPU
 
         FlushRenderingCommands();
 
-        Service.EnqueueContinentalGPUJob(Readback, VertexCount);
+        Service.EnqueueContinentalGPUJob(Readback, VertexCount, MoveTemp(Snapshot));
 
         return true;
     }
@@ -564,13 +631,14 @@ namespace PlanetaryCreation::GPU
 
         int32 LeftSeamCoverage = 0;
         int32 RightSeamCoverage = 0;
+        int32 MirroredCoverage = 0;
         if (PositionArray)
         {
-            ComputeSeamCoverageMetrics(*PositionArray, TextureSize.X, LeftSeamCoverage, RightSeamCoverage);
+            ComputeSeamCoverageMetrics(*PositionArray, TextureSize.X, LeftSeamCoverage, RightSeamCoverage, MirroredCoverage);
         }
 
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[OceanicGPUPreview] Height texture written (%dx%d, %d vertices, %d seam mirrors, %d edge wraps)"),
-            TextureSize.X, TextureSize.Y, VertexCount, LeftSeamCoverage, RightSeamCoverage);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[OceanicGPUPreview] Height texture written (%dx%d, %d vertices, SeamLeft=%d, SeamRight=%d, Mirrored=%d)"),
+            TextureSize.X, TextureSize.Y, VertexCount, LeftSeamCoverage, RightSeamCoverage, MirroredCoverage);
 
         return true;
     }

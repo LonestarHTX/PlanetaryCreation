@@ -35,123 +35,167 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
     {
         const int32 OriginalValue = CVarGPUAmplification->GetInt();
 
-        // ============================================================================
-        // Run 1: CPU Baseline
-        // ============================================================================
-
-        CVarGPUAmplification->Set(0, ECVF_SetByCode);
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Running CPU baseline"));
-
-        Service->AdvanceSteps(1);
-        const TArray<double>& CPUAmplifiedElevation = Service->GetVertexAmplifiedElevation();
-        TArray<double> CPUResults = CPUAmplifiedElevation;  // Deep copy
-
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] CPU baseline: %d vertices"), CPUResults.Num());
-
-        // ============================================================================
-        // Run 2: GPU Path (Will Fall Back to CPU Until Shader Ready)
-        // ============================================================================
-
-        Service->Undo();  // Reset to same state
-
-        CVarGPUAmplification->Set(1, ECVF_SetByCode);
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Attempting GPU path (expected to fall back to CPU)"));
-
-        Service->AdvanceSteps(1);
-        const TArray<double>& GPUAmplifiedElevation = Service->GetVertexAmplifiedElevation();
-        TArray<double> GPUResults = GPUAmplifiedElevation;  // Deep copy
-
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] GPU results: %d vertices"), GPUResults.Num());
-
-        CVarGPUAmplification->Set(OriginalValue, ECVF_SetByCode);
-
-        // ============================================================================
-        // Validation (Will Pass Once Shader Implemented)
-        // ============================================================================
-
-        TestEqual(TEXT("CPU and GPU produce same vertex count"), CPUResults.Num(), GPUResults.Num());
-
-        if (CPUResults.Num() != GPUResults.Num())
+        // Helper lambda for parity analysis
+        auto CompareAgainstBaseline = [&](const TArray<double>& Baseline, const TArray<double>& Candidate, const TCHAR* Label, bool bExpectParity)
         {
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("[GPUContinentalParity] Vertex count mismatch"));
+            TestEqual(FString::Printf(TEXT("[%s] Vertex count matches baseline"), Label), Candidate.Num(), Baseline.Num());
+            if (Candidate.Num() != Baseline.Num())
+            {
+                return;
+            }
+
+            const double Tolerance_m = 0.1;
+            const TArray<int32>& VertexPlateAssignments = Service->GetVertexPlateAssignments();
+            const TArray<FTectonicPlate>& Plates = Service->GetPlates();
+            const TArray<double>& BaselineElevation = Service->GetVertexElevationValues();
+
+            int32 TotalContinentalVertices = 0;
+            int32 WithinToleranceCount = 0;
+            double MaxDelta_m = 0.0;
+            int32 MaxDeltaIdx = INDEX_NONE;
+            double MeanAbsoluteDelta_m = 0.0;
+            int32 LoggedMismatches = 0;
+
+            for (int32 VertexIdx = 0; VertexIdx < Candidate.Num(); ++VertexIdx)
+            {
+                const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+                if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID) || Plates[PlateID].CrustType != ECrustType::Continental)
+                {
+                    continue;
+                }
+
+                ++TotalContinentalVertices;
+
+                const double CPUElevation = Baseline[VertexIdx];
+                const double CandidateElevation = Candidate[VertexIdx];
+                const double Delta = FMath::Abs(CPUElevation - CandidateElevation);
+                MeanAbsoluteDelta_m += Delta;
+
+                if (Delta <= Tolerance_m)
+                {
+                    ++WithinToleranceCount;
+                }
+
+                if (Delta > MaxDelta_m)
+                {
+                    MaxDelta_m = Delta;
+                    MaxDeltaIdx = VertexIdx;
+                }
+
+#if UE_BUILD_DEVELOPMENT
+                if (Delta > 1.0 && LoggedMismatches < 5)
+                {
+                    const double BaselineValue = BaselineElevation.IsValidIndex(VertexIdx) ? BaselineElevation[VertexIdx] : 0.0;
+                    UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity][%s][Diff] Vtx=%d Plate=%d Base=%.2f CPU=%.2f Candidate=%.2f Delta=%.2f"),
+                        Label,
+                        VertexIdx,
+                        PlateID,
+                        BaselineValue,
+                        CPUElevation,
+                        CandidateElevation,
+                        Delta);
+                    ++LoggedMismatches;
+                }
+#endif
+            }
+
+            if (TotalContinentalVertices > 0)
+            {
+                MeanAbsoluteDelta_m /= TotalContinentalVertices;
+                const double ParityRatio = static_cast<double>(WithinToleranceCount) / static_cast<double>(TotalContinentalVertices);
+
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity][%s] Total continental vertices: %d"), Label, TotalContinentalVertices);
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity][%s] Within ±%.2f m: %d (%.2f%%)"),
+                    Label, Tolerance_m, WithinToleranceCount, ParityRatio * 100.0);
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity][%s] Max delta: %.4f m (vertex %d)"),
+                    Label, MaxDelta_m, MaxDeltaIdx);
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity][%s] Mean absolute delta: %.4f m"),
+                    Label, MeanAbsoluteDelta_m);
+
+                if (bExpectParity)
+                {
+                    TestTrue(FString::Printf(TEXT("[%s] Parity ratio >= 99%%"), Label), ParityRatio >= 0.99);
+                    TestTrue(FString::Printf(TEXT("[%s] Max delta < 1.0 m"), Label), MaxDelta_m < 1.0);
+                    TestTrue(FString::Printf(TEXT("[%s] Mean delta < 0.05 m"), Label), MeanAbsoluteDelta_m < 0.05);
+                }
+                else
+                {
+                    TestTrue(FString::Printf(TEXT("[%s] Drift fallback produced non-trivial deltas"), Label), MaxDelta_m > Tolerance_m);
+                    TestTrue(FString::Printf(TEXT("[%s] Mean delta is finite"), Label), FMath::IsFinite(MeanAbsoluteDelta_m));
+                }
+            }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPUContinentalParity][%s] No continental vertices found"), Label);
+            }
+        };
+
+        // ========================================================================
+        // Baseline: CPU only
+        // ========================================================================
+        CVarGPUAmplification->Set(0, ECVF_SetByCode);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Running CPU baseline pass"));
+        Service->AdvanceSteps(1);
+        const TArray<double> CPUResults = Service->GetVertexAmplifiedElevation();
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] CPU baseline captured (%d vertices)"), CPUResults.Num());
+        Service->Undo();
+        Service->ResetAmplifiedElevationForTests();
+
+        // ========================================================================
+        // Snapshot-backed GPU path
+        // ========================================================================
+        CVarGPUAmplification->Set(1, ECVF_SetByCode);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Dispatching GPU continental amplification (snapshot path)"));
+
+        const bool bSnapshotDispatch = Service->ApplyContinentalAmplificationGPU();
+        TestTrue(TEXT("ApplyContinentalAmplificationGPU (snapshot) succeeded"), bSnapshotDispatch);
+        if (!bSnapshotDispatch)
+        {
+            CVarGPUAmplification->Set(OriginalValue, ECVF_SetByCode);
             return false;
         }
 
-        // Tolerance: 0.1 m (same as oceanic test)
-        const double Tolerance_m = 0.1;
-        int32 WithinToleranceCount = 0;
-        int32 TotalContinentalVertices = 0;
-        double MaxDelta_m = 0.0;
-        int32 MaxDeltaIdx = INDEX_NONE;
-        double MeanAbsoluteDelta_m = 0.0;
+        Service->ProcessPendingContinentalGPUReadbacks(true);
+        const TArray<double> SnapshotResults = Service->GetVertexAmplifiedElevation();
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Snapshot-backed results captured (%d vertices)"), SnapshotResults.Num());
 
-        const TArray<int32>& VertexPlateAssignments = Service->GetVertexPlateAssignments();
-        const TArray<FTectonicPlate>& Plates = Service->GetPlates();
+        CompareAgainstBaseline(CPUResults, SnapshotResults, TEXT("Snapshot"), /*bExpectParity*/ true);
 
-        int32 LoggedMismatches = 0;
-        const TArray<double>& BaselineElevation = Service->GetVertexElevationValues();
+        Service->Undo();
 
-        for (int32 VertexIdx = 0; VertexIdx < CPUResults.Num(); ++VertexIdx)
+        // ========================================================================
+        // Drift scenario: force snapshot hash mismatch and ensure fallback works
+        // ========================================================================
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Dispatching GPU continental amplification (drift fallback)"));
+
+        Service->ResetAmplifiedElevationForTests();
+        CVarGPUAmplification->Set(0, ECVF_SetByCode);
+        Service->AdvanceSteps(1);
+        Service->ProcessPendingContinentalGPUReadbacks(true);
+        const TArray<double> FallbackBaseline = Service->GetVertexAmplifiedElevation();
+        Service->Undo();
+
+        CVarGPUAmplification->Set(1, ECVF_SetByCode);
+
+        const bool bFallbackDispatch = Service->ApplyContinentalAmplificationGPU();
+        TestTrue(TEXT("ApplyContinentalAmplificationGPU (fallback) succeeded"), bFallbackDispatch);
+        if (!bFallbackDispatch)
         {
-            const int32 PlateID = VertexPlateAssignments[VertexIdx];
-            if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
-                continue;
-
-            // Only validate continental vertices
-            if (Plates[PlateID].CrustType != ECrustType::Continental)
-                continue;
-
-            TotalContinentalVertices++;
-
-            const double CPUElevation = CPUResults[VertexIdx];
-            const double GPUElevation = GPUResults[VertexIdx];
-            const double Delta = FMath::Abs(CPUElevation - GPUElevation);
-
-            MeanAbsoluteDelta_m += Delta;
-
-            if (Delta <= Tolerance_m)
-            {
-                WithinToleranceCount++;
-            }
-
-            if (Delta > MaxDelta_m)
-            {
-                MaxDelta_m = Delta;
-                MaxDeltaIdx = VertexIdx;
-            }
-
-#if UE_BUILD_DEVELOPMENT
-            if (Delta > 1.0 && LoggedMismatches < 5)
-            {
-                const double BaselineValue = BaselineElevation.IsValidIndex(VertexIdx) ? BaselineElevation[VertexIdx] : 0.0;
-                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity][Diff] Vtx=%d Plate=%d Base=%.2f CPU=%.2f GPU=%.2f Delta=%.2f"),
-                    VertexIdx, PlateID, BaselineValue, CPUElevation, GPUElevation, Delta);
-                ++LoggedMismatches;
-            }
-#endif
+            CVarGPUAmplification->Set(OriginalValue, ECVF_SetByCode);
+            return false;
         }
 
-        if (TotalContinentalVertices > 0)
-        {
-            MeanAbsoluteDelta_m /= TotalContinentalVertices;
+        // Simulate drift between dispatch and readback so the snapshot path is rejected.
+        Service->ForceContinentalSnapshotSerialDrift();
 
-            const double ParityRatio = static_cast<double>(WithinToleranceCount) / static_cast<double>(TotalContinentalVertices);
+        // Reinitialize amplified elevations so fallback recomputes from the proper baseline.
+        Service->ProcessPendingContinentalGPUReadbacks(true);
+        const TArray<double> FallbackResults = Service->GetVertexAmplifiedElevation();
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Fallback results captured (%d vertices)"), FallbackResults.Num());
 
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Validation Results:"));
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Total continental vertices: %d"), TotalContinentalVertices);
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Within tolerance (±%.2f m): %d (%.2f%%)"),
-                Tolerance_m, WithinToleranceCount, ParityRatio * 100.0);
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max delta: %.4f m (vertex %d)"), MaxDelta_m, MaxDeltaIdx);
-            UE_LOG(LogPlanetaryCreation, Log, TEXT("  Mean absolute delta: %.4f m"), MeanAbsoluteDelta_m);
+        CompareAgainstBaseline(FallbackBaseline, FallbackResults, TEXT("Fallback"), /*bExpectParity*/ true);
 
-            TestTrue(TEXT("GPU matches CPU within 0.1 m tolerance (>99% parity)"), ParityRatio >= 0.99);
-            TestTrue(TEXT("Max GPU-CPU delta stays under 1.0 m"), MaxDelta_m < 1.0);
-            TestTrue(TEXT("Mean GPU-CPU delta < 0.05 m"), MeanAbsoluteDelta_m < 0.05);
-        }
-        else
-        {
-            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPUContinentalParity] No continental vertices found"));
-        }
+        CVarGPUAmplification->Set(OriginalValue, ECVF_SetByCode);
 #else
         UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPUContinentalParity] Skipped - WITH_EDITOR not defined"));
 #endif

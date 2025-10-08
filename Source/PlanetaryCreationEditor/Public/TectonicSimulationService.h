@@ -77,13 +77,11 @@ struct FContinentalAmplificationGPUInputs
     int32 CachedSurfaceVersion = INDEX_NONE;
 };
 
-struct FContinentalAmplificationDebugInfo;
-
 struct FContinentalAmplificationCacheEntry
 {
     EContinentalTerrainType TerrainType = EContinentalTerrainType::Plain;
     uint32 ExemplarCount = 0;
-    uint32 ExemplarIndices[3] = { MAX_uint32, MAX_uint32, MAX_uint32 };
+    uint32 ExemplarIndices[3] = { MAX_uint32, MAX_uint32, MAX_uint32 };  // Indices into CPU exemplar library
     float Weights[3] = { 0.0f, 0.0f, 0.0f };
     float TotalWeight = 0.0f;
     FVector2f RandomOffset = FVector2f::ZeroVector;
@@ -91,7 +89,6 @@ struct FContinentalAmplificationCacheEntry
     bool bHasCachedData = false;
 };
 
-#if UE_BUILD_DEVELOPMENT
 struct FContinentalAmplificationDebugInfo
 {
     int32 VertexIndex = INDEX_NONE;
@@ -115,6 +112,7 @@ struct FContinentalAmplificationDebugInfo
     double VValue = 0.0;
 };
 
+#if UE_BUILD_DEVELOPMENT
 void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo* DebugInfo);
 #else
 inline void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo*) {}
@@ -845,6 +843,57 @@ struct FTectonicSimulationParameters
     int32 RidgeDirectionDirtyRingDepth = 2;
 };
 
+struct FOceanicAmplificationSnapshot
+{
+    TArray<float> BaselineElevation;
+    TArray<FVector4f> RidgeDirections;
+    TArray<float> CrustAge;
+    TArray<FVector3f> RenderPositions;
+    TArray<uint32> OceanicMask;
+    TArray<int32> PlateAssignments;
+    FTectonicSimulationParameters Parameters;
+    uint64 DataSerial = 0;
+    uint32 Hash = 0;
+    int32 VertexCount = 0;
+
+    bool IsConsistent() const
+    {
+        return VertexCount > 0 &&
+            BaselineElevation.Num() == VertexCount &&
+            RidgeDirections.Num() == VertexCount &&
+            CrustAge.Num() == VertexCount &&
+            RenderPositions.Num() == VertexCount &&
+            OceanicMask.Num() == VertexCount &&
+            PlateAssignments.Num() == VertexCount;
+    }
+};
+
+struct FContinentalAmplificationSnapshot
+{
+    TArray<float> BaselineElevation;
+    TArray<FVector3f> RenderPositions;
+    TArray<FContinentalAmplificationCacheEntry> CacheEntries;
+    TArray<int32> PlateAssignments;
+    TArray<double> AmplifiedElevation;
+    FTectonicSimulationParameters Parameters;
+    uint64 DataSerial = 0;
+    int32 TopologyVersion = INDEX_NONE;
+    int32 SurfaceVersion = INDEX_NONE;
+    int32 VertexCount = 0;
+    uint32 Hash = 0;
+
+    bool IsConsistent() const
+    {
+        return VertexCount > 0 &&
+            BaselineElevation.Num() == VertexCount &&
+            RenderPositions.Num() == VertexCount &&
+            CacheEntries.Num() == VertexCount &&
+            PlateAssignments.Num() == VertexCount &&
+            AmplifiedElevation.Num() == VertexCount;
+    }
+};
+
+
 /**
  * Milestone 5 Phase 3: Unit conversion helper - meters to Unreal Engine centimeters.
  *
@@ -1240,15 +1289,26 @@ public:
         const TArray<FVector3f>*& OutRenderPositions,
         const TArray<uint32>*& OutOceanicMask) const;
 
+    /** Build a deterministic snapshot for the continental amplification GPU dispatch. */
+    bool CreateContinentalAmplificationSnapshot(FContinentalAmplificationSnapshot& OutSnapshot) const;
+
     const FContinentalAmplificationGPUInputs& GetContinentalAmplificationGPUInputs() const;
+    const TArray<FContinentalAmplificationCacheEntry>& GetContinentalAmplificationCacheEntries() const;
+#if UE_BUILD_DEVELOPMENT
+    void ForceContinentalSnapshotSerialDrift();
+    void ResetAmplifiedElevationForTests();
+#endif
 
     /** Pump pending GPU readbacks; optionally block until all are ready. */
     void ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
     void ProcessPendingContinentalGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
 
+    /** Accessor for the current oceanic amplification serial (primarily for GPU snapshot validation). */
+    uint64 GetOceanicAmplificationDataSerial() const { return OceanicAmplificationDataSerial; }
+
 #if WITH_EDITOR
-    void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount);
-    void EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount);
+    void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount, FOceanicAmplificationSnapshot&& Snapshot);
+    void EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount, FContinentalAmplificationSnapshot&& Snapshot);
 #endif
 
     /**
@@ -1546,6 +1606,7 @@ private:
         int32 VertexCount = 0;
         uint64 JobId = 0;
         bool bCopySubmitted = false;
+        FOceanicAmplificationSnapshot Snapshot;
     };
 
     TArray<FOceanicGPUAsyncJob> PendingOceanicGPUJobs;
@@ -1560,9 +1621,11 @@ private:
         int32 VertexCount = 0;
         uint64 JobId = 0;
         bool bCopySubmitted = false;
+        FContinentalAmplificationSnapshot Snapshot;
     };
 
     TArray<FContinentalGPUAsyncJob> PendingContinentalGPUJobs;
+    uint64 NextContinentalGPUJobId = 1;
 #endif
 
     void RefreshRenderVertexFloatSoA() const;

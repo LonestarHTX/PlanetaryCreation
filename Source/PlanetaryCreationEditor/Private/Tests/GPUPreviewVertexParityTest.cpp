@@ -139,26 +139,40 @@ bool FGPUPreviewVertexParityTest::RunTest(const FString& Parameters)
 
     int32 SeamColumnZeroCoverage = 0;
     int32 SeamColumnMaxCoverage = 0;
+    int32 SeamMirroredCoverage = 0;
     const int32 SeamColumnMax = GPUPreviewVertexParity::PreviewTextureWidth - 1;
     int32 MinPixelX = SeamColumnMax;
     int32 MaxPixelX = 0;
 
     for (float U : UValues)
     {
-        const float PixelPosition = U * GPUPreviewVertexParity::PreviewTextureWidth;
+        const float PixelPosition = U * static_cast<float>(SeamColumnMax);
         const int32 PixelX = FMath::Clamp(FMath::FloorToInt(PixelPosition), 0, SeamColumnMax);
         MinPixelX = FMath::Min(MinPixelX, PixelX);
         MaxPixelX = FMath::Max(MaxPixelX, PixelX);
 
-        if (PixelX <= 1)
+        constexpr float SeamCoverageThreshold = 0.1f;
+        const bool bCountsLeft = U <= SeamCoverageThreshold;
+        const bool bCountsRight = U >= (1.0f - SeamCoverageThreshold);
+
+        if (!bCountsLeft && !bCountsRight)
         {
-            ++SeamColumnZeroCoverage;
-            ++SeamColumnMaxCoverage;
+            continue;
         }
-        else if (PixelX >= (SeamColumnMax - 1))
+
+        if (bCountsLeft && bCountsRight)
+        {
+            ++SeamMirroredCoverage;
+        }
+
+        if (bCountsLeft)
+        {
+            ++SeamColumnZeroCoverage;
+        }
+
+        if (bCountsRight)
         {
             ++SeamColumnMaxCoverage;
-            ++SeamColumnZeroCoverage;
         }
     }
 
@@ -167,6 +181,7 @@ bool FGPUPreviewVertexParityTest::RunTest(const FString& Parameters)
     AddInfo(FString::Printf(TEXT("Duplicate U range: [%.6f, %.6f]"), MinDuplicateU, MaxDuplicateU));
     AddInfo(FString::Printf(TEXT("Seam column 0 coverage (PixelX <= 1): %d"), SeamColumnZeroCoverage));
     AddInfo(FString::Printf(TEXT("Seam column %d coverage (PixelX >= %d): %d"), SeamColumnMax, SeamColumnMax - 1, SeamColumnMaxCoverage));
+    AddInfo(FString::Printf(TEXT("Mirrored seam hits (within threshold of both seams): %d"), SeamMirroredCoverage));
     AddInfo(FString::Printf(TEXT("Pixel X range: [%d, %d]"), MinPixelX, MaxPixelX));
     AddInfo(FString::Printf(TEXT("Expected preview vertex count after duplication: %d"), ExpectedPreviewVertexCount));
 

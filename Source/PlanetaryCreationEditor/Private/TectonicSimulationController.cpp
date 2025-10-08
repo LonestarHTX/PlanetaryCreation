@@ -76,6 +76,7 @@ FTectonicSimulationController::~FTectonicSimulationController()
 
 void FTectonicSimulationController::Initialize()
 {
+    bShutdownRequested.store(false, std::memory_order_relaxed);
     CachedService = GetService();
 }
 
@@ -115,7 +116,6 @@ void FTectonicSimulationController::Shutdown()
     bAsyncMeshBuildInProgress.store(false);
     ActiveAsyncTasks.store(0, std::memory_order_relaxed);
     CachedService.Reset();
-    bShutdownRequested.store(false, std::memory_order_relaxed);
 }
 
 void FTectonicSimulationController::StepSimulation(int32 Steps)
@@ -172,11 +172,12 @@ bool FTectonicSimulationController::RefreshPreviewColors()
     TArray<FColor> Colors;
     TArray<FVector2f> UVs;
     TArray<uint32> Indices;
+    TArray<int32> SourceIndices;
     BuildMeshFromSnapshot(RenderLevel, CurrentTopologyVersion, Snapshot, StreamSet, VertexCount, TriangleCount,
         PositionX, PositionY, PositionZ,
         NormalX, NormalY, NormalZ,
         TangentX, TangentY, TangentZ,
-        Colors, UVs, Indices);
+        Colors, UVs, Indices, SourceIndices);
 
     UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
 
@@ -185,7 +186,7 @@ bool FTectonicSimulationController::RefreshPreviewColors()
         MoveTemp(PositionX), MoveTemp(PositionY), MoveTemp(PositionZ),
         MoveTemp(NormalX), MoveTemp(NormalY), MoveTemp(NormalZ),
         MoveTemp(TangentX), MoveTemp(TangentY), MoveTemp(TangentZ),
-        MoveTemp(Colors), MoveTemp(UVs), MoveTemp(Indices));
+        MoveTemp(Colors), MoveTemp(UVs), MoveTemp(Indices), MoveTemp(SourceIndices));
 
     return true;
 }
@@ -418,7 +419,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
                 PositionX = MoveTemp(PositionX), PositionY = MoveTemp(PositionY), PositionZ = MoveTemp(PositionZ),
                 NormalX = MoveTemp(NormalX), NormalY = MoveTemp(NormalY), NormalZ = MoveTemp(NormalZ),
                 TangentX = MoveTemp(TangentX), TangentY = MoveTemp(TangentY), TangentZ = MoveTemp(TangentZ),
-                Colors = MoveTemp(Colors), UVs = MoveTemp(UVs), Indices = MoveTemp(Indices),
+                Colors = MoveTemp(Colors), UVs = MoveTemp(UVs), Indices = MoveTemp(Indices), SourceVertexIndices = MoveTemp(SourceVertexIndices),
                 VertexCount, TriangleCount, BuildTimeMs, BackgroundThreadID, Snapshot, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]() mutable
             {
                 const uint32 GameThreadID = FPlatformTLS::GetCurrentThreadId();
@@ -434,6 +435,13 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
 
                 UE_LOG(LogPlanetaryCreation, Log, TEXT("[ASYNC] Mesh build completed: %d verts, %d tris, %.2fms (Background: %u -> Game: %u)"),
                     VertexCount, TriangleCount, LastMeshBuildTimeMs, BackgroundThreadID, GameThreadID);
+
+                if (bShutdownRequested.load(std::memory_order_relaxed))
+                {
+                    bAsyncMeshBuildInProgress.store(false);
+                    ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
+                    return;
+                }
 
                 // Milestone 4 Phase 4.2: Cache the snapshot before using it
                 CacheLODMesh(RenderLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount,
@@ -2242,6 +2250,13 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
                 Colors = MoveTemp(Colors), UVs = MoveTemp(UVs), Indices = MoveTemp(Indices),
                 SourceVertexIndices = MoveTemp(SourceVertexIndices)]() mutable
             {
+                if (bShutdownRequested.load(std::memory_order_relaxed))
+                {
+                    bAsyncMeshBuildInProgress.store(false);
+                    ActiveAsyncTasks.fetch_sub(1, std::memory_order_relaxed);
+                    return;
+                }
+
                 if (!bShutdownRequested.load(std::memory_order_relaxed))
                 {
                     CacheLODMesh(LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion, Snapshot, VertexCount, TriangleCount,

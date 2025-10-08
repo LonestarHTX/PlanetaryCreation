@@ -5,6 +5,7 @@
 
 #include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
+#include "ContinentalAmplificationTypes.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -26,35 +27,33 @@
 using ETerrainType = EContinentalTerrainType;
 
 /**
- * Exemplar metadata loaded from ExemplarLibrary.json
- */
-struct FExemplarMetadata
-{
-    FString ID;
-    FString Name;
-    FString Region;  // "Himalayan", "Andean", or "Ancient"
-    FString Feature;
-    FString PNG16Path;
-    double ElevationMin_m;
-    double ElevationMax_m;
-    double ElevationMean_m;
-    double ElevationStdDev_m;
-    int32 Width_px;
-    int32 Height_px;
-
-    // Cached texture data (loaded once, reused)
-    TArray<uint16> HeightData;  // 16-bit elevation values [0, 65535]
-    bool bDataLoaded = false;
-};
-
-/**
  * Global exemplar library (loaded once at startup)
  */
 static TArray<FExemplarMetadata> ExemplarLibrary;
 static bool bExemplarLibraryLoaded = false;
 
+bool IsExemplarLibraryLoaded()
+{
+    return bExemplarLibraryLoaded;
+}
+
+FExemplarMetadata* AccessExemplarMetadata(int32 Index)
+{
+    return ExemplarLibrary.IsValidIndex(Index) ? &ExemplarLibrary[Index] : nullptr;
+}
+
+const FExemplarMetadata* AccessExemplarMetadataConst(int32 Index)
+{
+    return ExemplarLibrary.IsValidIndex(Index) ? &ExemplarLibrary[Index] : nullptr;
+}
+
 #if UE_BUILD_DEVELOPMENT
 static thread_local FContinentalAmplificationDebugInfo* GContinentalAmplificationDebugInfo = nullptr;
+
+FContinentalAmplificationDebugInfo* GetContinentalAmplificationDebugInfoPtr()
+{
+    return GContinentalAmplificationDebugInfo;
+}
 
 void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo* DebugInfo)
 {

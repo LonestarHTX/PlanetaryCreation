@@ -65,12 +65,15 @@ namespace PlanetaryCreation::GPU
 			int32 OriginalHeight;
 		};
 		TArray<FExemplarData> ExemplarData;
+		int32 LibraryIndexCounter = 0;
 
 		for (const TSharedPtr<FJsonValue>& ExemplarValue : *ExemplarsArray)
 		{
 			const TSharedPtr<FJsonObject>& ExemplarObj = ExemplarValue->AsObject();
 			if (!ExemplarObj.IsValid())
 				continue;
+
+			const int32 CurrentLibraryIndex = LibraryIndexCounter++;
 
 			FExemplarData Data;
 			Data.Info.ID = ExemplarObj->GetStringField(TEXT("id"));
@@ -90,6 +93,7 @@ namespace PlanetaryCreation::GPU
 			}
 
 			Data.Info.ArrayIndex = ExemplarData.Num();
+			Data.Info.LibraryIndex = CurrentLibraryIndex;
 			ExemplarData.Add(MoveTemp(Data));
 		}
 

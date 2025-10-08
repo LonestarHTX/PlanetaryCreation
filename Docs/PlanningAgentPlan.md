@@ -80,6 +80,13 @@
 - **Dependencies:** Milestone 5 data exports, exemplar datasets *(✅ Stage B SRTM catalog & cutter ready)*, profiling harness.
 - **Risks:** Amplification instability, GPU integration complexity; mitigate with staged rollouts and regression tests.
 - **Validation:** Side-by-side parity screenshots vs paper, Level 7 performance within budget (<120 ms), amplification regression suite.
+- **Immediate Actions (PRO Review – 2025-10-07):**
+  - Consolidate performance capture to a single Unreal Insights + CSV flow and refresh every doc/table with the same baseline; include subduction/collision/elevation timers to mirror the paper.
+    - Harness and latest metrics live in `Docs/Performance_M6.md`; treat it as the canonical source for Stage B/L3 measurements.
+  - Verify ridge-direction sampling uses the render-vertex cache in mainline and keep `RidgeDirectionCacheTest` green in CI.
+  - Raise `RetessellationThresholdDegrees` default to 45° with a “High Accuracy (30°)” toggle for review builds so perf measurements match the documented quick win.
+  - Normalize sediment/dampening loops to rely on cached adjacency weights to cut repeated neighbor scans.
+  - Treat Level 7 as a validation tier until async GPU amplification lands; document this expectation in milestone hand-off notes.
 
 - **New:** M6 Task 2.3.1 (Stage B Perf Profiling) instruments amplification loops to get us under 1s per step at L7; required before we flip Stage B on by default. Once CPU cost is under control, revisit GPU offload and UI polish in M7.
 - **Update 2025-10-06:** GPU oceanic amplification now matches CPU within 0.0025 m but still incurs blocking readback cost. Keep the CPU implementation in the simulation loop while the SoA/LOD refactor lands; schedule the async GPU pipeline (persistent buffers + fence sync) for the Milestone 7 rendering polish window.
