@@ -547,7 +547,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 
 **Next Step:** Additional milestone if we push Stage B to GPU (move to M7 or M8 once CPU gets under control).
 
-**Status (2025-10-09):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1089`). Oceanic/continental GPU readbacks now run asynchronously, and latest profiling logs Stage B at ~18 ms with readback cost ≈0 ms.
+**Status (2025-10-09):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1089`). Oceanic/continental GPU readbacks now run asynchronously, latest profiling logs Stage B at ~18 ms with readback cost ≈0 ms, and `bPendingOceanicGPUReadback` ensures continental amplification waits for outstanding oceanic data before consuming the height field.
 
 ---
 
