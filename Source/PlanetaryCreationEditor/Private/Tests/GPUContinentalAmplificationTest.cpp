@@ -17,21 +17,6 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
     if (!Service)
         return false;
 
-    // ============================================================================
-    // Placeholder: Continental GPU Shader Not Yet Implemented
-    // ============================================================================
-    // TODO: Remove AddExpectedError once ContinentalAmplificationGPU.cpp is complete
-
-    // Suppress expected failure until shader is ready
-    AddExpectedError(TEXT("Continental amplification GPU path not yet implemented"), EAutomationExpectedErrorFlags::Contains, 0);
-
-    UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] TEST SCAFFOLDED - shader not implemented yet"));
-    UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Remove AddExpectedError marker once shader lands"));
-
-    // ============================================================================
-    // Test Structure (Ready to Enable)
-    // ============================================================================
-
     // Setup: High LOD with continental amplification enabled
     FTectonicSimulationParameters Params;
     Params.Seed = 67890;  // Fixed seed for reproducibility
@@ -103,6 +88,9 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         const TArray<int32>& VertexPlateAssignments = Service->GetVertexPlateAssignments();
         const TArray<FTectonicPlate>& Plates = Service->GetPlates();
 
+        int32 LoggedMismatches = 0;
+        const TArray<double>& BaselineElevation = Service->GetVertexElevationValues();
+
         for (int32 VertexIdx = 0; VertexIdx < CPUResults.Num(); ++VertexIdx)
         {
             const int32 PlateID = VertexPlateAssignments[VertexIdx];
@@ -131,6 +119,16 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
                 MaxDelta_m = Delta;
                 MaxDeltaIdx = VertexIdx;
             }
+
+#if UE_BUILD_DEVELOPMENT
+            if (Delta > 1.0 && LoggedMismatches < 5)
+            {
+                const double BaselineValue = BaselineElevation.IsValidIndex(VertexIdx) ? BaselineElevation[VertexIdx] : 0.0;
+                UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity][Diff] Vtx=%d Plate=%d Base=%.2f CPU=%.2f GPU=%.2f Delta=%.2f"),
+                    VertexIdx, PlateID, BaselineValue, CPUElevation, GPUElevation, Delta);
+                ++LoggedMismatches;
+            }
+#endif
         }
 
         if (TotalContinentalVertices > 0)
@@ -146,14 +144,9 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
             UE_LOG(LogPlanetaryCreation, Log, TEXT("  Max delta: %.4f m (vertex %d)"), MaxDelta_m, MaxDeltaIdx);
             UE_LOG(LogPlanetaryCreation, Log, TEXT("  Mean absolute delta: %.4f m"), MeanAbsoluteDelta_m);
 
-            // TODO: Uncomment once shader is ready and remove AddExpectedError above
-            // TestTrue(TEXT("GPU matches CPU within 0.1 m tolerance (>99% parity)"), ParityRatio >= 0.99);
-            // TestTrue(TEXT("Max GPU-CPU delta stays under 1.0 m"), MaxDelta_m < 1.0);
-            // TestTrue(TEXT("Mean GPU-CPU delta < 0.05 m"), MeanAbsoluteDelta_m < 0.05);
-
-            // Temporary: Log results but don't fail test yet
-            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[GPUContinentalParity] Parity: %.2f%% (TEST SCAFFOLDED - not enforcing yet)"),
-                ParityRatio * 100.0);
+            TestTrue(TEXT("GPU matches CPU within 0.1 m tolerance (>99% parity)"), ParityRatio >= 0.99);
+            TestTrue(TEXT("Max GPU-CPU delta stays under 1.0 m"), MaxDelta_m < 1.0);
+            TestTrue(TEXT("Mean GPU-CPU delta < 0.05 m"), MeanAbsoluteDelta_m < 0.05);
         }
         else
         {
@@ -169,6 +162,6 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Test complete (shader pending)"));
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Test complete"));
     return true;
 }

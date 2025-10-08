@@ -32,6 +32,91 @@ struct FStageBProfile
     }
 };
 
+enum class EContinentalTerrainType : uint8
+{
+    Plain = 0,
+    OldMountains = 1,
+    AndeanMountains = 2,
+    HimalayanMountains = 3
+};
+
+struct FRenderVertexFloatSoA
+{
+    TArray<float> PositionX;
+    TArray<float> PositionY;
+    TArray<float> PositionZ;
+    TArray<float> NormalX;
+    TArray<float> NormalY;
+    TArray<float> NormalZ;
+    TArray<float> TangentX;
+    TArray<float> TangentY;
+    TArray<float> TangentZ;
+};
+
+struct FOceanicAmplificationFloatInputs
+{
+    TArray<float> BaselineElevation;
+    TArray<float> CrustAge;
+    TArray<FVector4f> RidgeDirections;
+    TArray<FVector3f> RenderPositions;
+    TArray<uint32> OceanicMask;
+    uint64 CachedDataSerial = 0;
+};
+
+struct FContinentalAmplificationGPUInputs
+{
+    TArray<float> BaselineElevation;
+    TArray<FVector3f> RenderPositions;
+    TArray<uint32> PackedTerrainInfo;
+    TArray<FUintVector4> ExemplarIndices;
+    TArray<FVector4f> ExemplarWeights;
+    TArray<FVector2f> RandomUVOffsets;
+    TArray<FVector2f> WrappedUVs;
+    uint64 CachedDataSerial = 0;
+    int32 CachedTopologyVersion = INDEX_NONE;
+    int32 CachedSurfaceVersion = INDEX_NONE;
+};
+
+struct FContinentalAmplificationDebugInfo;
+
+#if UE_BUILD_DEVELOPMENT
+struct FContinentalAmplificationDebugInfo
+{
+    int32 VertexIndex = INDEX_NONE;
+    EContinentalTerrainType TerrainType = EContinentalTerrainType::Plain;
+    uint32 ExemplarCount = 0;
+    uint32 ExemplarIndices[3] = { MAX_uint32, MAX_uint32, MAX_uint32 };
+    double SampleHeights[3] = { 0.0, 0.0, 0.0 };
+    double Weights[3] = { 0.0, 0.0, 0.0 };
+    double TotalWeight = 0.0;
+    double BlendedHeight = 0.0;
+    double ReferenceMean = 0.0;
+    double CpuResult = 0.0;
+    double RandomOffsetU = 0.0;
+    double RandomOffsetV = 0.0;
+    bool bUseOverrideRandomOffset = false;
+    double OverrideRandomOffsetU = 0.0;
+    double OverrideRandomOffsetV = 0.0;
+    int32 RandomSeed = 0;
+    int32 OverrideRandomSeed = 0;
+    double UValue = 0.0;
+    double VValue = 0.0;
+};
+
+void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo* DebugInfo);
+#else
+inline void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo*) {}
+#endif
+
+struct FRidgeDirectionFloatSoA
+{
+    TArray<float> DirX;
+    TArray<float> DirY;
+    TArray<float> DirZ;
+    int32 CachedTopologyVersion = INDEX_NONE;
+    int32 CachedVertexCount = 0;
+};
+
 /**
  * Paper-compliant elevation constants (Appendix A).
  * Reference: "Procedural Tectonic Planets" paper, Table in Appendix A.
@@ -178,6 +263,22 @@ struct FPlateBoundary
      * Used to track rift age for visualization/analytics.
      */
     double RiftFormationTimeMy = 0.0;
+};
+
+struct FPlateBoundarySummaryEntry
+{
+    FVector3d RepresentativePosition = FVector3d::ZeroVector;
+    FVector3d RepresentativeUnit = FVector3d::ZAxisVector;
+    int32 OtherPlateID = INDEX_NONE;
+    EBoundaryType BoundaryType = EBoundaryType::Transform;
+    bool bIsSubduction = false;
+    bool bHasRepresentative = false;
+};
+
+struct FPlateBoundarySummary
+{
+    TArray<FPlateBoundarySummaryEntry> Boundaries;
+    int32 CachedTopologyVersion = INDEX_NONE;
 };
 
 /** Milestone 4 Task 1.2: Records a plate topology change event for logging/CSV export. */
@@ -996,6 +1097,9 @@ public:
     void BuildRenderVertexReverseAdjacency();
     void UpdateConvergentNeighborFlags();
     void BuildRenderVertexBoundaryCache();
+    void InvalidatePlateBoundarySummaries();
+    const FPlateBoundarySummary* GetPlateBoundarySummary(int32 PlateID) const;
+    void RebuildPlateBoundarySummary(int32 PlateID, FPlateBoundarySummary& OutSummary) const;
 
     /** Milestone 5 Task 1.3: Full simulation history snapshot for undo/redo. */
     struct FSimulationHistorySnapshot
@@ -1124,11 +1228,15 @@ public:
         const TArray<FVector3f>*& OutRenderPositions,
         const TArray<uint32>*& OutOceanicMask) const;
 
+    const FContinentalAmplificationGPUInputs& GetContinentalAmplificationGPUInputs() const;
+
     /** Pump pending GPU readbacks; optionally block until all are ready. */
     void ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
+    void ProcessPendingContinentalGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
 
 #if WITH_EDITOR
     void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount);
+    void EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount);
 #endif
 
     /**
@@ -1394,44 +1502,13 @@ private:
     FString HeightmapExportOverrideDirectory;
 #endif
 
-    /** Persistent float SoA mirrors for render vertex data. */
-    struct FRenderVertexFloatSoA
-    {
-        TArray<float> PositionX;
-        TArray<float> PositionY;
-        TArray<float> PositionZ;
-        TArray<float> NormalX;
-        TArray<float> NormalY;
-        TArray<float> NormalZ;
-        TArray<float> TangentX;
-        TArray<float> TangentY;
-        TArray<float> TangentZ;
-    };
-
-    /** Cached float inputs shared by the oceanic amplification GPU path. */
-    struct FOceanicAmplificationFloatInputs
-    {
-        TArray<float> BaselineElevation;
-        TArray<float> CrustAge;
-        TArray<FVector4f> RidgeDirections;
-        TArray<FVector3f> RenderPositions;
-        TArray<uint32> OceanicMask;
-        uint64 CachedDataSerial = 0;
-    };
-
-    struct FRidgeDirectionFloatSoA
-    {
-        TArray<float> DirX;
-        TArray<float> DirY;
-        TArray<float> DirZ;
-        int32 CachedTopologyVersion = INDEX_NONE;
-        int32 CachedVertexCount = 0;
-    };
-
     /** Mutable caches to avoid recomputing float mirrors on every call. */
     mutable FRenderVertexFloatSoA RenderVertexFloatSoA;
     mutable FOceanicAmplificationFloatInputs OceanicAmplificationFloatInputs;
+    mutable FContinentalAmplificationGPUInputs ContinentalAmplificationGPUInputs;
     mutable FRidgeDirectionFloatSoA RidgeDirectionFloatSoA;
+    mutable TMap<int32, FPlateBoundarySummary> PlateBoundarySummaries;
+    mutable int32 PlateBoundarySummaryTopologyVersion = INDEX_NONE;
 
     /** Monotonic serial tracking modifications to amplification inputs. */
     uint64 OceanicAmplificationDataSerial = 1;
@@ -1457,10 +1534,24 @@ private:
 
     TArray<FOceanicGPUAsyncJob> PendingOceanicGPUJobs;
     uint64 NextOceanicGPUJobId = 1;
+
+    struct FContinentalGPUAsyncJob
+    {
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
+        FRenderCommandFence DispatchFence;
+        FRenderCommandFence CopyFence;
+        int32 NumBytes = 0;
+        int32 VertexCount = 0;
+        uint64 JobId = 0;
+        bool bCopySubmitted = false;
+    };
+
+    TArray<FContinentalGPUAsyncJob> PendingContinentalGPUJobs;
 #endif
 
     void RefreshRenderVertexFloatSoA() const;
     void RefreshOceanicAmplificationFloatInputs() const;
+    void RefreshContinentalAmplificationGPUInputs() const;
     void BumpOceanicAmplificationSerial();
     void EnsureRidgeDirtyMaskSize(int32 VertexCount) const;
     bool MarkRidgeDirectionVertexDirty(int32 VertexIdx);

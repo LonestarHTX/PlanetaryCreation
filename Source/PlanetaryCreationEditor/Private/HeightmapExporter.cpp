@@ -128,55 +128,94 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Heightmap dilation: %d/%d pixels are unfilled (%.1f%%)"),
         BlackPixelCount, ImageData.Num(), 100.0 * BlackPixelCount / ImageData.Num());
 
-	// Multi-pass dilation
-	for (int32 Pass = 0; Pass < MaxDilationPasses; ++Pass)
-	{
-		TArray<FColor> PreviousFrame = ImageData;
-		int32 PixelsFilledThisPass = 0;
+    // Multi-pass dilation
+    TArray<FColor> ScratchImage = ImageData;
+    bool bResultInScratch = false;
 
-		for (int32 Y = 0; Y < ImageHeight; ++Y)
-		{
-			for (int32 X = 0; X < ImageWidth; ++X)
-			{
-				const int32 PixelIdx = Y * ImageWidth + X;
-				if (PreviousFrame[PixelIdx].A == 0) // Unfilled pixel
-				{
-					// Search 3x3 neighborhood for filled pixel (alpha > 0)
-					FColor NeighborColor(0, 0, 0, 0);
-					for (int32 DY = -1; DY <= 1; ++DY)
-					{
-						for (int32 DX = -1; DX <= 1; ++DX)
-						{
-							const int32 NX = X + DX;
-							const int32 NY = Y + DY;
-							if (NX >= 0 && NX < ImageWidth && NY >= 0 && NY < ImageHeight)
-							{
-								const int32 NeighborIdx = NY * ImageWidth + NX;
-								if (PreviousFrame[NeighborIdx].A > 0) // Filled pixel
-								{
-									NeighborColor = PreviousFrame[NeighborIdx];
-									break;
-								}
-							}
-						}
-						if (NeighborColor.A > 0)
-							break;
-					}
+    for (int32 Pass = 0; Pass < MaxDilationPasses && BlackPixelCount > 0; ++Pass)
+    {
+        bool bFilledThisPass = false;
 
-					if (NeighborColor.A > 0)
-					{
-						ImageData[PixelIdx] = NeighborColor;
-						PixelsFilledThisPass++;
-					}
-				}
-			}
-		}
+        for (int32 Y = 0; Y < ImageHeight; ++Y)
+        {
+            for (int32 X = 0; X < ImageWidth; ++X)
+            {
+                const int32 PixelIdx = Y * ImageWidth + X;
+                const FColor& SourceColor = ScratchImage[PixelIdx];
 
-        if (PixelsFilledThisPass == 0)
+                if (SourceColor.A > 0)
+                {
+                    ImageData[PixelIdx] = SourceColor;
+                    continue;
+                }
+
+                FColor NeighborColor(0, 0, 0, 0);
+                for (int32 DY = -1; DY <= 1; ++DY)
+                {
+                    for (int32 DX = -1; DX <= 1; ++DX)
+                    {
+                        const int32 NX = X + DX;
+                        const int32 NY = Y + DY;
+                        if (NX < 0 || NX >= ImageWidth || NY < 0 || NY >= ImageHeight)
+                        {
+                            continue;
+                        }
+
+                        const int32 NeighborIdx = NY * ImageWidth + NX;
+                        const FColor& Neighbor = ScratchImage[NeighborIdx];
+                        if (Neighbor.A > 0)
+                        {
+                            NeighborColor = Neighbor;
+                            break;
+                        }
+                    }
+
+                    if (NeighborColor.A > 0)
+                    {
+                        break;
+                    }
+                }
+
+                if (NeighborColor.A > 0)
+                {
+                    ImageData[PixelIdx] = NeighborColor;
+                    bFilledThisPass = true;
+                    if (BlackPixelCount > 0)
+                    {
+                        --BlackPixelCount;
+                    }
+                }
+                else
+                {
+                    ImageData[PixelIdx] = SourceColor;
+                }
+            }
+        }
+
+        if (!bFilledThisPass)
         {
             UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Heightmap dilation converged after %d passes"), Pass + 1);
             break;
         }
+
+        Swap(ImageData, ScratchImage);
+        bResultInScratch = !bResultInScratch;
+    }
+
+    if (bResultInScratch)
+    {
+        Swap(ImageData, ScratchImage);
+    }
+
+    if (BlackPixelCount <= 0)
+    {
+        UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Heightmap dilation filled all pixels"));
+    }
+    else if (BlackPixelCount > 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Verbose,
+            TEXT("Heightmap dilation reached max %d passes with %d pixels still unfilled"),
+            MaxDilationPasses, BlackPixelCount);
     }
 
     // Mirror seam columns to avoid filtering artifacts at U≈0/1

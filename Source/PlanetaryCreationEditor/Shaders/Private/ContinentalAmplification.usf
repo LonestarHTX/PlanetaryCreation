@@ -1,8 +1,149 @@
-// Placeholder compute shader for continental amplification.
+// GPU compute shader for Stage B continental amplification.
+#include "/Engine/Public/Platform.ush"
 #include "/Plugin/PlanetaryCreation/Private/TectonicCommon.ush"
+
+#ifndef PI
+#define PI 3.14159265358979323846f
+#endif
+
+uint VertexCount;
+StructuredBuffer<float> InBaseline;
+StructuredBuffer<float3> InRenderPosition;
+StructuredBuffer<uint4> InExemplarIndices;
+StructuredBuffer<float4> InExemplarWeights;
+StructuredBuffer<uint> InPackedTerrainInfo;
+StructuredBuffer<float2> InRandomUV;
+StructuredBuffer<float2> InWrappedUV;
+StructuredBuffer<float4> InExemplarMetadata;
+Texture2DArray<float> ExemplarTextures;
+SamplerState ExemplarSampler;
+RWStructuredBuffer<float> OutAmplified;
+
+float2 WrapUV(float2 UV)
+{
+    UV = frac(UV);
+    if (UV.x < 0.0f)
+    {
+        UV.x += 1.0f;
+    }
+    if (UV.y < 0.0f)
+    {
+        UV.y += 1.0f;
+    }
+    return UV;
+}
+
+float2 ComputeEquirectUV(float3 Position, float2 Offset)
+{
+    float3 Unit = normalize(Position);
+    if (all(Unit == 0.0f))
+    {
+        Unit = float3(0.0f, 0.0f, 1.0f);
+    }
+
+    float Theta = atan2(Unit.y, Unit.x);
+    float Phi = asin(clamp(Unit.z, -1.0f, 1.0f));
+
+    float2 UV = float2(0.5f + Theta / (2.0f * PI), 0.5f - Phi / PI);
+    return WrapUV(UV + Offset);
+}
 
 [numthreads(64, 1, 1)]
 void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
 {
-    // TODO: Implement exemplar-based amplification on GPU.
+    uint Index = DispatchThreadID.x;
+    if (Index >= VertexCount)
+    {
+        return;
+    }
+
+    float Baseline = InBaseline[Index];
+
+    uint TextureWidth = 0u;
+    uint TextureHeight = 0u;
+    uint TextureLayers = 0u;
+    ExemplarTextures.GetDimensions(TextureWidth, TextureHeight, TextureLayers);
+    if (TextureWidth == 0u || TextureHeight == 0u)
+    {
+        OutAmplified[Index] = Baseline;
+        return;
+    }
+
+    float2 TextureSize = float2((float)TextureWidth, (float)TextureHeight);
+    float2 TextureMaxCoord = max(TextureSize - float2(1.0f, 1.0f), float2(0.0f, 0.0f));
+
+    uint PackedInfo = InPackedTerrainInfo[Index];
+    uint ExemplarCount = (PackedInfo >> 8u) & 0xFFu;
+    if (ExemplarCount == 0u)
+    {
+        OutAmplified[Index] = Baseline;
+        return;
+    }
+
+    uint4 PackedIndices = InExemplarIndices[Index];
+    float4 PackedWeights = InExemplarWeights[Index];
+    float TotalWeight = PackedWeights.w;
+
+    if (TotalWeight <= 0.0f)
+    {
+        OutAmplified[Index] = Baseline;
+        return;
+    }
+
+    float2 UV = InWrappedUV[Index];
+
+    float BlendedHeight = 0.0f;
+
+    [unroll]
+    for (uint SampleIdx = 0u; SampleIdx < 3u; ++SampleIdx)
+    {
+        if (SampleIdx >= ExemplarCount)
+        {
+            break;
+        }
+
+        uint AtlasIndex = (SampleIdx == 0u) ? PackedIndices.x : (SampleIdx == 1u ? PackedIndices.y : PackedIndices.z);
+        if (AtlasIndex == 0xffffffffu)
+        {
+            continue;
+        }
+
+        if (AtlasIndex >= TextureLayers)
+        {
+            continue;
+        }
+
+        float Weight = (SampleIdx == 0u) ? PackedWeights.x : (SampleIdx == 1u ? PackedWeights.y : PackedWeights.z);
+        if (Weight <= 0.0f)
+        {
+            continue;
+        }
+
+        float4 Meta = InExemplarMetadata[AtlasIndex];
+        float2 ScaledUV = UV * TextureSize;
+        float2 ClampedCoord = min(ScaledUV, TextureMaxCoord);
+        int2 PixelCoord = int2(ClampedCoord);
+        int4 SampleLocation = int4(PixelCoord, int(AtlasIndex), 0);
+        float Sample = ExemplarTextures.Load(SampleLocation).r;
+        float Elevation = lerp(Meta.x, Meta.y, Sample);
+        BlendedHeight += Elevation * Weight;
+    }
+
+    BlendedHeight /= TotalWeight;
+
+    uint ReferenceIndex = PackedIndices.x;
+    if (ReferenceIndex == 0xffffffffu)
+    {
+        OutAmplified[Index] = Baseline;
+        return;
+    }
+
+    float4 ReferenceMeta = InExemplarMetadata[ReferenceIndex];
+    float ReferenceMean = ReferenceMeta.z;
+
+    float DetailScale = (Baseline > 1000.0f && ReferenceMean > 1e-3f) ? Baseline / ReferenceMean : 0.5f;
+    float Detail = (BlendedHeight - ReferenceMean) * DetailScale;
+    float Amplified = Baseline + Detail;
+
+    OutAmplified[Index] = Amplified;
 }

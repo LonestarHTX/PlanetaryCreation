@@ -1797,7 +1797,11 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
 
     // Build StreamSet with cached geometry but fresh colors
     FRealtimeMeshStreamSet& StreamSet = OutStreamSet;
-    TRealtimeMeshBuilderLocal<uint16, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
+    TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
+
+    Builder.EnableTangents();
+    Builder.EnableTexCoords();
+    Builder.EnableColors();
 
     for (int32 Index = 0; Index < VertexCount; ++Index)
     {

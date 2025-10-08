@@ -154,14 +154,19 @@ namespace PlanetaryCreation::GPU
 				ResizedData = Data.RawData;
 			}
 
-			// Copy into Texture2DArray slice
-			uint8* SliceData = MipData + (i * SliceSize);
-			FMemory::Memcpy(SliceData, ResizedData.GetData(), SliceSize);
+		// Copy into Texture2DArray slice
+		uint8* SliceData = MipData + (i * SliceSize);
+		FMemory::Memcpy(SliceData, ResizedData.GetData(), SliceSize);
 
-			ExemplarInfo.Add(Data.Info);
-			UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[ExemplarGPU]   [%d] %s (%s) elev=[%.0f, %.0f]m"),
-				i, *Data.Info.ID, *Data.Info.Region, Data.Info.ElevationMin_m, Data.Info.ElevationMax_m);
-		}
+		FExemplarInfo& Info = ExemplarInfo.Add_GetRef(Data.Info);
+#if UE_BUILD_DEVELOPMENT
+		Info.DebugHeightData = ResizedData;
+		Info.DebugWidth = TextureWidth;
+		Info.DebugHeight = TextureHeight;
+#endif
+		UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[ExemplarGPU]   [%d] %s (%s) elev=[%.0f, %.0f]m"),
+			i, *Data.Info.ID, *Data.Info.Region, Data.Info.ElevationMin_m, Data.Info.ElevationMax_m);
+	}
 
 		Mip->BulkData.Unlock();
 		TextureArray->GetPlatformData()->Mips.Add(Mip);
@@ -185,7 +190,16 @@ namespace PlanetaryCreation::GPU
 
 		if (TextureArray)
 		{
-			TextureArray->ConditionalBeginDestroy();
+			if (IsValid(TextureArray))
+			{
+				TextureArray->ConditionalBeginDestroy();
+			}
+#if UE_BUILD_DEVELOPMENT
+			else
+			{
+				UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[ExemplarGPU] TextureArray already invalid at shutdown (skipping destroy)"));
+			}
+#endif
 			TextureArray = nullptr;
 		}
 

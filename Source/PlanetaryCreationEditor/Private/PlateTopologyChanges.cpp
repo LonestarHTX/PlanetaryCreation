@@ -12,7 +12,16 @@ void UTectonicSimulationService::DetectAndExecutePlateSplits()
         return;
 
     // Iterate boundaries to find sustained divergent boundaries
-    TArray<TPair<int32, int32>> CandidateSplits;
+    struct FSplitCandidate
+    {
+        int32 PlateToSplit = INDEX_NONE;
+        int32 NeighborPlate = INDEX_NONE;
+        TPair<int32, int32> BoundaryKey;
+        double PrimaryMetric = 0.0;   // Rift width (rift mode) or divergent duration (legacy)
+        double SecondaryMetric = 0.0; // Relative velocity or fallback tie-breaker
+    };
+
+    TMap<int32, FSplitCandidate> BestSplitByPlate;
 
     for (auto& BoundaryPair : Boundaries)
     {
@@ -41,48 +50,124 @@ void UTectonicSimulationService::DetectAndExecutePlateSplits()
             // Candidate for split - pick one of the two plates (deterministic: always choose lower PlateID)
             const int32 PlateToSplit = FMath::Min(PlateIDs.Key, PlateIDs.Value);
 
-            // Check if we already have a split candidate for this plate (avoid double-splitting)
-            bool bAlreadyQueued = false;
-            for (const TPair<int32, int32>& Existing : CandidateSplits)
+            const int32 NeighborPlate = (PlateIDs.Key == PlateToSplit) ? PlateIDs.Value : PlateIDs.Key;
+            const double PrimaryMetric = (Parameters.bEnableRiftPropagation && Boundary.BoundaryState == EBoundaryState::Rifting)
+                ? Boundary.RiftWidthMeters
+                : Boundary.DivergentDurationMy;
+            const double SecondaryMetric = Boundary.RelativeVelocity;
+            const TPair<int32, int32> BoundaryKey = PlateToSplit < NeighborPlate
+                ? TPair<int32, int32>(PlateToSplit, NeighborPlate)
+                : TPair<int32, int32>(NeighborPlate, PlateToSplit);
+
+            FSplitCandidate NewCandidate;
+            NewCandidate.PlateToSplit = PlateToSplit;
+            NewCandidate.NeighborPlate = NeighborPlate;
+            NewCandidate.BoundaryKey = BoundaryKey;
+            NewCandidate.PrimaryMetric = PrimaryMetric;
+            NewCandidate.SecondaryMetric = SecondaryMetric;
+
+            auto IsBetterCandidate = [](const FSplitCandidate& A, const FSplitCandidate& B)
             {
-                if (Existing.Key == PlateToSplit)
+                if (!FMath::IsNearlyEqual(A.PrimaryMetric, B.PrimaryMetric))
                 {
-                    bAlreadyQueued = true;
-                    break;
+                    return A.PrimaryMetric > B.PrimaryMetric;
+                }
+
+                if (!FMath::IsNearlyEqual(A.SecondaryMetric, B.SecondaryMetric))
+                {
+                    return A.SecondaryMetric > B.SecondaryMetric;
+                }
+
+                if (A.PlateToSplit != B.PlateToSplit)
+                {
+                    return A.PlateToSplit < B.PlateToSplit;
+                }
+
+                if (A.NeighborPlate != B.NeighborPlate)
+                {
+                    return A.NeighborPlate < B.NeighborPlate;
+                }
+
+                if (A.BoundaryKey.Key != B.BoundaryKey.Key)
+                {
+                    return A.BoundaryKey.Key < B.BoundaryKey.Key;
+                }
+
+                return A.BoundaryKey.Value < B.BoundaryKey.Value;
+            };
+
+            bool bShouldRecordCandidate = false;
+            if (FSplitCandidate* Existing = BestSplitByPlate.Find(PlateToSplit))
+            {
+                if (IsBetterCandidate(NewCandidate, *Existing))
+                {
+                    bShouldRecordCandidate = true;
+                    *Existing = NewCandidate;
                 }
             }
-
-            if (!bAlreadyQueued)
+            else
             {
-                CandidateSplits.Add(TPair<int32, int32>(PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key));
+                bShouldRecordCandidate = true;
+                BestSplitByPlate.Add(PlateToSplit, NewCandidate);
+            }
 
+            if (bShouldRecordCandidate)
+            {
                 if (Parameters.bEnableRiftPropagation && Boundary.BoundaryState == EBoundaryState::Rifting)
                 {
                     UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Split Detection] Plate %d candidate for rift-based split along boundary with Plate %d (rift width=%.0f m > %.0f m, velocity=%.4f rad/My)"),
-                        PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key,
+                        PlateToSplit, NeighborPlate,
                         Boundary.RiftWidthMeters, Parameters.RiftSplitThresholdMeters, Boundary.RelativeVelocity);
                 }
                 else
                 {
                     UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Split Detection] Plate %d candidate for duration-based split along boundary with Plate %d (velocity=%.4f rad/My, duration=%.1f My)"),
-                        PlateToSplit, PlateIDs.Key == PlateToSplit ? PlateIDs.Value : PlateIDs.Key,
+                        PlateToSplit, NeighborPlate,
                         Boundary.RelativeVelocity, Boundary.DivergentDurationMy);
                 }
             }
         }
     }
 
+    TArray<FSplitCandidate> CandidateSplits;
+    BestSplitByPlate.GenerateValueArray(CandidateSplits);
+
+    CandidateSplits.Sort([](const FSplitCandidate& A, const FSplitCandidate& B)
+    {
+        if (!FMath::IsNearlyEqual(A.PrimaryMetric, B.PrimaryMetric))
+        {
+            return A.PrimaryMetric > B.PrimaryMetric;
+        }
+
+        if (!FMath::IsNearlyEqual(A.SecondaryMetric, B.SecondaryMetric))
+        {
+            return A.SecondaryMetric > B.SecondaryMetric;
+        }
+
+        if (A.PlateToSplit != B.PlateToSplit)
+        {
+            return A.PlateToSplit < B.PlateToSplit;
+        }
+
+        if (A.NeighborPlate != B.NeighborPlate)
+        {
+            return A.NeighborPlate < B.NeighborPlate;
+        }
+
+        if (A.BoundaryKey.Key != B.BoundaryKey.Key)
+        {
+            return A.BoundaryKey.Key < B.BoundaryKey.Key;
+        }
+
+        return A.BoundaryKey.Value < B.BoundaryKey.Value;
+    });
+
     // Execute splits (limit to 1 per step to avoid cascading instability)
     if (CandidateSplits.Num() > 0)
     {
-        const TPair<int32, int32>& SplitPair = CandidateSplits[0];
-        const int32 PlateToSplit = SplitPair.Key;
-        const int32 NeighborPlate = SplitPair.Value;
-
-        // Find the boundary key
-        TPair<int32, int32> BoundaryKey = PlateToSplit < NeighborPlate
-            ? TPair<int32, int32>(PlateToSplit, NeighborPlate)
-            : TPair<int32, int32>(NeighborPlate, PlateToSplit);
+        const FSplitCandidate& SplitCandidate = CandidateSplits[0];
+        const int32 PlateToSplit = SplitCandidate.PlateToSplit;
+        const TPair<int32, int32> BoundaryKey = SplitCandidate.BoundaryKey;
 
         if (FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey))
         {
@@ -106,7 +191,16 @@ void UTectonicSimulationService::DetectAndExecutePlateMerges()
         return;
 
     // Iterate boundaries to find sustained convergent boundaries with small plates
-    TArray<TPair<TPair<int32, int32>, TPair<int32, int32>>> CandidateMerges; // (ConsumedID, SurvivorID), (PlateA, PlateB) boundary key
+    struct FMergeCandidate
+    {
+        int32 ConsumedID = INDEX_NONE;
+        int32 SurvivorID = INDEX_NONE;
+        TPair<int32, int32> BoundaryKey;
+        double PrimaryMetric = 0.0;   // Accumulated stress
+        double SecondaryMetric = 0.0; // Inverted area ratio (prefer smaller consumed plate)
+    };
+
+    TMap<int32, FMergeCandidate> BestMergeByConsumed;
 
     for (const auto& BoundaryPair : Boundaries)
     {
@@ -136,23 +230,112 @@ void UTectonicSimulationService::DetectAndExecutePlateMerges()
                 // Determine consumed vs survivor (smaller gets consumed)
                 const int32 ConsumedID = (AreaA < AreaB) ? PlateIDs.Key : PlateIDs.Value;
                 const int32 SurvivorID = (AreaA < AreaB) ? PlateIDs.Value : PlateIDs.Key;
+                const double PrimaryMetric = Boundary.AccumulatedStress;
+                const double SecondaryMetric = 1.0 - AreaRatio; // Larger value => smaller consumed plate
 
-                CandidateMerges.Add(TPair<TPair<int32, int32>, TPair<int32, int32>>(
-                    TPair<int32, int32>(ConsumedID, SurvivorID), PlateIDs));
+                FMergeCandidate NewCandidate;
+                NewCandidate.ConsumedID = ConsumedID;
+                NewCandidate.SurvivorID = SurvivorID;
+                NewCandidate.BoundaryKey = (PlateIDs.Key < PlateIDs.Value)
+                    ? PlateIDs
+                    : TPair<int32, int32>(PlateIDs.Value, PlateIDs.Key);
+                NewCandidate.PrimaryMetric = PrimaryMetric;
+                NewCandidate.SecondaryMetric = SecondaryMetric;
 
-                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Merge Detection] Plate %d candidate for merge into Plate %d (stress=%.1f MPa, area ratio=%.2f%%)"),
-                    ConsumedID, SurvivorID, Boundary.AccumulatedStress, AreaRatio * 100.0);
+                auto IsBetterCandidate = [](const FMergeCandidate& A, const FMergeCandidate& B)
+                {
+                    if (!FMath::IsNearlyEqual(A.PrimaryMetric, B.PrimaryMetric))
+                    {
+                        return A.PrimaryMetric > B.PrimaryMetric;
+                    }
+
+                    if (!FMath::IsNearlyEqual(A.SecondaryMetric, B.SecondaryMetric))
+                    {
+                        return A.SecondaryMetric > B.SecondaryMetric;
+                    }
+
+                    if (A.ConsumedID != B.ConsumedID)
+                    {
+                        return A.ConsumedID < B.ConsumedID;
+                    }
+
+                    if (A.SurvivorID != B.SurvivorID)
+                    {
+                        return A.SurvivorID < B.SurvivorID;
+                    }
+
+                    if (A.BoundaryKey.Key != B.BoundaryKey.Key)
+                    {
+                        return A.BoundaryKey.Key < B.BoundaryKey.Key;
+                    }
+
+                    return A.BoundaryKey.Value < B.BoundaryKey.Value;
+                };
+
+                bool bShouldRecordCandidate = false;
+                if (FMergeCandidate* Existing = BestMergeByConsumed.Find(ConsumedID))
+                {
+                    if (IsBetterCandidate(NewCandidate, *Existing))
+                    {
+                        bShouldRecordCandidate = true;
+                        *Existing = NewCandidate;
+                    }
+                }
+                else
+                {
+                    bShouldRecordCandidate = true;
+                    BestMergeByConsumed.Add(ConsumedID, NewCandidate);
+                }
+
+                if (bShouldRecordCandidate)
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[Merge Detection] Plate %d candidate for merge into Plate %d (stress=%.1f MPa, area ratio=%.2f%%)"),
+                        ConsumedID, SurvivorID, Boundary.AccumulatedStress, AreaRatio * 100.0);
+                }
             }
         }
     }
 
+    TArray<FMergeCandidate> CandidateMerges;
+    BestMergeByConsumed.GenerateValueArray(CandidateMerges);
+
+    CandidateMerges.Sort([](const FMergeCandidate& A, const FMergeCandidate& B)
+    {
+        if (!FMath::IsNearlyEqual(A.PrimaryMetric, B.PrimaryMetric))
+        {
+            return A.PrimaryMetric > B.PrimaryMetric;
+        }
+
+        if (!FMath::IsNearlyEqual(A.SecondaryMetric, B.SecondaryMetric))
+        {
+            return A.SecondaryMetric > B.SecondaryMetric;
+        }
+
+        if (A.ConsumedID != B.ConsumedID)
+        {
+            return A.ConsumedID < B.ConsumedID;
+        }
+
+        if (A.SurvivorID != B.SurvivorID)
+        {
+            return A.SurvivorID < B.SurvivorID;
+        }
+
+        if (A.BoundaryKey.Key != B.BoundaryKey.Key)
+        {
+            return A.BoundaryKey.Key < B.BoundaryKey.Key;
+        }
+
+        return A.BoundaryKey.Value < B.BoundaryKey.Value;
+    });
+
     // Execute merges (limit to 1 per step to avoid cascading instability)
     if (CandidateMerges.Num() > 0)
     {
-        const auto& MergePair = CandidateMerges[0];
-        const int32 ConsumedID = MergePair.Key.Key;
-        const int32 SurvivorID = MergePair.Key.Value;
-        const TPair<int32, int32>& BoundaryKey = MergePair.Value;
+        const FMergeCandidate& MergeCandidate = CandidateMerges[0];
+        const int32 ConsumedID = MergeCandidate.ConsumedID;
+        const int32 SurvivorID = MergeCandidate.SurvivorID;
+        const TPair<int32, int32>& BoundaryKey = MergeCandidate.BoundaryKey;
 
         if (const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey))
         {

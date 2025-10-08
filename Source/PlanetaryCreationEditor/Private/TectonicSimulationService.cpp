@@ -1,7 +1,24 @@
 #include "TectonicSimulationService.h"
 
 #include "PlanetaryCreationLogging.h"
+
+// =====================================================================================
+//  File Navigation
+//  1. Console Variables & Profiling Hooks
+//  2. Logging Helpers & Utilities
+//  3. Service Lifecycle (Init/Reset/Shutdown)
+//  4. Parameter Management & Snapshots
+//  5. Simulation Step Loop (AdvanceSteps, Stage A)
+//  6. Voronoi / Render Mesh Refresh
+//  7. Stage B Amplification (CPU/GPU, readback)
+//  8. Sediment, Dampening, Erosion (Stage A extensions)
+//  9. Terrane Mechanics (Extract/Transport/Reattach)
+// 10. Ridge Direction, Stress, Thermal Caches
+// 11. Serialization & CSV Export
+// 12. Automation/Test Helpers
+// =====================================================================================
 #include "Containers/BitArray.h"
+#include "Containers/StaticArray.h"
 
 DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "HAL/IConsoleManager.h"
@@ -169,6 +186,7 @@ void UTectonicSimulationService::InvalidateRidgeDirectionCache()
     RidgeDirectionFloatSoA.DirZ.Reset();
     RidgeDirectionFloatSoA.CachedTopologyVersion = INDEX_NONE;
     RidgeDirectionFloatSoA.CachedVertexCount = 0;
+    InvalidatePlateBoundarySummaries();
 }
 
 void UTectonicSimulationService::EnsureRidgeDirtyMaskSize(int32 VertexCount) const
@@ -598,6 +616,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     constexpr double StageBBudgetSeconds = 2.0; // Soft budget for Stage B passes at high LOD
 
     ProcessPendingOceanicGPUReadbacks(false);
+    ProcessPendingContinentalGPUReadbacks(false);
 
     for (int32 Step = 0; Step < StepCount; ++Step)
     {
@@ -620,6 +639,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
 #if WITH_EDITOR
         ProcessPendingOceanicGPUReadbacks(false, &GpuReadbackSeconds);
+        ProcessPendingContinentalGPUReadbacks(false, &GpuReadbackSeconds);
 #endif
 
 #if UE_BUILD_DEVELOPMENT
@@ -834,7 +854,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 if (bUsedGPU)
                 {
                     ContinentalGpuDispatchTime += FPlatformTime::Seconds() - BlockStart;
-                    ProcessPendingOceanicGPUReadbacks(true, &GpuReadbackSeconds);
+                    ProcessPendingContinentalGPUReadbacks(true, &GpuReadbackSeconds);
                 }
             }
 #endif
@@ -1004,6 +1024,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     LastStepTimeMs = (EndTime - StartTime) * 1000.0;
 
     ProcessPendingOceanicGPUReadbacks(false);
+    ProcessPendingContinentalGPUReadbacks(false);
 }
 
 void UTectonicSimulationService::SetSkipCPUAmplification(bool bInSkip)
@@ -1527,6 +1548,8 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
     TArray<int32> StateChangeSeeds;
     StateChangeSeeds.Reserve(Boundaries.Num() * 2);
 
+    bool bChangedBoundaryTypes = false;
+
     for (auto& BoundaryPair : Boundaries)
     {
         const TPair<int32, int32>& PlateIDs = BoundaryPair.Key;
@@ -1634,6 +1657,7 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
         if (NewType != PreviousType)
         {
             StateChangeSeeds.Append(Boundary.SharedEdgeVertices);
+            bChangedBoundaryTypes = true;
         }
 
         Boundary.BoundaryType = NewType;
@@ -1656,6 +1680,11 @@ void UTectonicSimulationService::UpdateBoundaryClassifications()
         DirtySeeds.Append(DivergentSeeds);
         MarkRidgeRingDirty(DirtySeeds, RidgeRingDepth);
         EnqueueCrustAgeResetSeeds(DivergentSeeds);
+    }
+
+    if (bChangedBoundaryTypes)
+    {
+        InvalidatePlateBoundarySummaries();
     }
 }
 
@@ -2748,6 +2777,112 @@ void UTectonicSimulationService::BuildRenderVertexBoundaryCache()
 #endif
 }
 
+void UTectonicSimulationService::InvalidatePlateBoundarySummaries()
+{
+    PlateBoundarySummaries.Reset();
+    PlateBoundarySummaryTopologyVersion = INDEX_NONE;
+}
+
+const FPlateBoundarySummary* UTectonicSimulationService::GetPlateBoundarySummary(int32 PlateID) const
+{
+    if (PlateID == INDEX_NONE)
+    {
+        return nullptr;
+    }
+
+    if (PlateBoundarySummaryTopologyVersion != TopologyVersion)
+    {
+        PlateBoundarySummaries.Reset();
+        PlateBoundarySummaryTopologyVersion = TopologyVersion;
+    }
+
+    FPlateBoundarySummary& Summary = PlateBoundarySummaries.FindOrAdd(PlateID);
+    if (Summary.CachedTopologyVersion != TopologyVersion)
+    {
+        RebuildPlateBoundarySummary(PlateID, Summary);
+    }
+
+    return &Summary;
+}
+
+void UTectonicSimulationService::RebuildPlateBoundarySummary(int32 PlateID, FPlateBoundarySummary& OutSummary) const
+{
+    OutSummary.Boundaries.Reset();
+    OutSummary.CachedTopologyVersion = TopologyVersion;
+
+    if (PlateID == INDEX_NONE)
+    {
+        return;
+    }
+
+    auto FindPlateByID = [&](int32 LookupPlateID) -> const FTectonicPlate*
+    {
+        return Plates.FindByPredicate([LookupPlateID](const FTectonicPlate& Plate)
+        {
+            return Plate.PlateID == LookupPlateID;
+        });
+    };
+
+    const FTectonicPlate* SourcePlate = FindPlateByID(PlateID);
+
+    for (const TPair<TPair<int32, int32>, FPlateBoundary>& BoundaryPair : Boundaries)
+    {
+        const TPair<int32, int32>& Key = BoundaryPair.Key;
+        if (Key.Key != PlateID && Key.Value != PlateID)
+        {
+            continue;
+        }
+
+        const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+        FPlateBoundarySummaryEntry Entry;
+        Entry.BoundaryType = Boundary.BoundaryType;
+        Entry.OtherPlateID = (Key.Key == PlateID) ? Key.Value : Key.Key;
+
+        FVector3d Accumulated = FVector3d::ZeroVector;
+        int32 ValidCount = 0;
+
+        for (int32 SharedIndex : Boundary.SharedEdgeVertices)
+        {
+            if (SharedVertices.IsValidIndex(SharedIndex))
+            {
+                Accumulated += SharedVertices[SharedIndex];
+                ++ValidCount;
+            }
+            else if (RenderVertices.IsValidIndex(SharedIndex))
+            {
+                Accumulated += RenderVertices[SharedIndex];
+                ++ValidCount;
+            }
+        }
+
+        if (ValidCount > 0)
+        {
+            Accumulated /= static_cast<double>(ValidCount);
+            Entry.RepresentativePosition = Accumulated;
+            Entry.RepresentativeUnit = Accumulated.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+            Entry.bHasRepresentative = true;
+        }
+        else if (SourcePlate && !SourcePlate->Centroid.IsNearlyZero())
+        {
+            Entry.RepresentativePosition = SourcePlate->Centroid;
+            Entry.RepresentativeUnit = SourcePlate->Centroid.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+            Entry.bHasRepresentative = true;
+        }
+
+        if (Entry.BoundaryType == EBoundaryType::Convergent)
+        {
+            const FTectonicPlate* OtherPlate = FindPlateByID(Entry.OtherPlateID);
+            if (SourcePlate && OtherPlate && SourcePlate->CrustType != OtherPlate->CrustType)
+            {
+                Entry.bIsSubduction = true;
+            }
+        }
+
+        OutSummary.Boundaries.Add(Entry);
+    }
+}
+
 void UTectonicSimulationService::UpdateConvergentNeighborFlags()
 {
     const int32 VertexCount = RenderVertices.Num();
@@ -3820,20 +3955,50 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
 
         TArray<int32> Loop;
         Loop.Reserve(Entry.Value.Num());
+        TSet<int32> LoopVisited;
 
         int32 Current = StartVertex;
         int32 Previous = INDEX_NONE;
+        int32 SafetyCounter = 0;
+        const int32 MaxIterations = FMath::Max(FMath::Max(BoundaryAdjacency.Num() * 4, SortedVertexIndices.Num() * 4), 64);
 
         while (true)
         {
+            if (LoopVisited.Contains(Current))
+            {
+                if (Current == StartVertex)
+                {
+                    break; // Closed the loop cleanly
+                }
+
+                UE_LOG(LogPlanetaryCreation, Error,
+                    TEXT("ExtractTerrane: Detected cycle visiting boundary vertex %d without returning to start %d"),
+                    Current, StartVertex);
+                return false;
+            }
+
+            LoopVisited.Add(Current);
             Loop.Add(Current);
             VisitedBoundaryVerts.Add(Current);
 
-            const TArray<int32>& Neighbors = BoundaryAdjacency[Current];
+            const TArray<int32>* NeighborsPtr = BoundaryAdjacency.Find(Current);
+            if (!NeighborsPtr)
+            {
+                UE_LOG(LogPlanetaryCreation, Error,
+                    TEXT("ExtractTerrane: Boundary adjacency missing entry for vertex %d"), Current);
+                return false;
+            }
+
+            const TArray<int32>& Neighbors = *NeighborsPtr;
             int32 NextVertex = INDEX_NONE;
             for (int32 Neighbor : Neighbors)
             {
-                if (Neighbor != Previous)
+                if (Neighbor == Previous)
+                {
+                    continue;
+                }
+
+                if (!LoopVisited.Contains(Neighbor) || Neighbor == StartVertex)
                 {
                     NextVertex = Neighbor;
                     break;
@@ -3852,6 +4017,14 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
             if (Current == StartVertex)
             {
                 break;
+            }
+
+            if (++SafetyCounter > MaxIterations)
+            {
+                UE_LOG(LogPlanetaryCreation, Error,
+                    TEXT("ExtractTerrane: Boundary loop traversal exceeded guard (%d iterations) starting at %d"),
+                    SafetyCounter, StartVertex);
+                return false;
             }
         }
 
@@ -4937,9 +5110,15 @@ double ComputeOceanicAmplification(const FVector3d& Position, int32 PlateID, dou
     const FTectonicSimulationParameters& Parameters);
 
 // Forward declarations from ContinentalAmplification.cpp
+struct FExemplarMetadata;
+bool LoadExemplarLibraryJSON(const FString& ProjectContentDir);
+TArray<FExemplarMetadata*> GetExemplarsForTerrainType(EContinentalTerrainType TerrainType);
+double BlendContinentalExemplars(const FVector3d& Position, double BaseElevation_m, const TArray<FExemplarMetadata*>& MatchingExemplars, const FString& ProjectContentDir, int32 Seed);
 double ComputeContinentalAmplification(const FVector3d& Position, int32 PlateID, double BaseElevation_m,
     const TArray<FTectonicPlate>& Plates, const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
-    double OrogenyAge_My, EBoundaryType NearestBoundaryType, const FString& ProjectContentDir, int32 Seed);
+    const FPlateBoundarySummary* BoundarySummary, double OrogenyAge_My, EBoundaryType NearestBoundaryType,
+    const FString& ProjectContentDir, int32 Seed);
+FVector2d ComputeContinentalRandomOffset(const FVector3d& Position, int32 Seed);
 
 
 void UTectonicSimulationService::ComputeRidgeDirections()
@@ -5034,109 +5213,158 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
     auto ComputeNearestBoundaryTangent = [&](const FVector3d& VertexNormal, int32 PlateID, double& OutDistance) -> FVector3d
     {
-        FVector3d BestTangent = FVector3d::ZeroVector;
         OutDistance = TNumericLimits<double>::Max();
 
-        const auto ComputeSegmentTangent = [](const FVector3d& PlaneNormal, const FVector3d& PointOnGreatCircle)
+        auto FetchBoundaryVertex = [&](int32 SharedIndex, FVector3d& OutUnit) -> bool
         {
-            const FVector3d Tangent = FVector3d::CrossProduct(PlaneNormal, PointOnGreatCircle).GetSafeNormal();
-            return Tangent.IsNearlyZero() ? FVector3d::ZeroVector : Tangent;
-        };
-
-        for (const auto& BoundaryPair : Boundaries)
-        {
-            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
-            const FPlateBoundary& Boundary = BoundaryPair.Value;
-
-            if (Boundary.BoundaryType != EBoundaryType::Divergent)
+            if (SharedVerts.IsValidIndex(SharedIndex))
             {
-                continue;
+                OutUnit = SharedVerts[SharedIndex].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+                return true;
             }
 
-            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+            if (RenderVertices.IsValidIndex(SharedIndex))
             {
-                continue;
+                OutUnit = RenderVertices[SharedIndex].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+                return true;
+            }
+
+            return false;
+        };
+
+        auto AccumulateBoundary = [&](const FPlateBoundary& Boundary, double& InOutClosestDistance, FVector3d& InOutWeightedTangent, double& InOutWeightSum)
+        {
+            if (Boundary.BoundaryType != EBoundaryType::Divergent)
+            {
+                return;
             }
 
             const TArray<int32>& SharedEdge = Boundary.SharedEdgeVertices;
             const int32 EdgeCount = SharedEdge.Num();
             if (EdgeCount < 2)
             {
-                continue;
+                return;
             }
 
-            auto ConsiderEdge = [&](const FVector3d& EdgeV0, const FVector3d& EdgeV1)
+            FVector3d BoundaryWeighted = FVector3d::ZeroVector;
+            double BoundaryWeightSum = 0.0;
+            double BoundaryClosest = InOutClosestDistance;
+
+            for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount; ++EdgeIdx)
             {
-                const FVector3d PlaneNormal = FVector3d::CrossProduct(EdgeV0, EdgeV1).GetSafeNormal();
-                if (PlaneNormal.IsNearlyZero())
-                {
-                    return;
-                }
+                const int32 V0Idx = SharedEdge[EdgeIdx];
+                const int32 V1Idx = SharedEdge[(EdgeIdx + 1) % EdgeCount];
 
-                const double Projection = FVector3d::DotProduct(VertexNormal, PlaneNormal);
-                const FVector3d Projected = (VertexNormal - Projection * PlaneNormal);
-                if (Projected.IsNearlyZero())
-                {
-                    return;
-                }
-
-                const FVector3d GreatCirclePoint = Projected.GetSafeNormal();
-
-                const double ArcAB = FMath::Acos(FMath::Clamp(EdgeV0 | EdgeV1, -1.0, 1.0));
-                const double ArcAC = FMath::Acos(FMath::Clamp(EdgeV0 | GreatCirclePoint, -1.0, 1.0));
-                const double ArcCB = FMath::Acos(FMath::Clamp(GreatCirclePoint | EdgeV1, -1.0, 1.0));
-
-                const bool bWithinSegment = (ArcAC + ArcCB) <= (ArcAB + 1e-3);
-
-                auto ConsiderPoint = [&](const FVector3d& PointOnCircle)
-                {
-                    const double AngularDistance = FMath::Acos(FMath::Clamp(VertexNormal | PointOnCircle, -1.0, 1.0));
-                    if (AngularDistance < OutDistance)
-                    {
-                        const FVector3d CandidateTangent = ComputeSegmentTangent(PlaneNormal, PointOnCircle);
-                        if (!CandidateTangent.IsNearlyZero())
-                        {
-                            OutDistance = AngularDistance;
-                            BestTangent = CandidateTangent;
-                        }
-                    }
-                };
-
-                if (bWithinSegment)
-                {
-                    ConsiderPoint(GreatCirclePoint);
-                }
-                else
-                {
-                    ConsiderPoint(EdgeV0);
-                    ConsiderPoint(EdgeV1);
-                }
-            };
-
-            for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount - 1; ++EdgeIdx)
-            {
-                const int32 EdgeV0Idx = SharedEdge[EdgeIdx];
-                const int32 EdgeV1Idx = SharedEdge[EdgeIdx + 1];
-                if (!SharedVerts.IsValidIndex(EdgeV0Idx) || !SharedVerts.IsValidIndex(EdgeV1Idx))
+                FVector3d P0, P1;
+                if (!FetchBoundaryVertex(V0Idx, P0) || !FetchBoundaryVertex(V1Idx, P1))
                 {
                     continue;
                 }
 
-                ConsiderEdge(SharedVerts[EdgeV0Idx].GetSafeNormal(), SharedVerts[EdgeV1Idx].GetSafeNormal());
+                if ((P1 - P0).IsNearlyZero())
+                {
+                    continue;
+                }
+
+                FVector3d EdgeVector = P1 - P0;
+                EdgeVector -= (EdgeVector | VertexNormal) * VertexNormal;
+                if (!EdgeVector.Normalize())
+                {
+                    continue;
+                }
+
+                FVector3d SegmentMid = (P0 + P1).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, VertexNormal);
+                if (SegmentMid.IsNearlyZero())
+                {
+                    SegmentMid = P0;
+                }
+
+                double AngularDistance = FMath::Acos(FMath::Clamp(VertexNormal | SegmentMid, -1.0, 1.0));
+                if (!FMath::IsFinite(AngularDistance))
+                {
+                    AngularDistance = PI;
+                }
+
+                BoundaryClosest = FMath::Min(BoundaryClosest, AngularDistance);
+
+                const double Weight = 1.0 / FMath::Max(AngularDistance, 1e-3);
+                BoundaryWeighted += EdgeVector * Weight;
+                BoundaryWeightSum += Weight;
             }
 
-            if (EdgeCount >= 2)
+            if (BoundaryWeightSum > 0.0)
             {
-                const int32 EdgeV0Idx = SharedEdge[EdgeCount - 1];
-                const int32 EdgeV1Idx = SharedEdge[0];
-                if (SharedVerts.IsValidIndex(EdgeV0Idx) && SharedVerts.IsValidIndex(EdgeV1Idx))
+                const FVector3d BoundaryTangent = (BoundaryWeighted / BoundaryWeightSum).GetSafeNormal();
+                if (!BoundaryTangent.IsNearlyZero())
                 {
-                    ConsiderEdge(SharedVerts[EdgeV0Idx].GetSafeNormal(), SharedVerts[EdgeV1Idx].GetSafeNormal());
+                    InOutClosestDistance = FMath::Min(InOutClosestDistance, BoundaryClosest);
+                    InOutWeightedTangent += BoundaryTangent * BoundaryWeightSum;
+                    InOutWeightSum += BoundaryWeightSum;
+                }
+            }
+        };
+
+        FVector3d WeightedTangent = FVector3d::ZeroVector;
+        double TotalWeight = 0.0;
+        double ClosestDistance = TNumericLimits<double>::Max();
+        bool bFoundBoundary = false;
+
+        const FPlateBoundarySummary* Summary = GetPlateBoundarySummary(PlateID);
+        if (Summary)
+        {
+            for (const FPlateBoundarySummaryEntry& Entry : Summary->Boundaries)
+            {
+                if (Entry.BoundaryType != EBoundaryType::Divergent)
+                {
+                    continue;
+                }
+
+                const int32 OtherPlateID = Entry.OtherPlateID;
+                const TPair<int32, int32> BoundaryKey = (PlateID < OtherPlateID)
+                    ? TPair<int32, int32>(PlateID, OtherPlateID)
+                    : TPair<int32, int32>(OtherPlateID, PlateID);
+
+                if (const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey))
+                {
+                    bFoundBoundary = true;
+                    AccumulateBoundary(*Boundary, ClosestDistance, WeightedTangent, TotalWeight);
                 }
             }
         }
+        else
+        {
+            for (const auto& BoundaryPair : Boundaries)
+            {
+                const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+                if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+                {
+                    continue;
+                }
 
-        return BestTangent;
+                bFoundBoundary = true;
+                AccumulateBoundary(BoundaryPair.Value, ClosestDistance, WeightedTangent, TotalWeight);
+            }
+        }
+
+        if (TotalWeight > 0.0 && !WeightedTangent.IsNearlyZero())
+        {
+            OutDistance = ClosestDistance;
+            return WeightedTangent.GetSafeNormal();
+        }
+
+        OutDistance = ClosestDistance;
+
+#if UE_BUILD_DEVELOPMENT
+        if (bFoundBoundary)
+        {
+            UE_LOG(LogPlanetaryCreation, VeryVerbose,
+                TEXT("[RidgeDiag] Plate %d boundary tangent unavailable after summary pass (weight=%.6f)"),
+                PlateID,
+                TotalWeight);
+        }
+#endif
+
+        return FVector3d::ZeroVector;
     };
 
     for (int32 VertexIdx : DirtyVertices)
@@ -5503,8 +5731,10 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     checkf(VertexElevationValues.Num() == VertexCount, TEXT("VertexElevationValues not initialized (must run erosion first)"));
     checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized"));
 
-    // Get project content directory for loading exemplar data
     const FString ProjectContentDir = FPaths::ProjectContentDir();
+
+    TMap<int32, const FPlateBoundarySummary*> LocalSummaryCache;
+    LocalSummaryCache.Reserve(Plates.Num());
 
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
@@ -5518,28 +5748,61 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
         const double OrogenyAge_My = CrustAge_My; // Approximate: use crust age as orogeny age
         EBoundaryType NearestBoundaryType = EBoundaryType::Transform; // Default
 
-        // Find nearest convergent boundary (for orogeny detection)
-        double MinDistanceToBoundary = TNumericLimits<double>::Max();
-        for (const auto& BoundaryPair : Boundaries)
+        const FPlateBoundarySummary* BoundarySummary = nullptr;
+        if (PlateID != INDEX_NONE)
         {
-            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
-            const FPlateBoundary& Boundary = BoundaryPair.Value;
-
-            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
-                continue;
-
-            // Simplified distance check (would need proper geodesic distance)
-            if (Boundary.SharedEdgeVertices.Num() > 0)
+            if (const FPlateBoundarySummary** FoundSummary = LocalSummaryCache.Find(PlateID))
             {
-                // Use first vertex as representative
-                const int32 BoundaryVertexIdx = Boundary.SharedEdgeVertices[0];
-                if (RenderVertices.IsValidIndex(BoundaryVertexIdx))
+                BoundarySummary = *FoundSummary;
+            }
+            else
+            {
+                BoundarySummary = GetPlateBoundarySummary(PlateID);
+                LocalSummaryCache.Add(PlateID, BoundarySummary);
+            }
+        }
+
+        double MinDistanceToBoundary = TNumericLimits<double>::Max();
+        if (BoundarySummary)
+        {
+            for (const FPlateBoundarySummaryEntry& Entry : BoundarySummary->Boundaries)
+            {
+                if (!Entry.bHasRepresentative)
                 {
-                    const double Distance = FVector3d::Distance(VertexPosition, RenderVertices[BoundaryVertexIdx]);
-                    if (Distance < MinDistanceToBoundary)
+                    continue;
+                }
+
+                const double Distance = FVector3d::Distance(VertexPosition, Entry.RepresentativePosition);
+                if (Distance < MinDistanceToBoundary)
+                {
+                    MinDistanceToBoundary = Distance;
+                    NearestBoundaryType = Entry.BoundaryType;
+                }
+            }
+        }
+        else
+        {
+            for (const auto& BoundaryPair : Boundaries)
+            {
+                const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+                const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+                if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+                {
+                    continue;
+                }
+
+                if (Boundary.SharedEdgeVertices.Num() > 0)
+                {
+                    const int32 BoundaryVertexIdx = Boundary.SharedEdgeVertices[0];
+                    if (RenderVertices.IsValidIndex(BoundaryVertexIdx))
                     {
-                        MinDistanceToBoundary = Distance;
-                        NearestBoundaryType = Boundary.BoundaryType;
+                        const double Distance = FVector3d::Distance(VertexPosition, RenderVertices[BoundaryVertexIdx]);
+                        if (Distance < MinDistanceToBoundary)
+                        {
+                            MinDistanceToBoundary = Distance;
+                            NearestBoundaryType = Boundary.BoundaryType;
+                        }
                     }
                 }
             }
@@ -5552,6 +5815,7 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
             BaseElevation_m,
             Plates,
             Boundaries,
+            BoundarySummary,
             OrogenyAge_My,
             NearestBoundaryType,
             ProjectContentDir,
@@ -5563,6 +5827,7 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
 
     // Milestone 4 Phase 4.2: Increment surface data version (elevation changed)
     SurfaceDataVersion++;
+    BumpOceanicAmplificationSerial();
 }
 
 // Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification
@@ -5645,6 +5910,12 @@ void UTectonicSimulationService::GetOceanicAmplificationFloatInputs(
     OutOceanicMask = &OceanicAmplificationFloatInputs.OceanicMask;
 }
 
+const FContinentalAmplificationGPUInputs& UTectonicSimulationService::GetContinentalAmplificationGPUInputs() const
+{
+    RefreshContinentalAmplificationGPUInputs();
+    return ContinentalAmplificationGPUInputs;
+}
+
 #if WITH_EDITOR
 void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount)
 {
@@ -5654,6 +5925,20 @@ void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferRe
     }
 
     FOceanicGPUAsyncJob& Job = PendingOceanicGPUJobs.AddDefaulted_GetRef();
+    Job.Readback = MoveTemp(Readback);
+    Job.VertexCount = VertexCount;
+    Job.NumBytes = VertexCount * sizeof(float);
+    Job.DispatchFence.BeginFence();
+}
+
+void UTectonicSimulationService::EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount)
+{
+    if (!Readback.IsValid() || VertexCount <= 0)
+    {
+        return;
+    }
+
+    FContinentalGPUAsyncJob& Job = PendingContinentalGPUJobs.AddDefaulted_GetRef();
     Job.Readback = MoveTemp(Readback);
     Job.VertexCount = VertexCount;
     Job.NumBytes = VertexCount * sizeof(float);
@@ -5791,8 +6076,483 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
         *OutReadbackSeconds += AccumulatedSeconds;
     }
 }
+
+void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlockUntilComplete, double* OutReadbackSeconds)
+{
+    double AccumulatedSeconds = 0.0;
+
+    const FContinentalAmplificationGPUInputs& Inputs = GetContinentalAmplificationGPUInputs();
+#if UE_BUILD_DEVELOPMENT
+    static int32 DebugComparisonCount = 0;
+#endif
+
+    TMap<int32, const FPlateBoundarySummary*> BoundarySummaryCache;
+    BoundarySummaryCache.Reserve(Plates.Num());
+
+    for (int32 JobIndex = PendingContinentalGPUJobs.Num() - 1; JobIndex >= 0; --JobIndex)
+    {
+        FContinentalGPUAsyncJob& Job = PendingContinentalGPUJobs[JobIndex];
+        if (!Job.Readback.IsValid())
+        {
+            PendingContinentalGPUJobs.RemoveAt(JobIndex);
+            continue;
+        }
+
+        if (!Job.DispatchFence.IsFenceComplete())
+        {
+            if (bBlockUntilComplete)
+            {
+                const double WaitStart = FPlatformTime::Seconds();
+                Job.DispatchFence.Wait();
+                AccumulatedSeconds += FPlatformTime::Seconds() - WaitStart;
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        if (!Job.Readback->IsReady())
+        {
+            if (bBlockUntilComplete)
+            {
+                const double ReadbackWaitStart = FPlatformTime::Seconds();
+                const double Deadline = FPlatformTime::Seconds() + 30.0;
+                while (!Job.Readback->IsReady() && FPlatformTime::Seconds() < Deadline)
+                {
+                    FPlatformProcess::SleepNoStats(0.001f);
+                }
+                AccumulatedSeconds += FPlatformTime::Seconds() - ReadbackWaitStart;
+                if (!Job.Readback->IsReady())
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        const int32 NumFloats = Job.VertexCount;
+
+        TSharedRef<TArray<float>, ESPMode::ThreadSafe> TempData = MakeShared<TArray<float>, ESPMode::ThreadSafe>();
+        TempData->SetNum(NumFloats);
+
+        ENQUEUE_RENDER_COMMAND(CopyContinentalGPUReadback)(
+            [Readback = Job.Readback, NumBytes = Job.NumBytes, TempData](FRHICommandListImmediate& RHICmdList)
+            {
+                if (!Readback.IsValid())
+                {
+                    return;
+                }
+
+                const float* GPUData = static_cast<const float*>(Readback->Lock(NumBytes));
+                if (GPUData)
+                {
+                    FMemory::Memcpy(TempData->GetData(), GPUData, NumBytes);
+                }
+                Readback->Unlock();
+            });
+
+        Job.CopyFence.BeginFence();
+        if (bBlockUntilComplete)
+        {
+            const double CopyWaitStart = FPlatformTime::Seconds();
+            Job.CopyFence.Wait();
+            AccumulatedSeconds += FPlatformTime::Seconds() - CopyWaitStart;
+        }
+        else if (!Job.CopyFence.IsFenceComplete())
+        {
+            continue;
+        }
+
+        TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
+        Amplified.SetNum(NumFloats);
+
+        int32 ContinentalOverrideCount = 0;
+#if UE_BUILD_DEVELOPMENT
+        double AccumulatedDelta = 0.0;
+        double MaxDelta = 0.0;
+#endif
+
+        for (int32 Index = 0; Index < NumFloats; ++Index)
+        {
+            const double Baseline = Inputs.BaselineElevation.IsValidIndex(Index)
+                ? static_cast<double>(Inputs.BaselineElevation[Index])
+                : VertexAmplifiedElevation.IsValidIndex(Index) ? VertexAmplifiedElevation[Index] : 0.0;
+
+            const uint32 PackedInfo = Inputs.PackedTerrainInfo.IsValidIndex(Index) ? Inputs.PackedTerrainInfo[Index] : 0u;
+            const uint32 ExemplarCount = (PackedInfo >> 8) & 0xFFu;
+
+            if (ExemplarCount > 0)
+            {
+                const double GPUValue = static_cast<double>((*TempData)[Index]);
+                Amplified[Index] = GPUValue;
+                ++ContinentalOverrideCount;
+#if UE_BUILD_DEVELOPMENT
+                const double Delta = FMath::Abs(GPUValue - Baseline);
+                AccumulatedDelta += Delta;
+                MaxDelta = FMath::Max(MaxDelta, Delta);
+
+                const bool bShouldLogDelta = (DebugComparisonCount < 5) || (Delta > 1.0);
+                if (bShouldLogDelta)
+                {
+                    const FTectonicSimulationParameters SimParams = GetParameters();
+                    const FString ProjectContentDir = FPaths::ProjectContentDir();
+                    const FVector3d& VertexPosition = RenderVertices[Index];
+                    const int32 PlateID = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
+                    const double CrustAge = VertexCrustAge.IsValidIndex(Index) ? VertexCrustAge[Index] : 0.0;
+
+                    const FPlateBoundarySummary* BoundarySummary = nullptr;
+                    if (PlateID != INDEX_NONE)
+                    {
+                        if (const FPlateBoundarySummary** CachedSummary = BoundarySummaryCache.Find(PlateID))
+                        {
+                            BoundarySummary = *CachedSummary;
+                        }
+                        else
+                        {
+                            BoundarySummary = GetPlateBoundarySummary(PlateID);
+                            BoundarySummaryCache.Add(PlateID, BoundarySummary);
+                        }
+                    }
+
+                    EBoundaryType DebugBoundaryType = EBoundaryType::Transform;
+                    double MinBoundaryDistance = TNumericLimits<double>::Max();
+
+                    if (BoundarySummary)
+                    {
+                        for (const FPlateBoundarySummaryEntry& Entry : BoundarySummary->Boundaries)
+                        {
+                            if (!Entry.bHasRepresentative)
+                            {
+                                continue;
+                            }
+
+                            const double Distance = FVector3d::Distance(VertexPosition, Entry.RepresentativePosition);
+                            if (Distance < MinBoundaryDistance)
+                            {
+                                MinBoundaryDistance = Distance;
+                                DebugBoundaryType = Entry.BoundaryType;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (const auto& BoundaryPair : Boundaries)
+                        {
+                            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+                            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+                            {
+                                continue;
+                            }
+
+                            const FPlateBoundary& Boundary = BoundaryPair.Value;
+                            if (Boundary.SharedEdgeVertices.Num() > 0)
+                            {
+                                const int32 BoundaryVertexIdx = Boundary.SharedEdgeVertices[0];
+                                if (RenderVertices.IsValidIndex(BoundaryVertexIdx))
+                                {
+                                    const double Distance = FVector3d::Distance(VertexPosition, RenderVertices[BoundaryVertexIdx]);
+                                    if (Distance < MinBoundaryDistance)
+                                    {
+                                        MinBoundaryDistance = Distance;
+                                        DebugBoundaryType = Boundary.BoundaryType;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    FContinentalAmplificationDebugInfo DebugInfo;
+                    DebugInfo.VertexIndex = Index;
+                    SetContinentalAmplificationDebugContext(&DebugInfo);
+
+                    const double CpuValue = ComputeContinentalAmplification(
+                        VertexPosition,
+                        PlateID,
+                        Baseline,
+                        Plates,
+                        Boundaries,
+                        BoundarySummary,
+                        CrustAge,
+                        DebugBoundaryType,
+                        ProjectContentDir,
+                        SimParams.Seed);
+
+                    SetContinentalAmplificationDebugContext(nullptr);
+
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[ContinentalGPUReadback][Compare] Vtx=%d Base=%.2f CPU=%.2f GPU=%.2f Delta=%.2f"),
+                        Index, Baseline, CpuValue, GPUValue, FMath::Abs(CpuValue - GPUValue));
+
+                    double FloatCpuValue = CpuValue;
+                    double OverrideCpuValue = CpuValue;
+                    FContinentalAmplificationDebugInfo OverrideDebugInfo;
+                    FContinentalAmplificationDebugInfo FloatDebugInfo;
+                    if (Inputs.RenderPositions.IsValidIndex(Index))
+                    {
+                        FloatDebugInfo.VertexIndex = Index;
+                        SetContinentalAmplificationDebugContext(&FloatDebugInfo);
+
+                        const FVector3f RenderPositionFloat = Inputs.RenderPositions[Index];
+                        FloatCpuValue = ComputeContinentalAmplification(
+                            FVector3d(RenderPositionFloat),
+                            PlateID,
+                            Baseline,
+                            Plates,
+                            Boundaries,
+                            BoundarySummary,
+                            CrustAge,
+                            DebugBoundaryType,
+                            ProjectContentDir,
+                            SimParams.Seed);
+
+                        SetContinentalAmplificationDebugContext(nullptr);
+                    }
+
+                    if (Inputs.RandomUVOffsets.IsValidIndex(Index))
+                    {
+                        const FVector2f OverrideRandom = Inputs.RandomUVOffsets[Index];
+                        OverrideDebugInfo.VertexIndex = Index;
+                        OverrideDebugInfo.bUseOverrideRandomOffset = true;
+                        OverrideDebugInfo.OverrideRandomOffsetU = OverrideRandom.X;
+                        OverrideDebugInfo.OverrideRandomOffsetV = OverrideRandom.Y;
+                        SetContinentalAmplificationDebugContext(&OverrideDebugInfo);
+
+                        OverrideCpuValue = ComputeContinentalAmplification(
+                            VertexPosition,
+                            PlateID,
+                            Baseline,
+                            Plates,
+                            Boundaries,
+                            BoundarySummary,
+                            CrustAge,
+                            DebugBoundaryType,
+                            ProjectContentDir,
+                            SimParams.Seed);
+
+                        SetContinentalAmplificationDebugContext(nullptr);
+                    }
+
+                    const uint32 TerrainType = PackedInfo & 0xFFu;
+                    const FUintVector4 PackedIndices = Inputs.ExemplarIndices.IsValidIndex(Index)
+                        ? Inputs.ExemplarIndices[Index]
+                        : FUintVector4(MAX_uint32, MAX_uint32, MAX_uint32, MAX_uint32);
+                    const FVector4f PackedWeights = Inputs.ExemplarWeights.IsValidIndex(Index)
+                        ? Inputs.ExemplarWeights[Index]
+                        : FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+                    const FVector2f RandomUV = Inputs.RandomUVOffsets.IsValidIndex(Index)
+                        ? Inputs.RandomUVOffsets[Index]
+                        : FVector2f::ZeroVector;
+
+                    auto DescribeExemplar = [](uint32 ExemplarIndex) -> FString
+                    {
+                        using namespace PlanetaryCreation::GPU;
+                        if (ExemplarIndex == MAX_uint32)
+                        {
+                            return TEXT("None");
+                        }
+
+                        const FExemplarTextureArray& TextureArray = GetExemplarTextureArray();
+                        const TArray<FExemplarTextureArray::FExemplarInfo>& InfoArray = TextureArray.GetExemplarInfo();
+                        if (!InfoArray.IsValidIndex(static_cast<int32>(ExemplarIndex)))
+                        {
+                            return FString::Printf(TEXT("Idx %u (out of range)"), ExemplarIndex);
+                        }
+
+                        const FExemplarTextureArray::FExemplarInfo& Info = InfoArray[ExemplarIndex];
+                        return FString::Printf(TEXT("%s[%u]"), *Info.ID, ExemplarIndex);
+                    };
+
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[ContinentalGPUReadback][Inputs] Vtx=%d Terrain=%u Count=%u Indices={%s,%s,%s} Weights={%.3f,%.3f,%.3f|Sum=%.3f} Offset=(%.3f,%.3f) Norm=%.3f"),
+                        Index,
+                        TerrainType,
+                        ExemplarCount,
+                        *DescribeExemplar(PackedIndices.X),
+                        *DescribeExemplar(PackedIndices.Y),
+                        *DescribeExemplar(PackedIndices.Z),
+                        PackedWeights.X,
+                        PackedWeights.Y,
+                        PackedWeights.Z,
+                        PackedWeights.W,
+                        RandomUV.X,
+                        RandomUV.Y,
+                        VertexPosition.Length());
+
+                    if (DebugInfo.ExemplarCount > 0)
+                    {
+                        auto DescribeLibraryExemplar = [](uint32 LibraryIndex) -> FString
+                        {
+                            using namespace PlanetaryCreation::GPU;
+                            if (LibraryIndex == MAX_uint32)
+                            {
+                                return TEXT("None");
+                            }
+
+                            const FExemplarTextureArray& TextureArray = GetExemplarTextureArray();
+                            const TArray<FExemplarTextureArray::FExemplarInfo>& InfoArray = TextureArray.GetExemplarInfo();
+                            if (!InfoArray.IsValidIndex(static_cast<int32>(LibraryIndex)))
+                            {
+                                return FString::Printf(TEXT("Idx %u (out of range)"), LibraryIndex);
+                            }
+
+                            const FExemplarTextureArray::FExemplarInfo& Info = InfoArray[LibraryIndex];
+                            return FString::Printf(TEXT("%s[%u]"), *Info.ID, LibraryIndex);
+                        };
+
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[ContinentalGPUReadback][CPUDetails] Vtx=%d Terrain=%d Blend=%.2f TotalWeight=%.3f RefMean=%.2f UV=(%.3f,%.3f) Samples={%s:%.2f,%s:%.2f,%s:%.2f} Weights={%.3f,%.3f,%.3f} Cpu=%.2f"),
+                            Index,
+                            static_cast<int32>(DebugInfo.TerrainType),
+                            DebugInfo.BlendedHeight,
+                            DebugInfo.TotalWeight,
+                            DebugInfo.ReferenceMean,
+                            DebugInfo.UValue,
+                            DebugInfo.VValue,
+                            *DescribeLibraryExemplar(DebugInfo.ExemplarIndices[0]),
+                            DebugInfo.SampleHeights[0],
+                            *DescribeLibraryExemplar(DebugInfo.ExemplarIndices[1]),
+                            DebugInfo.SampleHeights[1],
+                            *DescribeLibraryExemplar(DebugInfo.ExemplarIndices[2]),
+                            DebugInfo.SampleHeights[2],
+                            DebugInfo.Weights[0],
+                            DebugInfo.Weights[1],
+                            DebugInfo.Weights[2],
+                            DebugInfo.CpuResult);
+
+#if UE_BUILD_DEVELOPMENT
+                        double GPUApproxSamples[3] = { 0.0, 0.0, 0.0 };
+                        double GPUApproxBlend = 0.0;
+                        const double WrappedU = FMath::Frac(DebugInfo.UValue);
+                        const double WrappedV = FMath::Frac(DebugInfo.VValue);
+
+                        const TArray<PlanetaryCreation::GPU::FExemplarTextureArray::FExemplarInfo>& DebugInfoArray = PlanetaryCreation::GPU::GetExemplarTextureArray().GetExemplarInfo();
+                        for (int32 SampleIdx = 0; SampleIdx < 3; ++SampleIdx)
+                        {
+                            const uint32 LibraryIndex = DebugInfo.ExemplarIndices[SampleIdx];
+                            if (LibraryIndex == MAX_uint32)
+                            {
+                                continue;
+                            }
+
+                            if (!DebugInfoArray.IsValidIndex(static_cast<int32>(LibraryIndex)))
+                            {
+                                continue;
+                            }
+
+                            const auto& ExemplarInfoDebug = DebugInfoArray[LibraryIndex];
+                            if (ExemplarInfoDebug.DebugHeightData.Num() == 0 || ExemplarInfoDebug.DebugWidth <= 0 || ExemplarInfoDebug.DebugHeight <= 0)
+                            {
+                                continue;
+                            }
+
+                            const int32 PixelX = FMath::Clamp(static_cast<int32>(WrappedU * ExemplarInfoDebug.DebugWidth), 0, ExemplarInfoDebug.DebugWidth - 1);
+                            const int32 PixelY = FMath::Clamp(static_cast<int32>(WrappedV * ExemplarInfoDebug.DebugHeight), 0, ExemplarInfoDebug.DebugHeight - 1);
+                            const int32 PixelIndex = PixelY * ExemplarInfoDebug.DebugWidth + PixelX;
+
+                            if (!ExemplarInfoDebug.DebugHeightData.IsValidIndex(PixelIndex))
+                            {
+                                continue;
+                            }
+
+                            const uint16 RawValue = ExemplarInfoDebug.DebugHeightData[PixelIndex];
+                            const double NormalizedValue = static_cast<double>(RawValue) / 65535.0;
+                            const double Elevation = ExemplarInfoDebug.ElevationMin_m + (ExemplarInfoDebug.ElevationMax_m - ExemplarInfoDebug.ElevationMin_m) * NormalizedValue;
+                            GPUApproxSamples[SampleIdx] = Elevation;
+                            GPUApproxBlend += Elevation * DebugInfo.Weights[SampleIdx];
+                        }
+
+                        if (DebugInfo.TotalWeight > 0.0)
+                        {
+                            GPUApproxBlend /= DebugInfo.TotalWeight;
+                        }
+
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[ContinentalGPUReadback][GPUApprox] Vtx=%d Samples={%.2f,%.2f,%.2f} Blend=%.2f"),
+                            Index,
+                            GPUApproxSamples[0],
+                            GPUApproxSamples[1],
+                            GPUApproxSamples[2],
+                            GPUApproxBlend);
+#endif
+
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[ContinentalGPUReadback][CPUOffsets] Vtx=%d CpuSeed=%d CpuRandom=(%.3f,%.3f) OverrideSeed=%d OverrideRandom=(%.3f,%.3f) CpuOverride=%.2f"),
+                            Index,
+                            DebugInfo.RandomSeed,
+                            DebugInfo.RandomOffsetU,
+                            DebugInfo.RandomOffsetV,
+                            OverrideDebugInfo.bUseOverrideRandomOffset ? OverrideDebugInfo.OverrideRandomSeed : DebugInfo.RandomSeed,
+                            OverrideDebugInfo.bUseOverrideRandomOffset ? OverrideDebugInfo.OverrideRandomOffsetU : DebugInfo.RandomOffsetU,
+                            OverrideDebugInfo.bUseOverrideRandomOffset ? OverrideDebugInfo.OverrideRandomOffsetV : DebugInfo.RandomOffsetV,
+                            OverrideCpuValue);
+
+                        if (OverrideDebugInfo.bUseOverrideRandomOffset)
+                        {
+                            UE_LOG(LogPlanetaryCreation, Log,
+                                TEXT("[ContinentalGPUReadback][CPUOverride] Vtx=%d Samples={%.2f,%.2f,%.2f}"),
+                                Index,
+                                OverrideDebugInfo.SampleHeights[0],
+                                OverrideDebugInfo.SampleHeights[1],
+                                OverrideDebugInfo.SampleHeights[2]);
+                        }
+
+                        if (Inputs.RenderPositions.IsValidIndex(Index))
+                        {
+                            UE_LOG(LogPlanetaryCreation, Log,
+                                TEXT("[ContinentalGPUReadback][CPUFloat] Vtx=%d CpuApprox=%.2f Samples={%.2f,%.2f,%.2f}"),
+                                Index,
+                                FloatCpuValue,
+                                FloatDebugInfo.SampleHeights[0],
+                                FloatDebugInfo.SampleHeights[1],
+                                FloatDebugInfo.SampleHeights[2]);
+                        }
+                    }
+
+                    ++DebugComparisonCount;
+                }
+#endif
+            }
+            else
+            {
+                Amplified[Index] = Baseline;
+            }
+        }
+
+#if UE_BUILD_DEVELOPMENT
+        if (ContinentalOverrideCount > 0)
+        {
+            const double MeanDelta = AccumulatedDelta / ContinentalOverrideCount;
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[ContinentalGPUReadback] Overrides=%d/%d MeanDelta=%.3f MaxDelta=%.3f"),
+                ContinentalOverrideCount, NumFloats, MeanDelta, MaxDelta);
+        }
+        else
+        {
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[ContinentalGPUReadback] No continental overrides applied (VertexCount=%d)"), NumFloats);
+        }
+#endif
+
+        SurfaceDataVersion++;
+        PendingContinentalGPUJobs.RemoveAt(JobIndex);
+        BumpOceanicAmplificationSerial();
+    }
+
+    if (OutReadbackSeconds)
+    {
+        *OutReadbackSeconds += AccumulatedSeconds;
+    }
+}
 #else
 void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete, double* OutReadbackSeconds)
+{
+    (void)bBlockUntilComplete;
+    (void)OutReadbackSeconds;
+}
+
+void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlockUntilComplete, double* OutReadbackSeconds)
 {
     (void)bBlockUntilComplete;
     (void)OutReadbackSeconds;
@@ -5958,10 +6718,350 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
     Cache.CachedDataSerial = OceanicAmplificationDataSerial;
 }
 
+void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() const
+{
+    FContinentalAmplificationGPUInputs& Cache = ContinentalAmplificationGPUInputs;
+
+    const int32 VertexCount = VertexAmplifiedElevation.Num();
+    if (VertexCount <= 0)
+    {
+        Cache.BaselineElevation.Reset();
+        Cache.RenderPositions.Reset();
+        Cache.PackedTerrainInfo.Reset();
+        Cache.ExemplarIndices.Reset();
+        Cache.ExemplarWeights.Reset();
+        Cache.RandomUVOffsets.Reset();
+        Cache.WrappedUVs.Reset();
+        Cache.CachedDataSerial = OceanicAmplificationDataSerial;
+        Cache.CachedTopologyVersion = TopologyVersion;
+        Cache.CachedSurfaceVersion = SurfaceDataVersion;
+        return;
+    }
+
+    const bool bUpToDate = (Cache.CachedDataSerial == OceanicAmplificationDataSerial &&
+        Cache.CachedTopologyVersion == TopologyVersion &&
+        Cache.CachedSurfaceVersion == SurfaceDataVersion &&
+        Cache.BaselineElevation.Num() == VertexCount);
+
+    if (bUpToDate)
+    {
+        return;
+    }
+
+    Cache.BaselineElevation.SetNum(VertexCount);
+    Cache.RenderPositions.SetNum(VertexCount);
+    Cache.PackedTerrainInfo.SetNum(VertexCount);
+    Cache.ExemplarIndices.SetNum(VertexCount);
+    Cache.ExemplarWeights.SetNum(VertexCount);
+    Cache.RandomUVOffsets.SetNum(VertexCount);
+    Cache.WrappedUVs.SetNum(VertexCount);
+
+    using namespace PlanetaryCreation::GPU;
+
+    FExemplarTextureArray& ExemplarArray = GetExemplarTextureArray();
+    if (!ExemplarArray.IsInitialized())
+    {
+        const_cast<UTectonicSimulationService*>(this)->InitializeGPUExemplarResources();
+    }
+
+    const TArray<FExemplarTextureArray::FExemplarInfo>& ExemplarInfo = ExemplarArray.GetExemplarInfo();
+
+    TArray<int32> AncientIndices;
+    TArray<int32> AndeanIndices;
+    TArray<int32> HimalayanIndices;
+
+    AncientIndices.Reserve(ExemplarInfo.Num());
+    AndeanIndices.Reserve(ExemplarInfo.Num());
+    HimalayanIndices.Reserve(ExemplarInfo.Num());
+
+    for (const FExemplarTextureArray::FExemplarInfo& Info : ExemplarInfo)
+    {
+        const int32 ArrayIndex = Info.ArrayIndex;
+        if (ArrayIndex < 0)
+        {
+            continue;
+        }
+
+        if (Info.Region.Equals(TEXT("Ancient"), ESearchCase::IgnoreCase))
+        {
+            AncientIndices.Add(ArrayIndex);
+        }
+        else if (Info.Region.Equals(TEXT("Andean"), ESearchCase::IgnoreCase))
+        {
+            AndeanIndices.Add(ArrayIndex);
+        }
+        else if (Info.Region.Equals(TEXT("Himalayan"), ESearchCase::IgnoreCase))
+        {
+            HimalayanIndices.Add(ArrayIndex);
+        }
+    }
+
+    const FTectonicSimulationParameters SimParams = GetParameters();
+
+    TMap<int32, const FTectonicPlate*> PlateLookup;
+    PlateLookup.Reserve(Plates.Num());
+    for (const FTectonicPlate& Plate : Plates)
+    {
+        PlateLookup.Add(Plate.PlateID, &Plate);
+    }
+
+    TMap<int32, const FPlateBoundarySummary*> BoundarySummaryCache;
+    BoundarySummaryCache.Reserve(Plates.Num());
+
+    auto GetSummaryForPlate = [&](int32 PlateID) -> const FPlateBoundarySummary*
+    {
+        if (PlateID == INDEX_NONE)
+        {
+            return nullptr;
+        }
+
+        if (const FPlateBoundarySummary** Cached = BoundarySummaryCache.Find(PlateID))
+        {
+            return *Cached;
+        }
+
+        const FPlateBoundarySummary* Summary = GetPlateBoundarySummary(PlateID);
+        BoundarySummaryCache.Add(PlateID, Summary);
+        return Summary;
+    };
+
+    auto DetermineTerrainType = [&](const FTectonicPlate& SourcePlate, const FVector3d& VertexPosition,
+        double BaseElevation, double OrogenyAge) -> EContinentalTerrainType
+    {
+        EBoundaryType NearestBoundaryType = EBoundaryType::Transform;
+        double MinDistanceToBoundary = TNumericLimits<double>::Max();
+        bool bIsSubduction = false;
+
+        const FPlateBoundarySummary* BoundarySummary = GetSummaryForPlate(SourcePlate.PlateID);
+        if (BoundarySummary)
+        {
+            for (const FPlateBoundarySummaryEntry& Entry : BoundarySummary->Boundaries)
+            {
+                if (!Entry.bHasRepresentative)
+                {
+                    continue;
+                }
+
+                const double Distance = FVector3d::Distance(VertexPosition, Entry.RepresentativePosition);
+                if (Distance < MinDistanceToBoundary)
+                {
+                    MinDistanceToBoundary = Distance;
+                    NearestBoundaryType = Entry.BoundaryType;
+                }
+
+                if (Entry.BoundaryType == EBoundaryType::Convergent && Entry.bIsSubduction)
+                {
+                    bIsSubduction = true;
+                }
+            }
+        }
+        else
+        {
+            for (const TPair<TPair<int32, int32>, FPlateBoundary>& BoundaryPair : Boundaries)
+            {
+                const TPair<int32, int32>& Key = BoundaryPair.Key;
+                const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+                if (Key.Key != SourcePlate.PlateID && Key.Value != SourcePlate.PlateID)
+                {
+                    continue;
+                }
+
+                if (Boundary.SharedEdgeVertices.Num() > 0)
+                {
+                    const int32 RepresentativeVertex = Boundary.SharedEdgeVertices[0];
+                    if (RenderVertices.IsValidIndex(RepresentativeVertex))
+                    {
+                        const double Distance = FVector3d::Distance(VertexPosition, RenderVertices[RepresentativeVertex]);
+                        if (Distance < MinDistanceToBoundary)
+                        {
+                            MinDistanceToBoundary = Distance;
+                            NearestBoundaryType = Boundary.BoundaryType;
+                        }
+                    }
+                }
+
+                if (Boundary.BoundaryType == EBoundaryType::Convergent)
+                {
+                    const FTectonicPlate* PlateA = PlateLookup.FindRef(Key.Key);
+                    const FTectonicPlate* PlateB = PlateLookup.FindRef(Key.Value);
+                    if (PlateA && PlateB && PlateA->CrustType != PlateB->CrustType)
+                    {
+                        bIsSubduction = true;
+                    }
+                }
+            }
+        }
+
+        if (NearestBoundaryType != EBoundaryType::Convergent && BaseElevation < 500.0)
+        {
+            return EContinentalTerrainType::Plain;
+        }
+
+        if (OrogenyAge > 100.0)
+        {
+            return EContinentalTerrainType::OldMountains;
+        }
+
+        if (bIsSubduction)
+        {
+            return EContinentalTerrainType::AndeanMountains;
+        }
+
+        return EContinentalTerrainType::HimalayanMountains;
+    };
+
+    auto GetExemplarListForTerrain = [&](EContinentalTerrainType TerrainType) -> const TArray<int32>*
+    {
+        switch (TerrainType)
+        {
+        case EContinentalTerrainType::AndeanMountains:
+            return &AndeanIndices;
+        case EContinentalTerrainType::HimalayanMountains:
+            return &HimalayanIndices;
+        case EContinentalTerrainType::OldMountains:
+        case EContinentalTerrainType::Plain:
+        default:
+            return &AncientIndices;
+        }
+    };
+
+    const double PlanetRadius = Parameters.PlanetRadius;
+    const bool bHasBoundaries = Boundaries.Num() > 0;
+
+    constexpr uint32 MaxExemplarBlendCount = 3;
+    const uint32 InvalidIndex = MAX_uint32;
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const FVector3d& VertexPosition = RenderVertices[VertexIdx];
+        Cache.RenderPositions[VertexIdx] = FVector3f(VertexPosition);
+        Cache.BaselineElevation[VertexIdx] = static_cast<float>(VertexAmplifiedElevation[VertexIdx]);
+
+        uint32 PackedInfo = 0;
+        FUintVector4 PackedIndices(InvalidIndex, InvalidIndex, InvalidIndex, InvalidIndex);
+        FVector4f PackedWeights(0.0f, 0.0f, 0.0f, 0.0f);
+        FVector2f RandomOffset(0.0f, 0.0f);
+        FVector2d RandomOffsetDouble(0.0, 0.0);
+
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        const FTectonicPlate* PlatePtr = PlateLookup.FindRef(PlateID);
+
+        const bool bIsContinental = PlatePtr && PlatePtr->CrustType == ECrustType::Continental;
+        if (!bIsContinental)
+        {
+            Cache.PackedTerrainInfo[VertexIdx] = PackedInfo;
+            Cache.ExemplarIndices[VertexIdx] = PackedIndices;
+            Cache.ExemplarWeights[VertexIdx] = PackedWeights;
+            Cache.RandomUVOffsets[VertexIdx] = RandomOffset;
+            Cache.WrappedUVs[VertexIdx] = FVector2f::ZeroVector;
+            continue;
+        }
+
+        const double BaseElevation = VertexAmplifiedElevation[VertexIdx];
+        const double OrogenyAge = VertexCrustAge.IsValidIndex(VertexIdx) ? VertexCrustAge[VertexIdx] : 0.0;
+
+        EContinentalTerrainType TerrainType = EContinentalTerrainType::Plain;
+
+        if (bHasBoundaries)
+        {
+            TerrainType = DetermineTerrainType(*PlatePtr, VertexPosition, BaseElevation, OrogenyAge);
+        }
+
+        const TArray<int32>* ExemplarListPtr = GetExemplarListForTerrain(TerrainType);
+        const TArray<int32>& ExemplarList = ExemplarListPtr ? *ExemplarListPtr : AncientIndices;
+
+        const uint32 ExemplarCount = FMath::Min<uint32>(MaxExemplarBlendCount, static_cast<uint32>(ExemplarList.Num()));
+        if (ExemplarCount > 0)
+        {
+            float TotalWeight = 0.0f;
+            float Weights[MaxExemplarBlendCount] = { 0.0f, 0.0f, 0.0f };
+            uint32 Indices[MaxExemplarBlendCount] = { InvalidIndex, InvalidIndex, InvalidIndex };
+
+            for (uint32 ExemplarIdx = 0; ExemplarIdx < ExemplarCount; ++ExemplarIdx)
+            {
+                const int32 AtlasIndex = ExemplarList[ExemplarIdx];
+                if (AtlasIndex < 0)
+                {
+                    continue;
+                }
+
+                const float Weight = 1.0f / static_cast<float>(ExemplarIdx + 1);
+                Weights[ExemplarIdx] = Weight;
+                Indices[ExemplarIdx] = static_cast<uint32>(AtlasIndex);
+                TotalWeight += Weight;
+            }
+
+            PackedIndices = FUintVector4(Indices[0], Indices[1], Indices[2], InvalidIndex);
+            PackedWeights = FVector4f(Weights[0], Weights[1], Weights[2], TotalWeight);
+
+            RandomOffsetDouble = ComputeContinentalRandomOffset(VertexPosition, SimParams.Seed);
+            RandomOffset = FVector2f(static_cast<float>(RandomOffsetDouble.X), static_cast<float>(RandomOffsetDouble.Y));
+
+            PackedInfo = static_cast<uint32>(TerrainType) | (ExemplarCount << 8);
+        }
+        else
+        {
+            PackedInfo = static_cast<uint32>(TerrainType);
+        }
+
+        Cache.PackedTerrainInfo[VertexIdx] = PackedInfo;
+        Cache.ExemplarIndices[VertexIdx] = PackedIndices;
+        Cache.ExemplarWeights[VertexIdx] = PackedWeights;
+        Cache.RandomUVOffsets[VertexIdx] = RandomOffset;
+
+        const FVector3d NormalizedPos = VertexPosition.GetSafeNormal();
+        double WrappedU = 0.5 + (FMath::Atan2(NormalizedPos.Y, NormalizedPos.X) / (2.0 * PI)) + RandomOffsetDouble.X;
+        double WrappedV = 0.5 - (FMath::Asin(NormalizedPos.Z) / PI) + RandomOffsetDouble.Y;
+        WrappedU = FMath::Frac(WrappedU);
+        WrappedV = FMath::Frac(WrappedV);
+        if (WrappedU < 0.0)
+        {
+            WrappedU += 1.0;
+        }
+        if (WrappedV < 0.0)
+        {
+            WrappedV += 1.0;
+        }
+        Cache.WrappedUVs[VertexIdx] = FVector2f(static_cast<float>(WrappedU), static_cast<float>(WrappedV));
+
+#if UE_BUILD_DEVELOPMENT
+        static int32 DebugPackedLog = 0;
+        const bool bLogVertex = (VertexIdx == 2 || VertexIdx == 9 || VertexIdx == 22 || VertexIdx == 25 || VertexIdx == 26 || VertexIdx == 154003);
+        if ((DebugPackedLog < 5 || bLogVertex) && ((PackedInfo >> 8u) & 0xFFu) > 0u)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalGPUInputs] Vtx=%d Terrain=%u Count=%u Indices={%u,%u,%u} Weights={%.3f,%.3f,%.3f} Offset=(%.3f,%.3f) Baseline=%.2f"),
+                VertexIdx,
+                PackedInfo & 0xFFu,
+                (PackedInfo >> 8u) & 0xFFu,
+                PackedIndices.X,
+                PackedIndices.Y,
+                PackedIndices.Z,
+                PackedWeights.X,
+                PackedWeights.Y,
+                PackedWeights.Z,
+                RandomOffset.X,
+                RandomOffset.Y,
+                Cache.BaselineElevation[VertexIdx]);
+            if (!bLogVertex)
+            {
+                ++DebugPackedLog;
+            }
+        }
+#endif
+    }
+
+    Cache.CachedDataSerial = OceanicAmplificationDataSerial;
+    Cache.CachedTopologyVersion = TopologyVersion;
+    Cache.CachedSurfaceVersion = SurfaceDataVersion;
+}
+
 void UTectonicSimulationService::BumpOceanicAmplificationSerial()
 {
     ++OceanicAmplificationDataSerial;
     OceanicAmplificationFloatInputs.CachedDataSerial = 0;
+    ContinentalAmplificationGPUInputs.CachedDataSerial = 0;
 }
 #if UE_BUILD_DEVELOPMENT
 void UTectonicSimulationService::RunTerraneMeshSurgerySpike()

@@ -177,5 +177,15 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     }
 
     const float FineDetail = 20.0f * GradientNoise;
-    OutAmplified[Index] = Baseline + FaultDetail + FineDetail;
+
+    float Amplified = Baseline + FaultDetail + FineDetail;
+
+    const float VarianceScale = 1.5f;
+    Amplified = Baseline + (Amplified - Baseline) * VarianceScale;
+
+    const float3 ExtraNoiseOffset = float3(23.17f, 42.73f, 7.91f);
+    const float ExtraVarianceNoise = 150.0f * PerlinNoise3D(Position * 8.0f + ExtraNoiseOffset);
+    Amplified += ExtraVarianceNoise;
+
+    OutAmplified[Index] = Amplified;
 }

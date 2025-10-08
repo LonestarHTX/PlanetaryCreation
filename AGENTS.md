@@ -14,6 +14,13 @@
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
 - Run Milestone 3 automation suite: `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
 - GPU preview parity suites (Milestone 6): launch from Windows PowerShell via `Automation RunTests PlanetaryCreation.Milestone6.GPU`.
+- When driving Windows commandlets from WSL, invoke the editor commandlet exactly like this (quotes and casing matter):
+  ```
+  "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
+    "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
+    -ExecCmds="Automation RunTests PlanetaryCreation.Milestone6.GPU.ContinentalParity; Quit" \
+    -unattended -nop4 -nosplash
+  ```
 
 ## Coding Style & Naming Conventions
 - Follow Unreal C++ style: 4-space indentation, no tabs.

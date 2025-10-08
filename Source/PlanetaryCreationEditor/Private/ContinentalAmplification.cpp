@@ -23,13 +23,7 @@
  * - Andean: Subduction orogeny (volcanic arc, active mountain building)
  * - Himalayan: Continental collision orogeny (fold/thrust belt, extreme uplift)
  */
-enum class ETerrainType : uint8
-{
-    Plain,              // Low elevation, no orogeny
-    OldMountains,       // Orogeny age >100 My (eroded ranges)
-    AndeanMountains,    // Subduction orogeny (volcanic arc)
-    HimalayanMountains  // Continental collision orogeny (fold/thrust belt)
-};
+using ETerrainType = EContinentalTerrainType;
 
 /**
  * Exemplar metadata loaded from ExemplarLibrary.json
@@ -58,6 +52,24 @@ struct FExemplarMetadata
  */
 static TArray<FExemplarMetadata> ExemplarLibrary;
 static bool bExemplarLibraryLoaded = false;
+
+#if UE_BUILD_DEVELOPMENT
+static thread_local FContinentalAmplificationDebugInfo* GContinentalAmplificationDebugInfo = nullptr;
+
+void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo* DebugInfo)
+{
+    GContinentalAmplificationDebugInfo = DebugInfo;
+}
+#endif
+
+FVector2d ComputeContinentalRandomOffset(const FVector3d& Position, int32 Seed)
+{
+    const int32 RandomSeed = Seed + static_cast<int32>(Position.X * 1000.0 + Position.Y * 1000.0);
+    FRandomStream RandomStream(RandomSeed);
+    const double OffsetU = RandomStream.FRand() * 0.1;
+    const double OffsetV = RandomStream.FRand() * 0.1;
+    return FVector2d(OffsetU, OffsetV);
+}
 
 /**
  * Load exemplar library JSON from Content/PlanetaryCreation/Exemplars/ExemplarLibrary.json
@@ -187,6 +199,7 @@ ETerrainType ClassifyTerrainType(
     double BaseElevation_m,
     const TArray<FTectonicPlate>& Plates,
     const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
+    const FPlateBoundarySummary* BoundarySummary,
     double OrogenyAge_My,
     EBoundaryType NearestBoundaryType)
 {
@@ -215,25 +228,39 @@ ETerrainType ClassifyTerrainType(
     // Recent subduction → Andean (volcanic arc)
     // Detect subduction by checking if one plate is oceanic, one continental
     bool bIsSubduction = false;
-    for (const auto& BoundaryPair : Boundaries)
+    if (BoundarySummary)
     {
-        const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
-        const FPlateBoundary& Boundary = BoundaryPair.Value;
-
-        if (Boundary.BoundaryType != EBoundaryType::Convergent)
-            continue;
-
-        if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
-            continue;
-
-        // Check if plates have different crust types (subduction)
-        const FTectonicPlate& Plate1 = Plates[BoundaryKey.Key];
-        const FTectonicPlate& Plate2 = Plates[BoundaryKey.Value];
-
-        if (Plate1.CrustType != Plate2.CrustType)
+        for (const FPlateBoundarySummaryEntry& Entry : BoundarySummary->Boundaries)
         {
-            bIsSubduction = true;
-            break;
+            if (Entry.BoundaryType == EBoundaryType::Convergent && Entry.bIsSubduction)
+            {
+                bIsSubduction = true;
+                break;
+            }
+        }
+    }
+    else
+    {
+        for (const auto& BoundaryPair : Boundaries)
+        {
+            const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
+            const FPlateBoundary& Boundary = BoundaryPair.Value;
+
+            if (Boundary.BoundaryType != EBoundaryType::Convergent)
+                continue;
+
+            if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
+                continue;
+
+            // Check if plates have different crust types (subduction)
+            const FTectonicPlate& Plate1 = Plates[BoundaryKey.Key];
+            const FTectonicPlate& Plate2 = Plates[BoundaryKey.Value];
+
+            if (Plate1.CrustType != Plate2.CrustType)
+            {
+                bIsSubduction = true;
+                break;
+            }
         }
     }
 
@@ -312,6 +339,147 @@ TArray<FExemplarMetadata*> GetExemplarsForTerrainType(ETerrainType TerrainType)
     return MatchingExemplars;
 }
 
+double BlendContinentalExemplars(
+    const FVector3d& Position,
+    double BaseElevation_m,
+    const TArray<FExemplarMetadata*>& MatchingExemplars,
+    const FString& ProjectContentDir,
+    int32 Seed)
+{
+    double AmplifiedElevation = BaseElevation_m;
+
+    if (MatchingExemplars.Num() == 0)
+    {
+        return AmplifiedElevation;
+    }
+
+    for (FExemplarMetadata* Exemplar : MatchingExemplars)
+    {
+        if (Exemplar && !Exemplar->bDataLoaded)
+        {
+            LoadExemplarHeightData(*Exemplar, ProjectContentDir);
+        }
+    }
+
+    const int32 RandomSeedValue = Seed + static_cast<int32>(Position.X * 1000.0 + Position.Y * 1000.0);
+    FVector2d ComputedOffset = ComputeContinentalRandomOffset(Position, Seed);
+    double RandomOffsetU = ComputedOffset.X;
+    double RandomOffsetV = ComputedOffset.Y;
+
+#if UE_BUILD_DEVELOPMENT
+    const bool bOverrideRandomOffset = GContinentalAmplificationDebugInfo && GContinentalAmplificationDebugInfo->bUseOverrideRandomOffset;
+    if (bOverrideRandomOffset)
+    {
+        RandomOffsetU = GContinentalAmplificationDebugInfo->OverrideRandomOffsetU;
+        RandomOffsetV = GContinentalAmplificationDebugInfo->OverrideRandomOffsetV;
+        if (GContinentalAmplificationDebugInfo)
+        {
+            GContinentalAmplificationDebugInfo->OverrideRandomSeed = RandomSeedValue;
+        }
+    }
+
+    if (GContinentalAmplificationDebugInfo)
+    {
+        GContinentalAmplificationDebugInfo->RandomOffsetU = RandomOffsetU;
+        GContinentalAmplificationDebugInfo->RandomOffsetV = RandomOffsetV;
+        GContinentalAmplificationDebugInfo->RandomSeed = RandomSeedValue;
+    }
+#endif
+
+    const FVector3d NormalizedPos = Position.GetSafeNormal();
+    const double U = 0.5 + (FMath::Atan2(NormalizedPos.Y, NormalizedPos.X) / (2.0 * PI)) + RandomOffsetU;
+    const double V = 0.5 - (FMath::Asin(NormalizedPos.Z) / PI) + RandomOffsetV;
+
+#if UE_BUILD_DEVELOPMENT
+    if (GContinentalAmplificationDebugInfo)
+    {
+        GContinentalAmplificationDebugInfo->UValue = U;
+        GContinentalAmplificationDebugInfo->VValue = V;
+    }
+#endif
+
+    double BlendedHeight = 0.0;
+    double TotalWeight = 0.0;
+    const int32 MaxExemplarsToBlend = FMath::Min(3, MatchingExemplars.Num());
+
+#if UE_BUILD_DEVELOPMENT
+    if (GContinentalAmplificationDebugInfo)
+    {
+        GContinentalAmplificationDebugInfo->ExemplarCount = static_cast<uint32>(MaxExemplarsToBlend);
+        for (int32 DebugIdx = 0; DebugIdx < 3; ++DebugIdx)
+        {
+            GContinentalAmplificationDebugInfo->ExemplarIndices[DebugIdx] = MAX_uint32;
+            GContinentalAmplificationDebugInfo->SampleHeights[DebugIdx] = 0.0;
+            GContinentalAmplificationDebugInfo->Weights[DebugIdx] = 0.0;
+        }
+    }
+#endif
+
+    for (int32 ExemplarIndex = 0; ExemplarIndex < MaxExemplarsToBlend; ++ExemplarIndex)
+    {
+        FExemplarMetadata* Exemplar = MatchingExemplars[ExemplarIndex];
+        if (!Exemplar || !Exemplar->bDataLoaded)
+        {
+            continue;
+        }
+
+        const double SampledHeight = SampleExemplarHeight(*Exemplar, U, V);
+        const double Weight = 1.0 / (ExemplarIndex + 1.0);
+
+        BlendedHeight += SampledHeight * Weight;
+        TotalWeight += Weight;
+
+#if UE_BUILD_DEVELOPMENT
+        if (GContinentalAmplificationDebugInfo)
+        {
+            const int32 LibraryIndex = static_cast<int32>(Exemplar - ExemplarLibrary.GetData());
+            if (LibraryIndex >= 0)
+            {
+                GContinentalAmplificationDebugInfo->ExemplarIndices[ExemplarIndex] = static_cast<uint32>(LibraryIndex);
+            }
+            GContinentalAmplificationDebugInfo->SampleHeights[ExemplarIndex] = SampledHeight;
+            GContinentalAmplificationDebugInfo->Weights[ExemplarIndex] = Weight;
+        }
+#endif
+    }
+
+    if (TotalWeight > 0.0)
+    {
+        BlendedHeight /= TotalWeight;
+    }
+
+    if (MatchingExemplars.Num() > 0 && MatchingExemplars[0] && MatchingExemplars[0]->bDataLoaded)
+    {
+        const FExemplarMetadata& RefExemplar = *MatchingExemplars[0];
+        const double DetailScale = (BaseElevation_m > 1000.0) ? (BaseElevation_m / RefExemplar.ElevationMean_m) : 0.5;
+        const double Detail = (BlendedHeight - RefExemplar.ElevationMean_m) * DetailScale;
+        AmplifiedElevation += Detail;
+
+#if UE_BUILD_DEVELOPMENT
+        if (GContinentalAmplificationDebugInfo)
+        {
+            const int32 LibraryIndex = static_cast<int32>(&RefExemplar - ExemplarLibrary.GetData());
+            if (LibraryIndex >= 0)
+            {
+                GContinentalAmplificationDebugInfo->ExemplarIndices[0] = static_cast<uint32>(LibraryIndex);
+            }
+            GContinentalAmplificationDebugInfo->ReferenceMean = RefExemplar.ElevationMean_m;
+        }
+#endif
+    }
+
+#if UE_BUILD_DEVELOPMENT
+    if (GContinentalAmplificationDebugInfo)
+    {
+        GContinentalAmplificationDebugInfo->TotalWeight = TotalWeight;
+        GContinentalAmplificationDebugInfo->BlendedHeight = BlendedHeight;
+        GContinentalAmplificationDebugInfo->CpuResult = AmplifiedElevation;
+    }
+#endif
+
+    return AmplifiedElevation;
+}
+
 /**
  * Milestone 6 Task 2.2: Compute continental amplification for a single vertex.
  *
@@ -328,6 +496,7 @@ double ComputeContinentalAmplification(
     double BaseElevation_m,
     const TArray<FTectonicPlate>& Plates,
     const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
+    const FPlateBoundarySummary* BoundarySummary,
     double OrogenyAge_My,
     EBoundaryType NearestBoundaryType,
     const FString& ProjectContentDir,
@@ -362,74 +531,15 @@ double ComputeContinentalAmplification(
 
     // Classify terrain type
     const ETerrainType TerrainType = ClassifyTerrainType(
-        Position, PlateID, BaseElevation_m, Plates, Boundaries, OrogenyAge_My, NearestBoundaryType);
+        Position, PlateID, BaseElevation_m, Plates, Boundaries, BoundarySummary, OrogenyAge_My, NearestBoundaryType);
 
-    // Get matching exemplars
-    TArray<FExemplarMetadata*> MatchingExemplars = GetExemplarsForTerrainType(TerrainType);
-
-    if (MatchingExemplars.Num() == 0)
+#if UE_BUILD_DEVELOPMENT
+    if (GContinentalAmplificationDebugInfo)
     {
-        // No matching exemplars, return base elevation
-        return AmplifiedElevation;
+        GContinentalAmplificationDebugInfo->TerrainType = TerrainType;
     }
+#endif
 
-    // Load exemplar height data (lazy loading)
-    for (FExemplarMetadata* Exemplar : MatchingExemplars)
-    {
-        if (!Exemplar->bDataLoaded)
-        {
-            LoadExemplarHeightData(*Exemplar, ProjectContentDir);
-        }
-    }
-
-    // Sample and blend heightfields
-    // Use position as UV coordinates (simple projection to avoid repetition)
-    // Add small random offset per-vertex using seed (repetition mitigation)
-    FRandomStream RandomStream(Seed + static_cast<int32>(Position.X * 1000.0 + Position.Y * 1000.0));
-    const double RandomOffsetU = RandomStream.FRand() * 0.1;
-    const double RandomOffsetV = RandomStream.FRand() * 0.1;
-
-    // Simple spherical UV mapping
-    const FVector3d NormalizedPos = Position.GetSafeNormal();
-    const double U = 0.5 + (FMath::Atan2(NormalizedPos.Y, NormalizedPos.X) / (2.0 * PI)) + RandomOffsetU;
-    const double V = 0.5 - (FMath::Asin(NormalizedPos.Z) / PI) + RandomOffsetV;
-
-    // Blend multiple exemplars
-    double BlendedHeight = 0.0;
-    double TotalWeight = 0.0;
-    const int32 MaxExemplarsToBlend = FMath::Min(3, MatchingExemplars.Num());
-
-    for (int32 i = 0; i < MaxExemplarsToBlend; ++i)
-    {
-        FExemplarMetadata* Exemplar = MatchingExemplars[i];
-        if (!Exemplar->bDataLoaded)
-            continue;
-
-        // Sample heightfield
-        const double SampledHeight = SampleExemplarHeight(*Exemplar, U, V);
-
-        // Weight by inverse index (first exemplar has highest weight)
-        const double Weight = 1.0 / (i + 1.0);
-
-        BlendedHeight += SampledHeight * Weight;
-        TotalWeight += Weight;
-    }
-
-    if (TotalWeight > 0.0)
-        BlendedHeight /= TotalWeight;
-
-    // Scale blended detail to match base elevation range
-    // Use exemplar's elevation range as reference
-    if (MatchingExemplars.Num() > 0 && MatchingExemplars[0]->bDataLoaded)
-    {
-        const FExemplarMetadata& RefExemplar = *MatchingExemplars[0];
-        const double ExemplarRange = RefExemplar.ElevationMax_m - RefExemplar.ElevationMin_m;
-        const double DetailScale = (BaseElevation_m > 1000.0) ? (BaseElevation_m / RefExemplar.ElevationMean_m) : 0.5;
-
-        // Add scaled detail to base elevation
-        const double Detail = (BlendedHeight - RefExemplar.ElevationMean_m) * DetailScale;
-        AmplifiedElevation += Detail;
-    }
-
-    return AmplifiedElevation;
+    const TArray<FExemplarMetadata*> MatchingExemplars = GetExemplarsForTerrainType(TerrainType);
+    return BlendContinentalExemplars(Position, BaseElevation_m, MatchingExemplars, ProjectContentDir, Seed);
 }

@@ -64,6 +64,11 @@ namespace PlanetaryCreation::GPU
 			float ElevationMax_m;
 			float ElevationMean_m;
 			int32 ArrayIndex;  // Index in Texture2DArray
+#if UE_BUILD_DEVELOPMENT
+			TArray<uint16> DebugHeightData;
+			int32 DebugWidth = 0;
+			int32 DebugHeight = 0;
+#endif
 		};
 
 		const TArray<FExemplarInfo>& GetExemplarInfo() const { return ExemplarInfo; }

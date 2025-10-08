@@ -2,6 +2,8 @@
 
 #include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
+#include "ExemplarTextureArray.h"
+#include "Engine/Texture2DArray.h"
 
 #include "GlobalShader.h"
 #include "RenderGraphBuilder.h"
@@ -75,6 +77,35 @@ namespace PlanetaryCreation::GPU
 
         IMPLEMENT_GLOBAL_SHADER(FOceanicAmplificationPreviewCS, "/Plugin/PlanetaryCreation/Private/OceanicAmplificationPreview.usf", "MainCS", SF_Compute);
 
+        class FContinentalAmplificationCS : public FGlobalShader
+        {
+        public:
+            DECLARE_GLOBAL_SHADER(FContinentalAmplificationCS);
+            SHADER_USE_PARAMETER_STRUCT(FContinentalAmplificationCS, FGlobalShader);
+
+            BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+                SHADER_PARAMETER(uint32, VertexCount)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float>, InBaseline)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector3f>, InRenderPosition)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint32>, InPackedTerrainInfo)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FUintVector4>, InExemplarIndices)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector4f>, InExemplarWeights)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector2f>, InRandomUV)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector2f>, InWrappedUV)
+                SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector4f>, InExemplarMetadata)
+                SHADER_PARAMETER_RDG_TEXTURE(Texture2DArray<float>, ExemplarTextures)
+                SHADER_PARAMETER_SAMPLER(SamplerState, ExemplarSampler)
+                SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float>, OutAmplified)
+            END_SHADER_PARAMETER_STRUCT()
+
+            static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+            {
+                return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+            }
+        };
+
+        IMPLEMENT_GLOBAL_SHADER(FContinentalAmplificationCS, "/Plugin/PlanetaryCreation/Private/ContinentalAmplification.usf", "MainCS", SF_Compute);
+
         static bool SupportsGPUAmplification()
         {
             return IsFeatureLevelSupported(GMaxRHIShaderPlatform, ERHIFeatureLevel::SM5);
@@ -108,18 +139,27 @@ namespace PlanetaryCreation::GPU
                     U += 1.0f;
                 }
 
-                const float PixelPosition = U * static_cast<float>(TextureWidth);
-                const int32 PixelX = FMath::Clamp(FMath::FloorToInt(PixelPosition), 0, LastColumn);
+                const float ColumnPosition = U * static_cast<float>(TextureWidth);
+                const float DistanceToLeft = FMath::Abs(ColumnPosition);
+                const float DistanceToRight = FMath::Abs(static_cast<float>(LastColumn) - ColumnPosition);
 
-                if (PixelX <= 1)
+                // Treat anything within ~1 pixel of a seam column as coverage.
+                constexpr float SeamThreshold = 1.5f;
+                const bool bNearLeft = DistanceToLeft <= SeamThreshold;
+                const bool bNearRight = DistanceToRight <= SeamThreshold;
+
+                if (!bNearLeft && !bNearRight)
                 {
-                    ++OutLeftCoverage;
-                    ++OutRightCoverage;
+                    continue;
                 }
-                else if (PixelX >= (LastColumn - 1))
+
+                if (bNearLeft && (!bNearRight || DistanceToLeft <= DistanceToRight))
+                {
+                    ++OutLeftCoverage;
+                }
+                else
                 {
                     ++OutRightCoverage;
-                    ++OutLeftCoverage;
                 }
             }
         }
@@ -252,8 +292,154 @@ namespace PlanetaryCreation::GPU
 
     bool ApplyContinentalAmplificationGPU(UTectonicSimulationService& Service)
     {
-        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[StageB][GPU] Continental amplification GPU path not yet implemented. Falling back to CPU."));
-        return false;
+        if (!SupportsGPUAmplification())
+        {
+            return false;
+        }
+
+        const FContinentalAmplificationGPUInputs& Inputs = Service.GetContinentalAmplificationGPUInputs();
+        const int32 VertexCount = Inputs.BaselineElevation.Num();
+        if (VertexCount == 0)
+        {
+            return false;
+        }
+
+        FExemplarTextureArray& ExemplarArray = GetExemplarTextureArray();
+        if (!ExemplarArray.IsInitialized())
+        {
+            Service.InitializeGPUExemplarResources();
+        }
+
+        if (!ExemplarArray.IsInitialized())
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ContinentalGPU] Exemplar texture array unavailable; falling back to CPU."));
+            return false;
+        }
+
+        UTexture2DArray* TextureArray = ExemplarArray.GetTextureArray();
+        if (!TextureArray || !TextureArray->GetResource())
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ContinentalGPU] Texture2DArray resource is invalid."));
+            return false;
+        }
+
+        const TArray<float>* BaselineArray = &Inputs.BaselineElevation;
+        const TArray<FVector3f>* PositionArray = &Inputs.RenderPositions;
+        const TArray<uint32>* PackedInfoArray = &Inputs.PackedTerrainInfo;
+        const TArray<FUintVector4>* ExemplarIndexArray = &Inputs.ExemplarIndices;
+        const TArray<FVector4f>* ExemplarWeightArray = &Inputs.ExemplarWeights;
+        const TArray<FVector2f>* RandomUVArray = &Inputs.RandomUVOffsets;
+        const TArray<FVector2f>* WrappedUVArray = &Inputs.WrappedUVs;
+
+        if (BaselineArray->Num() != VertexCount || PositionArray->Num() != VertexCount ||
+            PackedInfoArray->Num() != VertexCount || ExemplarIndexArray->Num() != VertexCount ||
+            ExemplarWeightArray->Num() != VertexCount || RandomUVArray->Num() != VertexCount ||
+            WrappedUVArray->Num() != VertexCount)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ContinentalGPU] Input array size mismatch (baseline=%d position=%d packed=%d indices=%d weights=%d uv=%d expected=%d)"),
+                BaselineArray->Num(), PositionArray->Num(), PackedInfoArray->Num(),
+                ExemplarIndexArray->Num(), ExemplarWeightArray->Num(), RandomUVArray->Num(), VertexCount);
+            return false;
+        }
+
+        const int32 ExemplarCount = ExemplarArray.GetExemplarCount();
+        if (ExemplarCount == 0)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ContinentalGPU] No exemplar layers available for GPU amplification."));
+            return false;
+        }
+
+        TSharedRef<TArray<FVector4f>, ESPMode::ThreadSafe> ExemplarMetadataRef = MakeShared<TArray<FVector4f>, ESPMode::ThreadSafe>();
+        ExemplarMetadataRef->SetNumZeroed(ExemplarCount);
+        for (const FExemplarTextureArray::FExemplarInfo& Info : ExemplarArray.GetExemplarInfo())
+        {
+            if (ExemplarMetadataRef->IsValidIndex(Info.ArrayIndex))
+            {
+                (*ExemplarMetadataRef)[Info.ArrayIndex] = FVector4f(Info.ElevationMin_m, Info.ElevationMax_m, Info.ElevationMean_m, 0.0f);
+            }
+        }
+
+        const FTextureRHIRef TextureRHI = TextureArray->GetResource()->TextureRHI;
+        if (!TextureRHI.IsValid())
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[ContinentalGPU] Texture RHI is invalid."));
+            return false;
+        }
+
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback = MakeShared<FRHIGPUBufferReadback, ESPMode::ThreadSafe>(TEXT("PlanetaryCreation.ContinentalGPU.Readback"));
+
+        ENQUEUE_RENDER_COMMAND(ContinentalAmplificationGPU)(
+            [BaselineArray, PositionArray, PackedInfoArray, ExemplarIndexArray, ExemplarWeightArray,
+             RandomUVArray, WrappedUVArray, ExemplarMetadataRef, TextureRHI, Readback, VertexCount](FRHICommandListImmediate& RHICmdList)
+            {
+                FRDGBuilder GraphBuilder(RHICmdList);
+
+                FRDGBufferRef BaselineBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.Baseline"), *BaselineArray);
+                FRDGBufferRef PositionBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.Position"), *PositionArray);
+                FRDGBufferRef PackedInfoBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.PackedInfo"), *PackedInfoArray);
+                FRDGBufferRef IndexBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.Indices"), *ExemplarIndexArray);
+                FRDGBufferRef WeightBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.Weights"), *ExemplarWeightArray);
+                FRDGBufferRef RandomUVBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.RandomUV"), *RandomUVArray);
+                FRDGBufferRef WrappedUVBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.WrappedUV"), *WrappedUVArray);
+                FRDGBufferRef MetadataBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.ContinentalGPU.Metadata"), *ExemplarMetadataRef);
+                FRDGBufferRef OutputBuffer = GraphBuilder.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(sizeof(float), VertexCount), TEXT("PlanetaryCreation.ContinentalGPU.Output"));
+
+                FRDGTextureRef ExemplarTexture = GraphBuilder.RegisterExternalTexture(CreateRenderTarget(TextureRHI, TEXT("PlanetaryCreation.ContinentalGPU.ExemplarArray")));
+
+                FContinentalAmplificationCS::FParameters* Parameters = GraphBuilder.AllocParameters<FContinentalAmplificationCS::FParameters>();
+                Parameters->VertexCount = static_cast<uint32>(VertexCount);
+                Parameters->InBaseline = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(BaselineBuffer));
+                Parameters->InRenderPosition = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(PositionBuffer));
+                Parameters->InPackedTerrainInfo = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(PackedInfoBuffer));
+                Parameters->InExemplarIndices = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(IndexBuffer));
+                Parameters->InExemplarWeights = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(WeightBuffer));
+                Parameters->InRandomUV = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(RandomUVBuffer));
+                Parameters->InWrappedUV = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(WrappedUVBuffer));
+                Parameters->InExemplarMetadata = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(MetadataBuffer));
+                Parameters->ExemplarTextures = ExemplarTexture;
+                Parameters->ExemplarSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI();
+                Parameters->OutAmplified = GraphBuilder.CreateUAV(FRDGBufferUAVDesc(OutputBuffer));
+
+                const int32 GroupCountX = FMath::DivideAndRoundUp(VertexCount, 64);
+
+                GraphBuilder.AddPass(
+                    RDG_EVENT_NAME("PlanetaryCreation::ContinentalAmplificationGPU"),
+                    Parameters,
+                    ERDGPassFlags::Compute,
+                    [Parameters, GroupCountX](FRHICommandList& RHICmdListInner)
+                    {
+                        TShaderMapRef<FContinentalAmplificationCS> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+                        FComputeShaderUtils::Dispatch(RHICmdListInner, ComputeShader, *Parameters, FIntVector(GroupCountX, 1, 1));
+                    });
+
+                TRefCountPtr<FRDGPooledBuffer> OutputPooledBuffer;
+                GraphBuilder.QueueBufferExtraction(OutputBuffer, &OutputPooledBuffer);
+                GraphBuilder.Execute();
+
+                if (!OutputPooledBuffer.IsValid())
+                {
+                    UE_LOG(LogPlanetaryCreation, Error, TEXT("[ContinentalGPU] Output buffer extraction failed"));
+                    return;
+                }
+
+                FRHIBuffer* OutputRHI = OutputPooledBuffer->GetRHI();
+                if (!OutputRHI)
+                {
+                    UE_LOG(LogPlanetaryCreation, Error, TEXT("[ContinentalGPU] Failed to retrieve output buffer"));
+                    return;
+                }
+
+                if (Readback.IsValid())
+                {
+                    Readback->EnqueueCopy(RHICmdList, OutputRHI, VertexCount * sizeof(float));
+                }
+            });
+
+        FlushRenderingCommands();
+
+        Service.EnqueueContinentalGPUJob(Readback, VertexCount);
+
+        return true;
     }
 
     bool ApplyOceanicAmplificationGPUPreview(UTectonicSimulationService& Service, FTextureRHIRef& OutHeightTexture, FIntPoint TextureSize)
