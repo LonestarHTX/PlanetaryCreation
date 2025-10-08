@@ -5732,95 +5732,30 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized"));
 
     const FString ProjectContentDir = FPaths::ProjectContentDir();
-
-    TMap<int32, const FPlateBoundarySummary*> LocalSummaryCache;
-    LocalSummaryCache.Reserve(Plates.Num());
+    RefreshContinentalAmplificationCache();
+    const FTectonicSimulationParameters SimParams = GetParameters();
 
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
-        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
         const double BaseElevation_m = VertexAmplifiedElevation[VertexIdx]; // Use oceanic-amplified elevation as base
-        const double CrustAge_My = VertexCrustAge[VertexIdx];
+        const FContinentalAmplificationCacheEntry CacheEntry =
+            ContinentalAmplificationCacheEntries.IsValidIndex(VertexIdx)
+                ? ContinentalAmplificationCacheEntries[VertexIdx]
+                : FContinentalAmplificationCacheEntry();
 
-        // Compute orogeny age and nearest boundary type (simplified for now)
-        // TODO: Track orogeny age per-vertex in future milestone
-        const double OrogenyAge_My = CrustAge_My; // Approximate: use crust age as orogeny age
-        EBoundaryType NearestBoundaryType = EBoundaryType::Transform; // Default
-
-        const FPlateBoundarySummary* BoundarySummary = nullptr;
-        if (PlateID != INDEX_NONE)
+        if (!CacheEntry.bHasCachedData)
         {
-            if (const FPlateBoundarySummary** FoundSummary = LocalSummaryCache.Find(PlateID))
-            {
-                BoundarySummary = *FoundSummary;
-            }
-            else
-            {
-                BoundarySummary = GetPlateBoundarySummary(PlateID);
-                LocalSummaryCache.Add(PlateID, BoundarySummary);
-            }
+            continue;
         }
 
-        double MinDistanceToBoundary = TNumericLimits<double>::Max();
-        if (BoundarySummary)
-        {
-            for (const FPlateBoundarySummaryEntry& Entry : BoundarySummary->Boundaries)
-            {
-                if (!Entry.bHasRepresentative)
-                {
-                    continue;
-                }
-
-                const double Distance = FVector3d::Distance(VertexPosition, Entry.RepresentativePosition);
-                if (Distance < MinDistanceToBoundary)
-                {
-                    MinDistanceToBoundary = Distance;
-                    NearestBoundaryType = Entry.BoundaryType;
-                }
-            }
-        }
-        else
-        {
-            for (const auto& BoundaryPair : Boundaries)
-            {
-                const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
-                const FPlateBoundary& Boundary = BoundaryPair.Value;
-
-                if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
-                {
-                    continue;
-                }
-
-                if (Boundary.SharedEdgeVertices.Num() > 0)
-                {
-                    const int32 BoundaryVertexIdx = Boundary.SharedEdgeVertices[0];
-                    if (RenderVertices.IsValidIndex(BoundaryVertexIdx))
-                    {
-                        const double Distance = FVector3d::Distance(VertexPosition, RenderVertices[BoundaryVertexIdx]);
-                        if (Distance < MinDistanceToBoundary)
-                        {
-                            MinDistanceToBoundary = Distance;
-                            NearestBoundaryType = Boundary.BoundaryType;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Call amplification function from ContinentalAmplification.cpp
-        const double AmplifiedElevation = ComputeContinentalAmplification(
+        const double AmplifiedElevation = ComputeContinentalAmplificationFromCache(
+            VertexIdx,
             VertexPosition,
-            PlateID,
             BaseElevation_m,
-            Plates,
-            Boundaries,
-            BoundarySummary,
-            OrogenyAge_My,
-            NearestBoundaryType,
+            CacheEntry,
             ProjectContentDir,
-            Parameters.Seed
-        );
+            SimParams.Seed);
 
         VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;
     }
@@ -7062,6 +6997,205 @@ void UTectonicSimulationService::BumpOceanicAmplificationSerial()
     ++OceanicAmplificationDataSerial;
     OceanicAmplificationFloatInputs.CachedDataSerial = 0;
     ContinentalAmplificationGPUInputs.CachedDataSerial = 0;
+    ContinentalAmplificationCacheSerial = 0;
+}
+
+void UTectonicSimulationService::RefreshContinentalAmplificationCache() const
+{
+    const int32 VertexCount = VertexAmplifiedElevation.Num();
+    if (VertexCount <= 0)
+    {
+        ContinentalAmplificationCacheEntries.Reset();
+        ContinentalAmplificationCacheSerial = OceanicAmplificationDataSerial;
+        ContinentalAmplificationCacheTopologyVersion = TopologyVersion;
+        ContinentalAmplificationCacheSurfaceVersion = SurfaceDataVersion;
+        return;
+    }
+
+    const bool bUpToDate =
+        ContinentalAmplificationCacheSerial == OceanicAmplificationDataSerial &&
+        ContinentalAmplificationCacheTopologyVersion == TopologyVersion &&
+        ContinentalAmplificationCacheSurfaceVersion == SurfaceDataVersion &&
+        ContinentalAmplificationCacheEntries.Num() == VertexCount;
+
+    if (bUpToDate)
+    {
+        return;
+    }
+
+    const FContinentalAmplificationGPUInputs& GPUInputs = GetContinentalAmplificationGPUInputs();
+
+    ContinentalAmplificationCacheEntries.SetNum(VertexCount);
+
+    for (int32 Index = 0; Index < VertexCount; ++Index)
+    {
+        FContinentalAmplificationCacheEntry& Entry = ContinentalAmplificationCacheEntries[Index];
+        Entry = FContinentalAmplificationCacheEntry();
+
+        const uint32 PackedInfo = GPUInputs.PackedTerrainInfo.IsValidIndex(Index)
+            ? GPUInputs.PackedTerrainInfo[Index]
+            : 0u;
+
+        Entry.TerrainType = static_cast<EContinentalTerrainType>(PackedInfo & 0xFFu);
+        Entry.ExemplarCount = FMath::Min<uint32>((PackedInfo >> 8u) & 0xFFu, 3u);
+        Entry.bHasCachedData = (Entry.ExemplarCount > 0);
+
+        const FUintVector4 PackedIndices = GPUInputs.ExemplarIndices.IsValidIndex(Index)
+            ? GPUInputs.ExemplarIndices[Index]
+            : FUintVector4(MAX_uint32, MAX_uint32, MAX_uint32, MAX_uint32);
+
+        Entry.ExemplarIndices[0] = PackedIndices.X;
+        Entry.ExemplarIndices[1] = PackedIndices.Y;
+        Entry.ExemplarIndices[2] = PackedIndices.Z;
+
+        const FVector4f PackedWeights = GPUInputs.ExemplarWeights.IsValidIndex(Index)
+            ? GPUInputs.ExemplarWeights[Index]
+            : FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+
+        Entry.Weights[0] = PackedWeights.X;
+        Entry.Weights[1] = PackedWeights.Y;
+        Entry.Weights[2] = PackedWeights.Z;
+        Entry.TotalWeight = PackedWeights.W;
+
+        Entry.RandomOffset = GPUInputs.RandomUVOffsets.IsValidIndex(Index)
+            ? GPUInputs.RandomUVOffsets[Index]
+            : FVector2f::ZeroVector;
+
+        Entry.WrappedUV = GPUInputs.WrappedUVs.IsValidIndex(Index)
+            ? GPUInputs.WrappedUVs[Index]
+            : FVector2f::ZeroVector;
+    }
+
+    ContinentalAmplificationCacheSerial = OceanicAmplificationDataSerial;
+    ContinentalAmplificationCacheTopologyVersion = TopologyVersion;
+    ContinentalAmplificationCacheSurfaceVersion = SurfaceDataVersion;
+}
+
+double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
+    int32 VertexIdx,
+    const FVector3d& Position,
+    double BaseElevation_m,
+    const FContinentalAmplificationCacheEntry& CacheEntry,
+    const FString& ProjectContentDir,
+    int32 Seed)
+{
+    double AmplifiedElevation = BaseElevation_m;
+
+    if (!CacheEntry.bHasCachedData || CacheEntry.ExemplarCount == 0)
+    {
+        return AmplifiedElevation;
+    }
+
+    if (!bExemplarLibraryLoaded)
+    {
+        if (!LoadExemplarLibraryJSON(ProjectContentDir))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load exemplar library, skipping continental amplification"));
+            return AmplifiedElevation;
+        }
+    }
+
+#if UE_BUILD_DEVELOPMENT
+    FContinentalAmplificationDebugInfo* DebugInfo = GContinentalAmplificationDebugInfo;
+    if (DebugInfo)
+    {
+        DebugInfo->TerrainType = CacheEntry.TerrainType;
+        DebugInfo->VertexIndex = VertexIdx;
+        DebugInfo->ExemplarCount = CacheEntry.ExemplarCount;
+        DebugInfo->RandomOffsetU = CacheEntry.RandomOffset.X;
+        DebugInfo->RandomOffsetV = CacheEntry.RandomOffset.Y;
+        DebugInfo->RandomSeed = Seed + static_cast<int32>(Position.X * 1000.0 + Position.Y * 1000.0);
+        for (int32 DebugIdx = 0; DebugIdx < 3; ++DebugIdx)
+        {
+            DebugInfo->ExemplarIndices[DebugIdx] = MAX_uint32;
+            DebugInfo->SampleHeights[DebugIdx] = 0.0;
+            DebugInfo->Weights[DebugIdx] = 0.0;
+        }
+    }
+#endif
+
+    const double WrappedU = FMath::Frac(static_cast<double>(CacheEntry.WrappedUV.X));
+    const double WrappedV = FMath::Frac(static_cast<double>(CacheEntry.WrappedUV.Y));
+
+    double BlendedHeight = 0.0;
+    double TotalWeight = 0.0;
+
+    for (uint32 SampleIdx = 0; SampleIdx < CacheEntry.ExemplarCount; ++SampleIdx)
+    {
+        const uint32 LibraryIndex = CacheEntry.ExemplarIndices[SampleIdx];
+        if (LibraryIndex == MAX_uint32)
+        {
+            continue;
+        }
+
+        if (!ExemplarLibrary.IsValidIndex(static_cast<int32>(LibraryIndex)))
+        {
+            continue;
+        }
+
+        FExemplarMetadata& Exemplar = ExemplarLibrary[LibraryIndex];
+        if (!Exemplar.bDataLoaded)
+        {
+            LoadExemplarHeightData(Exemplar, ProjectContentDir);
+        }
+
+        const double Weight = static_cast<double>(CacheEntry.Weights[SampleIdx]);
+        if (Weight <= 0.0)
+        {
+            continue;
+        }
+
+        const double SampledHeight = SampleExemplarHeight(Exemplar, WrappedU, WrappedV);
+        BlendedHeight += SampledHeight * Weight;
+        TotalWeight += Weight;
+
+#if UE_BUILD_DEVELOPMENT
+        if (DebugInfo)
+        {
+            DebugInfo->ExemplarIndices[SampleIdx] = LibraryIndex;
+            DebugInfo->SampleHeights[SampleIdx] = SampledHeight;
+            DebugInfo->Weights[SampleIdx] = Weight;
+        }
+#endif
+    }
+
+    if (TotalWeight > 0.0)
+    {
+        BlendedHeight /= TotalWeight;
+    }
+
+    if (CacheEntry.ExemplarCount > 0)
+    {
+        const uint32 ReferenceIndex = CacheEntry.ExemplarIndices[0];
+        if (ReferenceIndex != MAX_uint32 && ExemplarLibrary.IsValidIndex(static_cast<int32>(ReferenceIndex)))
+        {
+            const FExemplarMetadata& RefExemplar = ExemplarLibrary[ReferenceIndex];
+            const double DetailScale = (BaseElevation_m > 1000.0)
+                ? (BaseElevation_m / RefExemplar.ElevationMean_m)
+                : 0.5;
+            const double Detail = (BlendedHeight - RefExemplar.ElevationMean_m) * DetailScale;
+            AmplifiedElevation += Detail;
+#if UE_BUILD_DEVELOPMENT
+            if (DebugInfo)
+            {
+                DebugInfo->ReferenceMean = RefExemplar.ElevationMean_m;
+            }
+#endif
+        }
+    }
+
+#if UE_BUILD_DEVELOPMENT
+    if (DebugInfo)
+    {
+        DebugInfo->TotalWeight = TotalWeight;
+        DebugInfo->BlendedHeight = BlendedHeight;
+        DebugInfo->CpuResult = AmplifiedElevation;
+        DebugInfo->UValue = static_cast<double>(CacheEntry.WrappedUV.X);
+        DebugInfo->VValue = static_cast<double>(CacheEntry.WrappedUV.Y);
+    }
+#endif
+
+    return AmplifiedElevation;
 }
 #if UE_BUILD_DEVELOPMENT
 void UTectonicSimulationService::RunTerraneMeshSurgerySpike()

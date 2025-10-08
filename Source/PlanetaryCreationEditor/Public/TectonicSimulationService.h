@@ -79,6 +79,18 @@ struct FContinentalAmplificationGPUInputs
 
 struct FContinentalAmplificationDebugInfo;
 
+struct FContinentalAmplificationCacheEntry
+{
+    EContinentalTerrainType TerrainType = EContinentalTerrainType::Plain;
+    uint32 ExemplarCount = 0;
+    uint32 ExemplarIndices[3] = { MAX_uint32, MAX_uint32, MAX_uint32 };
+    float Weights[3] = { 0.0f, 0.0f, 0.0f };
+    float TotalWeight = 0.0f;
+    FVector2f RandomOffset = FVector2f::ZeroVector;
+    FVector2f WrappedUV = FVector2f::ZeroVector;
+    bool bHasCachedData = false;
+};
+
 #if UE_BUILD_DEVELOPMENT
 struct FContinentalAmplificationDebugInfo
 {
@@ -1506,12 +1518,16 @@ private:
     mutable FRenderVertexFloatSoA RenderVertexFloatSoA;
     mutable FOceanicAmplificationFloatInputs OceanicAmplificationFloatInputs;
     mutable FContinentalAmplificationGPUInputs ContinentalAmplificationGPUInputs;
+    mutable TArray<FContinentalAmplificationCacheEntry> ContinentalAmplificationCacheEntries;
     mutable FRidgeDirectionFloatSoA RidgeDirectionFloatSoA;
     mutable TMap<int32, FPlateBoundarySummary> PlateBoundarySummaries;
     mutable int32 PlateBoundarySummaryTopologyVersion = INDEX_NONE;
 
     /** Monotonic serial tracking modifications to amplification inputs. */
     uint64 OceanicAmplificationDataSerial = 1;
+    mutable uint64 ContinentalAmplificationCacheSerial = 0;
+    mutable int32 ContinentalAmplificationCacheTopologyVersion = INDEX_NONE;
+    mutable int32 ContinentalAmplificationCacheSurfaceVersion = INDEX_NONE;
 
     /** Ridge direction cache bookkeeping. */
     mutable TBitArray<> RidgeDirectionDirtyMask;
@@ -1552,9 +1568,12 @@ private:
     void RefreshRenderVertexFloatSoA() const;
     void RefreshOceanicAmplificationFloatInputs() const;
     void RefreshContinentalAmplificationGPUInputs() const;
+    void RefreshContinentalAmplificationCache() const;
     void BumpOceanicAmplificationSerial();
     void EnsureRidgeDirtyMaskSize(int32 VertexCount) const;
     bool MarkRidgeDirectionVertexDirty(int32 VertexIdx);
+    double ComputeContinentalAmplificationFromCache(int32 VertexIdx, const FVector3d& Position, double BaseElevation_m,
+        const FContinentalAmplificationCacheEntry& CacheEntry, const FString& ProjectContentDir, int32 Seed);
 };
 #if WITH_EDITOR
 class FRHIGPUBufferReadback;

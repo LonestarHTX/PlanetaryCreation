@@ -72,6 +72,9 @@ struct FCachedLODMesh
 
     /** Final index buffer (post seam-duplication) recorded as uint32 values. */
     TArray<uint32> Indices;
+
+    /** Mapping from final vertex buffer index back to source render vertex index (handles seam duplicates). */
+    TArray<int32> SourceVertexIndices;
 };
 
 /** Encapsulates higher-level control over the tectonic simulation and mesh conversion. */
@@ -160,13 +163,15 @@ private:
         TArray<float>& OutPositionX, TArray<float>& OutPositionY, TArray<float>& OutPositionZ,
         TArray<float>& OutNormalX, TArray<float>& OutNormalY, TArray<float>& OutNormalZ,
         TArray<float>& OutTangentX, TArray<float>& OutTangentY, TArray<float>& OutTangentZ,
-        TArray<FColor>& OutColors, TArray<FVector2f>& OutUVs, TArray<uint32>& OutIndices);
+        TArray<FColor>& OutColors, TArray<FVector2f>& OutUVs, TArray<uint32>& OutIndices,
+        TArray<int32>& OutSourceIndices);
 
     /** Milestone 4 Phase 4.2: Check if LOD mesh is cached and valid. */
     bool IsLODCached(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const;
 
     /** Milestone 4 Phase 4.2: Get cached LOD mesh (returns nullptr if not cached). */
     const FCachedLODMesh* GetCachedLOD(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion) const;
+    FCachedLODMesh* GetMutableCachedLOD(int32 LODLevel);
 
     /** Milestone 4 Phase 4.2: Store built mesh snapshot in cache. */
     void CacheLODMesh(int32 LODLevel, int32 TopologyVersion, int32 SurfaceDataVersion,
@@ -174,7 +179,8 @@ private:
         TArray<float>&& PositionX, TArray<float>&& PositionY, TArray<float>&& PositionZ,
         TArray<float>&& NormalX, TArray<float>&& NormalY, TArray<float>&& NormalZ,
         TArray<float>&& TangentX, TArray<float>&& TangentY, TArray<float>&& TangentZ,
-        TArray<FColor>&& VertexColors, TArray<FVector2f>&& UVs, TArray<uint32>&& Indices);
+        TArray<FColor>&& VertexColors, TArray<FVector2f>&& UVs, TArray<uint32>&& Indices,
+        TArray<int32>&& SourceVertexIndices);
 
     /** Milestone 4 Phase 4.2: Invalidate cache on topology change. */
     void InvalidateLODCache();
@@ -188,6 +194,9 @@ private:
     void BuildMeshFromCacheWithColorRefresh(const FCachedLODMesh& CachedMesh,
         const FMeshBuildSnapshot& FreshSnapshot,
         RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
+
+    bool UpdateCachedMeshFromSnapshot(FCachedLODMesh& CachedMesh, const FMeshBuildSnapshot& Snapshot, int32 NewSurfaceDataVersion);
+    void ApplyCachedMeshToPreview(const FCachedLODMesh& CachedMesh);
 
     void EnsureGPUPreviewTextureAsset() const;
     void CopyHeightTextureToPreviewResource() const;
