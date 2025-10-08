@@ -69,7 +69,7 @@ This document tracks milestone intent, delivery status, notable deviations from 
   - Introduced `ETectonicVisualizationMode` enum, console hook (`r.PlanetaryCreation.VisualizationMode`), and combo UI replacing heightmap/velocity checkboxes.
   - Controller/velocity overlay now clear arrows when mode ≠ Velocity; GPU preview diagnostics updated to assert enum flow (`PlanetaryCreation.Milestone6.GPU.PreviewDiagnostic`).
 - **Terrane Mesh Surgery Refactor** — `UTectonicSimulationService::ExtractTerrane`, `UTectonicSimulationService::ReattachTerrane`, and `FContinentalTerrane`
-- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and queues readbacks asynchronously, keeping Stage B under ~18 ms with ≈0 ms readback cost
+- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and pools readback buffers, keeping Stage B under ~18 ms with ≈0 ms readback cost
   - Extraction snapshots full vertex payloads (position, velocity, stress, sediment, amplified elevation, duplicate mapping) and compacts render SoA arrays without orphaned vertices.
   - Reattachment removes patch triangles via sorted-key sets, restores duplicates, rebuilds adjacency, and keeps the mesh manifold; `TerraneMeshSurgeryTest` expanded to confirm no `INDEX_NONE` assignments remain.
   - Build + automation coverage: Win64 Development UBT (≈3 s incremental) and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` now succeed.
