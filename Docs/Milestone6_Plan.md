@@ -61,6 +61,8 @@ Complete **Section 5** of the "Procedural Tectonic Planets" paper by implementin
 
 Findings feed directly into Task 1.1 design notes. If spike reveals blocking issues (e.g., retessellation incompatibility), escalate immediately.
 
+**Status (2025-10-08):** ✅ Implemented. The spike runs via `planetary.TerraneMeshSurgery` (see `Source/PlanetaryCreationEditor/Private/TectonicSimulationController.cpp:47`) and executes `UTectonicSimulationService::RunTerraneMeshSurgerySpike()` (`Source/PlanetaryCreationEditor/Private/TectonicSimulationService.cpp:7721`). Automation coverage lives in `PlanetaryCreation.Milestone6.TerraneMeshSurgerySpike`.
+
 #### Task 1.1: Terrane Extraction System
 **Owner:** Simulation Engineer
 **Effort:** 4 days
@@ -112,7 +114,7 @@ struct FTectonicTerrane
 - Deterministic: Same seed produces same terrane boundaries
 - CSV export enables terrane lifecycle tracking
 
-**Status (2025-10-07):** Extraction + reattachment pipeline refactored to snapshot full per-vertex payloads (`FTerraneVertexRecord`), compact render SoA arrays, rebuild boundary caps, and restore duplicates without non-manifold edges (`TectonicSimulationService.cpp:2951` / `3638`). `TerraneMeshSurgeryTest` now exercises the round trip and verifies no `INDEX_NONE` assignments remain; incremental Win64 build and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` both pass. Follow-ups: keep TerraneSerialization/TerraneMechanics docs/tests aligned and rerun the broader Milestone 6 suite when convenient.
+**Status (2025-10-08):** ✅ Complete. `UTectonicSimulationService::ExtractTerrane()` (`Source/PlanetaryCreationEditor/Private/TectonicSimulationService.cpp:4016`) snapshots full vertex payloads, rebuilds boundary caps, and validates topology; automation `TerraneMeshSurgeryTest` and `TerraneMechanicsTest` confirm extraction/reattachment determinism.
 
 ---
 
@@ -165,6 +167,8 @@ void UpdateTerranePosition(FTectonicTerrane& Terrane, double DeltaTime_My)
 - Terranes migrate realistically with oceanic carrier plates
 - Collision detection provides early warning for reattachment events
 - Visualization overlay enables intuitive understanding of terrane dynamics
+
+**Status (2025-10-08):** ✅ Carrier assignment (`AssignTerraneCarrier`), centroid updates (`UpdateTerranePositions`), and collision detection (`DetectTerraneCollisions`) are live in `TectonicSimulationService.cpp:5109-5313`. Automation `PlanetaryCreation.Milestone6.TerraneTransport` validates state transitions and performance.
 
 ---
 
@@ -229,6 +233,8 @@ double ComputeCollisionUplift(const FVector3d& Point, const FTectonicTerrane& Te
 - Collision events logged with timestamp, plates, and uplift metrics
 - Deterministic: Same seed produces same collision results
 
+**Status (2025-10-08):** ✅ Automated reattachment runs through `ProcessTerraneReattachments()` and `ReattachTerrane()` (`Source/PlanetaryCreationEditor/Private/TectonicSimulationService.cpp:5315-5106`). `PlanetaryCreation.Milestone6.TerraneReattachment` exercises collision thresholds and suturing rollback guarantees.
+
 ---
 
 #### Task 1.4: Terrane Regression & Edge Cases
@@ -258,6 +264,8 @@ double ComputeCollisionUplift(const FVector3d& Point, const FTectonicTerrane& Te
 - Tiny terranes auto-merged, preventing mesh fragmentation
 - Terrane-terrane collisions produce sensible results
 - System scales to 20 simultaneous terranes
+
+**Status (2025-10-08):** ✅ Edge-case automation `PlanetaryCreation.Milestone6.TerraneEdgeCases` (see `Source/PlanetaryCreationEditor/Private/Tests/TerraneEdgeCasesTest.cpp`) covers minimum-size rejection, multi-terrane scenarios, retessellation safety, and performance regressions.
 
 ---
 
@@ -304,6 +312,8 @@ TerraneID,SourcePlateID,CarrierPlateID,Centroid_Lat,Centroid_Lon,Area_km2,Extrac
 - CSV export enables terrane lifecycle analysis
 - Deterministic IDs ensure cross-platform reproducibility
 - M6 saves are backwards compatible with M5 (terranes optional)
+
+**Status (2025-10-08):** ⚠️ Partial. Undo/redo snapshots now serialize terrane payloads (`CaptureHistorySnapshot`, `TerraneSerializationTest`), but the planned `Terranes.csv` export and deterministic ID hashing for external files remain TODO.
 
 ---
 
@@ -512,6 +522,8 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - Fold direction alignment creates coherent mountain range orientations
 - Performance budget: <20ms of 50ms allocated to Stage B
 
+**Status (2025-10-08):** 🟡 CPU exemplar blending is live via `ComputeContinentalAmplificationFromCache()` and the per-vertex cache/builders in `TectonicSimulationService.cpp:7030-7160`. Snapshot hashing backs the parity path (`GetContinentalAmplificationGPUInputs` + `ProcessPendingContinentalGPUReadbacks`), and `PlanetaryCreation.Milestone6.ContinentalAmplification` remains green. Outstanding: tighten drift handling so fallback comparisons consume the captured snapshot (mirroring the oceanic plan) and fold-direction rotation polish.
+
 ---
 
 #### Task 2.3.1: Stage B Performance Profiling & Guard Rails *(new)*
@@ -534,6 +546,8 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 **Dependencies:** Stage B amplification implemented (Task 2.1/2.2), surface toggles available in panel.
 
 **Next Step:** Additional milestone if we push Stage B to GPU (move to M7 or M8 once CPU gets under control).
+
+**Status (2025-10-08):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1018`). Latest profiling logs Stage B at ~18 ms with cached continental amplification.
 
 ---
 
@@ -567,6 +581,8 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - GPU mesh streaming handles 4× vertex density increase
 - Material system highlights tectonic features (ridges, trenches, mountains)
 
+**Status (2025-10-08):** 🟡 LOD cache reuse and source-index mapping landed (`TectonicSimulationController.cpp:1883-2118`), eliminating redundant seam rebuilds. GPU mesh streaming and amplification-only LOD cascade remain TODO.
+
 ---
 
 #### Task 2.4: Boundary Overlay Simplification *(new)*
@@ -593,6 +609,17 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - Overlay presents clean single-line seams at tectonic boundaries.
 - Toggle CVar restores legacy behaviour for debugging.
 - Simplification adds <1 ms at L6.
+
+**Status (2025-10-08):** 🔴 Not started.
+
+---
+
+### Near-Term Follow-ups
+
+- Finalize the oceanic snapshot transition: evaluate GPU readbacks against the captured snapshot so parity holds even when hashes diverge, then tighten the tolerance back to ≤0.1 m.
+- Mirror the snapshot-enforced fallback on the continental path so both amplification stages share the same strict parity enforcement.
+- Introduce async or double-buffered GPU readbacks for oceanic amplification to remove the ~1.4 ms stall while retaining snapshot hash guards.
+- Optimise the Level 7 mesh update path (incremental stream edits / async uploads) and log the impact with the Stage B profiling harness after each change.
 
 ---
 
@@ -682,6 +709,8 @@ void ComputeHydraulicErosion(TArray<FVector3d>& AmplifiedVertices, double DeltaT
 - Valleys and river basins emerge from amplified terrain
 - Mass conservation maintained (erosion/deposition balance)
 
+**Status (2025-10-08):** 🔴 Planned – hydraulic routing has not been implemented yet.
+
 ---
 
 #### Task 3.2: Erosion-Deposition Coupling with Stage B
@@ -708,6 +737,8 @@ void ComputeHydraulicErosion(TArray<FVector3d>& AmplifiedVertices, double DeltaT
 **Acceptance:**
 - Erosion respects tectonic age and orogeny type
 - Exemplar blending adapts to erosion state
+
+**Status (2025-10-08):** 🔴 Planned; coupling work has not begun.
 
 ---
 
@@ -795,6 +826,8 @@ If actual speedup <2× (e.g., compiler auto-vectorization interference, cache th
 - Falls back to scalar on unsupported CPUs
 - Multi-platform build: AVX2 (x64 modern), SSE4.2 (x64 legacy), NEON (ARM), scalar (fallback)
 
+**Status (2025-10-08):** 🔴 Not started.
+
 ---
 
 #### Task 4.2: GPU Compute Shaders (Thermal, Velocity Fields)
@@ -856,6 +889,8 @@ If CPU→GPU data transfer exceeds compute savings (e.g., PCIe bandwidth bottlen
 - Visualization fields (thermal, velocity) computed on GPU
 - Graceful degradation to CPU on older hardware
 
+**Status (2025-10-08):** 🔴 Not started.
+
 ---
 
 #### Task 4.3: Level 6, 7, 8 Profiling (Paper Table 2 Parity)
@@ -903,6 +938,8 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 - Table 2 metrics aligned with paper (where applicable)
 - Performance report published
 
+**Status (2025-10-08):** 🔴 In backlog; only preliminary Stage B profiling is available.
+
 ---
 
 #### Task 4.4: Memory Profiling & Optimization
@@ -932,6 +969,8 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 - Total memory <8 MB (within budget)
 - No memory leaks detected
 - Exemplar streaming reduces peak memory by 30%
+
+**Status (2025-10-08):** 🔴 Not started.
 
 ---
 
@@ -1056,6 +1095,8 @@ bool FAmplificationDeterminismTest::RunTest(const FString& Parameters)
 - Long-duration stability with amplification enabled
 - Determinism maintained across platforms
 
+**Status (2025-10-08):** 🟡 Terrane, Stage B, and GPU preview tests are live; additional hydraulic/SIMD coverage awaits the corresponding features.
+
 ---
 
 #### Task 5.2: Paper Table 2 Parity Validation
@@ -1084,6 +1125,8 @@ bool FAmplificationDeterminismTest::RunTest(const FString& Parameters)
 - Key metrics within 20% of paper values (accounting for hardware/engine differences)
 - Visual quality matches paper figures (expert validation)
 - Deviations documented with justification
+
+**Status (2025-10-08):** 🔴 Pending Stage B parity and Level 7/8 profiling.
 
 ---
 
@@ -1124,6 +1167,8 @@ bool FAmplificationDeterminismTest::RunTest(const FString& Parameters)
 - User guide updated with M6 workflows
 - Release notes published for external users
 - Completion summary documents lessons learned
+
+**Status (2025-10-08):** 🟡 Planning underway; `Docs/MilestoneSummary.md` and `Docs/Performance_M6.md` carry interim notes, but formal release docs are still to be drafted.
 
 ---
 
