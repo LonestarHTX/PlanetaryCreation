@@ -37,6 +37,8 @@ struct FStageBProfile
     int32 RidgeMissingTangents = 0;
     int32 RidgePoorAlignment = 0;
     int32 RidgeGradientFallbacks = 0;
+    int32 VoronoiReassignedVertices = 0;
+    bool bVoronoiForcedFullRidge = false;
 
     double TotalMs() const
     {
@@ -1550,6 +1552,9 @@ private:
     TBitArray<> PendingCrustAgeResetMask;
 
     TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;
+    /** Metrics from the most recent Voronoi rebuild for ridge dirtying heuristics. */
+    int32 LastVoronoiReassignedCount = 0;
+    bool bLastVoronoiForcedFullRidgeUpdate = false;
 
     /** Cadence counter for Voronoi refresh. */
     int32 StepsSinceLastVoronoiRefresh = 0;

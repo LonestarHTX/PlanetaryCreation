@@ -1120,9 +1120,11 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             InterpolateStressToVertices();
             StepsSinceLastVoronoiRefresh = 0;
             bSurfaceDataChanged = true;
-            MarkAllRidgeDirectionsDirty();
 #if UE_BUILD_DEVELOPMENT
-            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[AdvanceSteps] Recomputing ridge directions after Voronoi refresh"));
+            UE_LOG(LogPlanetaryCreation, VeryVerbose,
+                TEXT("[AdvanceSteps] Recomputing ridge directions after Voronoi refresh (reassigned=%d, full=%s)"),
+                LastVoronoiReassignedCount,
+                bLastVoronoiForcedFullRidgeUpdate ? TEXT("yes") : TEXT("no"));
 #endif
             {
                 TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirectionsPostVoronoi);
@@ -1190,7 +1192,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         const double StageBDuration = BaselineInitTime + RidgeDirectionTime + OceanicCombinedTime + ContinentalCombinedTime + GpuReadbackSeconds + CacheInvalidationSeconds;
 
         UE_LOG(LogPlanetaryCreation, Log,
-            TEXT("[StepTiming] Step %d | LOD L%d | Total %.2f ms | StageB %.2f ms (Baseline %.2f | Ridge %.2f [Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d] | Oceanic %.2f | Continental %.2f | Readback %.2f) | Erosion %.2f ms | Sediment %.2f ms | Dampening %.2f ms"),
+            TEXT("[StepTiming] Step %d | LOD L%d | Total %.2f ms | StageB %.2f ms (Baseline %.2f | Ridge %.2f [Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d] | Voronoi %d%s | Oceanic %.2f | Continental %.2f | Readback %.2f) | Erosion %.2f ms | Sediment %.2f ms | Dampening %.2f ms"),
             AbsoluteStep,
             Parameters.RenderSubdivisionLevel,
             StepElapsed * 1000.0,
@@ -1203,6 +1205,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             LastRidgeMissingTangentCount,
             LastRidgePoorAlignmentCount,
             LastRidgeGradientFallbackCount,
+            LastVoronoiReassignedCount,
+            bLastVoronoiForcedFullRidgeUpdate ? TEXT("*") : TEXT(""),
             OceanicCombinedTime * 1000.0,
             ContinentalCombinedTime * 1000.0,
             GpuReadbackSeconds * 1000.0,
@@ -1243,13 +1247,15 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         Profile.RidgeMissingTangents = LastRidgeMissingTangentCount;
         Profile.RidgePoorAlignment = LastRidgePoorAlignmentCount;
         Profile.RidgeGradientFallbacks = LastRidgeGradientFallbackCount;
+        Profile.VoronoiReassignedVertices = LastVoronoiReassignedCount;
+        Profile.bVoronoiForcedFullRidge = bLastVoronoiForcedFullRidgeUpdate;
         LatestStageBProfile = Profile;
 
         const int32 StageBLogMode = CVarPlanetaryCreationStageBProfiling.GetValueOnGameThread();
         if (StageBLogMode > 0)
         {
             UE_LOG(LogPlanetaryCreation, Log,
-                TEXT("[StageB][Profile] Step %d | LOD L%d | Baseline %.2f ms | Ridge %.2f ms (Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d) | OceanicCPU %.2f ms | OceanicGPU %.2f ms | ContinentalCPU %.2f ms | ContinentalGPU %.2f ms | Readback %.2f ms | Cache %.2f ms | Total %.2f ms"),
+                TEXT("[StageB][Profile] Step %d | LOD L%d | Baseline %.2f ms | Ridge %.2f ms (Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d) | Voronoi %d%s | OceanicCPU %.2f ms | OceanicGPU %.2f ms | ContinentalCPU %.2f ms | ContinentalGPU %.2f ms | Readback %.2f ms | Cache %.2f ms | Total %.2f ms"),
                 AbsoluteStep,
                 Parameters.RenderSubdivisionLevel,
                 Profile.BaselineMs,
@@ -1260,6 +1266,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 Profile.RidgeMissingTangents,
                 Profile.RidgePoorAlignment,
                 Profile.RidgeGradientFallbacks,
+                Profile.VoronoiReassignedVertices,
+                Profile.bVoronoiForcedFullRidge ? TEXT("*") : TEXT(""),
                 Profile.OceanicCPUMs,
                 Profile.OceanicGPUMs,
                 Profile.ContinentalCPUMs,
@@ -2335,12 +2343,22 @@ int32 UTectonicSimulationService::GetMidpointIndex(int32 V0, int32 V1, TMap<TPai
 // Milestone 3 Task 2.1: Build Voronoi mapping
 void UTectonicSimulationService::BuildVoronoiMapping()
 {
-    VertexPlateAssignments.Reset();
+    const int32 VertexCount = RenderVertices.Num();
 
-    if (RenderVertices.Num() == 0 || Plates.Num() == 0)
+    TArray<int32> PreviousAssignments = VertexPlateAssignments;
+    const bool bHadComparableAssignments = PreviousAssignments.Num() == VertexCount;
+    LastVoronoiReassignedCount = 0;
+    bLastVoronoiForcedFullRidgeUpdate = false;
+
+    if (VertexCount == 0 || Plates.Num() == 0)
     {
         UE_LOG(LogPlanetaryCreation, Warning, TEXT("Cannot build Voronoi mapping: RenderVertices=%d, Plates=%d"),
-            RenderVertices.Num(), Plates.Num());
+            VertexCount, Plates.Num());
+        if (!bHadComparableAssignments)
+        {
+            MarkAllRidgeDirectionsDirty();
+            bLastVoronoiForcedFullRidgeUpdate = true;
+        }
         return;
     }
 
@@ -2348,7 +2366,13 @@ void UTectonicSimulationService::BuildVoronoiMapping()
 
     // For small plate counts (N<50), brute force is faster than KD-tree
     // due to cache locality and no tree traversal overhead
-    VertexPlateAssignments.SetNumUninitialized(RenderVertices.Num());
+    VertexPlateAssignments.SetNumUninitialized(VertexCount);
+
+    TArray<int32> ReassignedVertices;
+    if (bHadComparableAssignments)
+    {
+        ReassignedVertices.Reserve(VertexCount);
+    }
 
     // Milestone 4 Task 5.0: Voronoi warping parameters
     const bool bUseWarping = Parameters.bEnableVoronoiWarping;
@@ -2360,7 +2384,7 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     int32 ElevationOverrideCount = 0;
 #endif
 
-    for (int32 i = 0; i < RenderVertices.Num(); ++i)
+    for (int32 i = 0; i < VertexCount; ++i)
     {
         int32 ClosestPlateID = INDEX_NONE;
         double MinDistSq = TNumericLimits<double>::Max();
@@ -2397,6 +2421,15 @@ void UTectonicSimulationService::BuildVoronoiMapping()
         }
 
         VertexPlateAssignments[i] = ClosestPlateID;
+
+        if (bHadComparableAssignments)
+        {
+            const int32 PreviousPlateID = PreviousAssignments.IsValidIndex(i) ? PreviousAssignments[i] : INDEX_NONE;
+            if (PreviousPlateID != ClosestPlateID)
+            {
+                ReassignedVertices.Add(i);
+            }
+        }
 
         if (ClosestPlate && VertexElevationValues.IsValidIndex(i))
         {
@@ -2451,7 +2484,7 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     const double ElapsedMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Built Voronoi mapping: %d vertices → %d plates in %.2f ms (avg %.3f μs per vertex)"),
-        RenderVertices.Num(), Plates.Num(), ElapsedMs, (ElapsedMs * 1000.0) / RenderVertices.Num());
+        VertexCount, Plates.Num(), ElapsedMs, (ElapsedMs * 1000.0) / FMath::Max(VertexCount, 1));
 
 #if UE_BUILD_DEVELOPMENT
     if (ElevationOverrideCount > 0)
@@ -2480,7 +2513,20 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     BuildRenderVertexBoundaryCache();
 
     // Ensure subsequent Stage B passes recompute ridge directions against the refreshed cache.
-    MarkAllRidgeDirectionsDirty();
+    if (!bHadComparableAssignments)
+    {
+        MarkAllRidgeDirectionsDirty();
+        LastVoronoiReassignedCount = VertexCount;
+        bLastVoronoiForcedFullRidgeUpdate = true;
+    }
+    else
+    {
+        LastVoronoiReassignedCount = ReassignedVertices.Num();
+        if (ReassignedVertices.Num() > 0)
+        {
+            MarkRidgeRingDirty(ReassignedVertices, Parameters.RidgeDirectionDirtyRingDepth);
+        }
+    }
 }
 
 void UTectonicSimulationService::BuildRenderVertexAdjacency()

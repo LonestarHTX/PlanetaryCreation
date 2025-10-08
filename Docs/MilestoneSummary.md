@@ -74,7 +74,7 @@ This document tracks milestone intent, delivery status, notable deviations from 
   - Reattachment removes patch triangles via sorted-key sets, restores duplicates, rebuilds adjacency, and keeps the mesh manifold; `TerraneMeshSurgeryTest` expanded to confirm no `INDEX_NONE` assignments remain.
   - Build + automation coverage: Win64 Development UBT (≈3 s incremental) and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` now succeed.
   - Async replay snapshots now bump the serial and recompute the hash immediately after mutation, preventing `ProcessPendingOceanicGPUReadbacks()` from dropping into the fallback path each frame.
-  - Stage B profiling output now reports ridge-cache health (dirty counts, updates, cache hits, fallback counters) per step; undo/redo restores cached ridge data so temporal jumps only touch the affected vertices (e.g., L7 Step 7 dirty count 192).
+  - Stage B profiling output now reports ridge-cache health and Voronoi-change metrics (dirty counts, updates, cache hits, fallback counters, reassigned vertex totals); undo/redo restores cached ridge data so temporal jumps only touch the affected vertices (e.g., L7 Step 7 dirty count 192).
 - **Sediment & Dampening Optimizations** — `SedimentTransport.cpp`, `OceanicDampening.cpp`, `TectonicSimulationService.cpp`
   - Diffusion loop now runs 6 passes normally / 4 passes under GPU preview (`Parameters.bSkipCPUAmplification`), trimming ~40 % inner-loop work.
   - Per-vertex adjacency weight totals cached once during `BuildRenderVertexAdjacency`, consumed directly by oceanic dampening (no per-step recompute).

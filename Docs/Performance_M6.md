@@ -35,7 +35,7 @@ Logs for every run are written to `Saved/Logs/PlanetaryCreation.log`. The Stage�
 - Undoing to the cached snapshot dirties the ridge cache once (Step 7), explaining the 4.31 ms spike before the steady-state 4.35 ms ridge cost on the GPU pass.
 - CPU baseline/replay remain ~19–24 ms with ridge work minimal unless the topology cache invalidates.
 - No `[StageB][GPU] … hash mismatch` warnings after the snapshot serial/hash fix; GPU parity exits with max delta **0.0003 m**.
-- `[StepTiming]` now prints ridge dirty/update counts and cache statistics; the L7 undo replay only touched **192 vertices**, while the continental parity pass still reports full-mesh dirties (expected until exemplar caching lands).
+- `[StepTiming]` now prints Voronoi reassignment counts alongside ridge dirty/update/cache stats; the L7 undo replay only touched **192 vertices**, while the continental parity pass still reports full-mesh dirties (expected until exemplar caching lands).
 - Navigation-system repository ensure is now intercepted by the editor module handler; parity logs show a single warning (`NavigationSystem.cpp:3808`) without repeated error spam.
 
 ### Level 3 Baseline (M5 Regression Harness)

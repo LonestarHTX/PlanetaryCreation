@@ -85,7 +85,7 @@
     - Harness and latest metrics live in `Docs/Performance_M6.md`; treat it as the canonical source for Stage B/L3 measurements.
   - Keep the `RefreshRidgeDirectionsIfNeeded()` flow using the render-vertex cache (no per-step recompute) and keep `RidgeDirectionCacheTest` green in CI.
   - Capture steady-state timings with the new Stage B in-place mesh refresh path (no rebuild) and document the savings; fall back to rebuild only when topology stamps diverge.
-  - Use the expanded `[StepTiming]` logging (dirty/update/cache counts) to enforce ridge-cache health thresholds during undo/redo and parity automation.
+  - Use the expanded `[StepTiming]` logging (Voronoi reassignment counts plus ridge dirty/update/cache stats) to enforce ridge-cache health thresholds during undo/redo and parity automation.
   - Keep an eye on the navigation-system warning (`NavigationSystem.cpp:3808`) now suppressed by the module ensure handler and confirm no new ensures slip through automation logs.
   - Raise `RetessellationThresholdDegrees` default to 45° with a “High Accuracy (30°)” toggle for review builds so perf measurements match the documented quick win.
   - Normalize sediment/dampening loops to rely on cached adjacency weights to cut repeated neighbor scans.
