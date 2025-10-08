@@ -522,7 +522,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - Fold direction alignment creates coherent mountain range orientations
 - Performance budget: <20ms of 50ms allocated to Stage B
 
-**Status (2025-10-08):** 🟡 CPU exemplar blending is live via `ComputeContinentalAmplificationFromCache()` and the per-vertex cache/builders in `TectonicSimulationService.cpp:7030-7160`. Snapshot hashing backs the parity path (`GetContinentalAmplificationGPUInputs` + `ProcessPendingContinentalGPUReadbacks`), and `PlanetaryCreation.Milestone6.ContinentalAmplification` remains green. Outstanding: tighten drift handling so fallback comparisons consume the captured snapshot (mirroring the oceanic plan) and fold-direction rotation polish.
+**Status (2025-10-08):** 🟡 CPU exemplar blending is live via `ComputeContinentalAmplificationFromCache()` and the per-vertex cache/builders in `TectonicSimulationService.cpp:7030-7160`. Snapshot hashing backs the parity path (`GetContinentalAmplificationGPUInputs` + `ProcessPendingContinentalGPUReadbacks`), and `PlanetaryCreation.Milestone6.ContinentalAmplification` remains green. Remaining polish: fold-direction rotation for exemplars and broader visual tuning once the hydraulic pass lands.
 
 ---
 
@@ -547,7 +547,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 
 **Next Step:** Additional milestone if we push Stage B to GPU (move to M7 or M8 once CPU gets under control).
 
-**Status (2025-10-08):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1018`). Latest profiling logs Stage B at ~18 ms with cached continental amplification.
+**Status (2025-10-09):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1089`). Oceanic/continental GPU readbacks now run asynchronously, and latest profiling logs Stage B at ~18 ms with readback cost ≈0 ms.
 
 ---
 
@@ -581,7 +581,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - GPU mesh streaming handles 4× vertex density increase
 - Material system highlights tectonic features (ridges, trenches, mountains)
 
-**Status (2025-10-08):** 🟡 LOD cache reuse and source-index mapping landed (`TectonicSimulationController.cpp:1883-2118`), eliminating redundant seam rebuilds. GPU mesh streaming and amplification-only LOD cascade remain TODO.
+**Status (2025-10-09):** 🟡 LOD cache reuse and source-index mapping landed (`TectonicSimulationController.cpp:1883-2118`), eliminating redundant seam rebuilds. GPU mesh streaming and amplification-only LOD cascade remain TODO.
 
 ---
 
@@ -616,10 +616,10 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 
 ### Near-Term Follow-ups
 
-- Finalize the oceanic snapshot transition: evaluate GPU readbacks against the captured snapshot so parity holds even when hashes diverge, then tighten the tolerance back to ≤0.1 m.
-- Mirror the snapshot-enforced fallback on the continental path so both amplification stages share the same strict parity enforcement.
-- Introduce async or double-buffered GPU readbacks for oceanic amplification to remove the ~1.4 ms stall while retaining snapshot hash guards.
 - Optimise the Level 7 mesh update path (incremental stream edits / async uploads) and log the impact with the Stage B profiling harness after each change.
+- Ship the boundary overlay simplifier (Task 2.4) and refresh the UI toggle once the simplified path is default.
+- Implement hydraulic routing / erosion coupling (Phase 3) to finish the mountains-and-valleys work planned for M6.
+- Complete the Phase 4 optimisation sweep (SIMD, GPU field compute) and capture the Level 6/7/8 performance baselines for the parity report.
 
 ---
 
