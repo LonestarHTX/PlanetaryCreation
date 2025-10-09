@@ -49,6 +49,8 @@
 - Stage B elevations stream into the realtime mesh as a dedicated `StageBHeight` vertex buffer, so cached LODs and GPU preview materials consume the exact amplified heights with no CPU displacement step; the preview MID now takes the live elevation scale from simulation parameters.
 - Visualization modes expanded with **Amplified Stage B** (delta heatmap) and **Amplification Blend** (plate colours tinted by Stage B deltas) so perf captures can highlight how much detail Stage B contributes without swapping materials mid-run.
 - GPU parity tests: `GPUOceanicParity`, `GPUContinentalParity`, `GPUPreviewSeamMirroring`
+- Paper defaults ship with Stage B/GPU/PBR enabled (LOD 5, CPU skip). Use `r.PlanetaryCreation.PaperDefaults 0` before profiling CPU-only baselines.
+- Preview lighting toggle (UI + `r.PlanetaryCreation.UsePBRShading`) builds a transient lit material for CPU preview and an on-the-fly lit WPO material for GPU preview; 2025‑10‑09 parity runs logged Stage B = **11.3 ms** (Oceanic GPU) and **16.9 ms CPU + 11.5 ms cache** (Continental snapshot replay) with 100 % vertices inside ±0.10 m.
 
 **Why Stage B Over Thermal/Velocity:**
 - Stage B: **≈30.5 ms** combined (dominant share of M6 budget) → High-value GPU target

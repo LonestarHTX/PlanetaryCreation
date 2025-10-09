@@ -9,10 +9,12 @@
 - Place automation tests in `Source/PlanetaryCreation/Private/Tests` once created.
 
 ## Build, Test, and Development Commands
+- The editor now boots with the full paper pipeline (LOD 5 + Stage B/GPU/PBR). Run `r.PlanetaryCreation.PaperDefaults 0` when you need the lean M5 baseline (CPU profiling, older automation).
 - Launch playable build: `"<UE5>\Engine\Binaries\Win64\UnrealEditor.exe" PlanetaryCreation.uproject -game`.
 - Rebuild editor target: `"<UE5>\Engine\Build\BatchFiles\Build.bat" PlanetaryCreationEditor Win64 Development -project="%CD%\PlanetaryCreation.uproject"`.
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
 - Run Milestone 3 automation suite: `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
+- CPU-only automation (Milestone 3/5 regressions, etc.) should prepend `r.PlanetaryCreation.PaperDefaults 0` in `-ExecCmds` so the run matches the lean M5 configuration.
 - GPU preview parity suites (Milestone 6): launch from Windows PowerShell via `Automation RunTests PlanetaryCreation.Milestone6.GPU`.
 - Running GPU automation from WSL **must** hop out to a native Windows shell (PowerShell or `cmd.exe`). Launching `UnrealEditor-Cmd.exe` directly inside WSL fails with `UtilBindVsockAnyPort` and the command times out after ~10 s.
 - Typical PowerShell pattern (swap the test name as needed):
@@ -24,6 +26,7 @@
     -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log
   ```
   - Swap the test name for `PlanetaryCreation.Milestone6.GPU.ContinentalParity` to capture the complementary Stage B tables; both suites now emit `[StageB][Profile]`/`[StageB][CacheProfile]` as long as the command is launched this way.
+  - If you previously ran `r.PlanetaryCreation.PaperDefaults 0`, remember to re-enable (`r.PlanetaryCreation.PaperDefaults 1`) before GPU suites so Stage B/GPU preview are active.
   ```
   - **Do not** append `Quit` inside `-ExecCmds`; the automation controller exits on its own when `-TestExit="Automation Test Queue Empty"` is present. Adding `Quit` or manually terminating the process prevents the queue from running, which was the root cause of earlier “nothing happens” sessions.
   - Let the command run to completion—the Stage B `[StageB][Profile]` / `[StageB][CacheProfile]` lines appear once the parity suite reaches the replay phase.
@@ -34,6 +37,10 @@
 - Wrap experimental runtime mesh code in `#if UE_BUILD_DEVELOPMENT` guards until production-ready.
 
 ## Testing Guidelines
+- Quick smoke after environment changes:
+  1. Launch the editor (defaults land in LOD 5 + Stage B/GPU/PBR).
+  2. Step the simulation once and confirm plate colours + amplification blend render (no flat grey fallback).
+  3. Toggle `PaperDefaults 0/1` to ensure the switch still works before running heavy automation.
 - Use Unreal's Automation Testing framework (`IMPLEMENT_SIMPLE_AUTOMATION_TEST`) and name suites `FPlanetaryCreation<Feature>Test`.
 - Run targeted tests headless: `"<UE5>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" PlanetaryCreation.uproject -ExecCmds="Automation RunTests PlanetaryCreation" -TestExit="Automation Test Queue Empty"`.
 - Inspect logs with `powershell -Command "Get-Content 'Saved/Logs/PlanetaryCreation.log' | Select-String 'Result={Success}'"`.

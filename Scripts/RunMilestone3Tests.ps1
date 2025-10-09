@@ -122,9 +122,10 @@ try
     # --------------------------------------------------------------
     foreach ($TestName in $Tests)
     {
+        $ExecCmd = "r.PlanetaryCreation.PaperDefaults 0; Automation RunTests $TestName; Quit"
         $Arguments = @(
             $ProjectPath,
-            "-ExecCmds=Automation RunTests $TestName; Quit",
+            "-ExecCmds=$ExecCmd",
             "-unattended",
             "-nop4",
             "-nosplash",

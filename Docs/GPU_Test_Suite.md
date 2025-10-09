@@ -10,6 +10,8 @@
 
 Four automation-facing tests validate GPU compute shader correctness, cache discipline, and parity with the CPU baseline. All tests use Unreal's automation framework and integrate with the existing M6 test suite.
 
+> **Note:** The editor now boots with the paper-authentic defaults (LOD 5, Stage B/GPU/PBR enabled). CPU-focused or regression suites should issue `r.PlanetaryCreation.PaperDefaults 0` at setup and re-enable the GPU path explicitly where needed.
+
 ---
 
 ## Test Files

@@ -1,6 +1,7 @@
 #include "TectonicSimulationService.h"
 
 #include "PlanetaryCreationLogging.h"
+#include "TectonicSimulationController.h"
 
 // =====================================================================================
 //  File Navigation
@@ -45,23 +46,34 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "Misc/DefaultValueHelper.h"
 
 #if WITH_EDITOR
+static void HandleUseGPUAmplificationChanged(IConsoleVariable* Variable);
+static void HandlePaperDefaultsChanged(IConsoleVariable* Variable);
+#endif
+
+#if WITH_EDITOR
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
     TEXT("r.PlanetaryCreation.UseGPUAmplification"),
-    0,
-    TEXT("Enable GPU compute path for Stage B amplification. 0 = CPU (default), 1 = GPU when available."),
-    ECVF_Default);
+    1,
+    TEXT("Enable GPU compute path for Stage B amplification. 0 = CPU fallback, 1 = GPU (paper default)."),
+    FConsoleVariableDelegate::CreateStatic(&HandleUseGPUAmplificationChanged));
 
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationVisualizationMode(
     TEXT("r.PlanetaryCreation.VisualizationMode"),
-    static_cast<int32>(ETectonicVisualizationMode::PlateColors),
-    TEXT("Set visualization overlay: 0=Plate Colors, 1=Elevation Heatmap, 2=Velocity Field, 3=Stress Gradient, 4=Amplified Stage B, 5=Amplification Blend."),
+    static_cast<int32>(ETectonicVisualizationMode::AmplificationBlend),
+    TEXT("Set visualization overlay: 0=Plate Colors, 1=Elevation Heatmap, 2=Velocity Field, 3=Stress Gradient, 4=Amplified Stage B, 5=Amplification Blend (paper default)."),
     ECVF_Default);
 
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationStageBProfiling(
     TEXT("r.PlanetaryCreation.StageBProfiling"),
-    0,
-    TEXT("Enable detailed Stage B profiling logs. 0=Off, 1=Per-step log."),
+    1,
+    TEXT("Enable detailed Stage B profiling logs. 0=Off, 1=Per-step log (paper default)."),
     ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarPlanetaryCreationPaperDefaults(
+    TEXT("r.PlanetaryCreation.PaperDefaults"),
+    1,
+    TEXT("Toggle paper-aligned defaults (Stage B amplification, GPU preview, PBR shading, LOD5).\n0 = revert to M5 baseline\n1 = enable paper-authentic pipeline (default)."),
+    FConsoleVariableDelegate::CreateStatic(&HandlePaperDefaultsChanged));
 
 static void ApplyStageBProfilingCommandLineOverride()
 {
@@ -124,6 +136,86 @@ struct FStageBProfilingCommandLineInitializer
 };
 
 static FStageBProfilingCommandLineInitializer GStageBProfilingCommandLineInitializer;
+
+static void HandleUseGPUAmplificationChanged(IConsoleVariable* Variable)
+{
+#if WITH_EDITOR
+    const bool bEnable = Variable && Variable->GetInt() != 0;
+    if (FTectonicSimulationController* Controller = FTectonicSimulationController::GetActiveController())
+    {
+        Controller->SetGPUPreviewMode(bEnable);
+    }
+#endif
+}
+
+static void HandlePaperDefaultsChanged(IConsoleVariable* Variable)
+{
+    if (!Variable)
+    {
+        return;
+    }
+
+    const bool bEnable = Variable->GetInt() != 0;
+
+    if (IConsoleVariable* GPUVar = CVarPlanetaryCreationUseGPUAmplification.AsVariable())
+    {
+        GPUVar->Set(bEnable ? 1 : 0, ECVF_SetByCode);
+    }
+
+    if (IConsoleVariable* StageBVar = CVarPlanetaryCreationStageBProfiling.AsVariable())
+    {
+        StageBVar->Set(bEnable ? 1 : 0, ECVF_SetByCode);
+    }
+
+    if (IConsoleVariable* VizVar = CVarPlanetaryCreationVisualizationMode.AsVariable())
+    {
+        VizVar->Set(bEnable
+            ? static_cast<int32>(ETectonicVisualizationMode::Amplified)
+            : static_cast<int32>(ETectonicVisualizationMode::PlateColors),
+            ECVF_SetByCode);
+    }
+
+#if WITH_EDITOR
+    UTectonicSimulationService* Service = nullptr;
+    if (GEditor)
+    {
+        Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
+    }
+
+    if (Service)
+    {
+        FTectonicSimulationParameters Params = Service->GetParameters();
+
+        if (bEnable)
+        {
+            Params.bEnableOceanicAmplification = true;
+            Params.bEnableContinentalAmplification = true;
+            Params.bSkipCPUAmplification = true;
+            Params.bEnableAutomaticLOD = false;
+            Params.RenderSubdivisionLevel = FMath::Max(Params.RenderSubdivisionLevel, Params.MinAmplificationLOD);
+            Params.VisualizationMode = ETectonicVisualizationMode::Amplified;
+        }
+        else
+        {
+            Params.bEnableOceanicAmplification = false;
+            Params.bEnableContinentalAmplification = false;
+            Params.bSkipCPUAmplification = false;
+            Params.bEnableAutomaticLOD = true;
+            Params.RenderSubdivisionLevel = 0;
+            Params.VisualizationMode = ETectonicVisualizationMode::PlateColors;
+        }
+
+        Service->SetParameters(Params);
+    }
+
+    if (FTectonicSimulationController* Controller = FTectonicSimulationController::GetActiveController())
+    {
+        Controller->SetPBRShadingEnabled(bEnable);
+        Controller->SetGPUPreviewMode(bEnable && (CVarPlanetaryCreationUseGPUAmplification.GetValueOnAnyThread() != 0));
+        Controller->RebuildPreview();
+    }
+#endif
+}
 
 static void HandleVisualizationModeConsoleChange(IConsoleVariable* Variable)
 {
@@ -6529,6 +6621,45 @@ void UTectonicSimulationService::InitializeAmplifiedElevationBaseline()
     BumpOceanicAmplificationSerial();
 }
 
+void UTectonicSimulationService::EnsureStageBPrimed()
+{
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount == 0)
+    {
+        VertexCrustAge.Reset();
+        VertexRidgeDirections.Reset();
+        VertexAmplifiedElevation.Reset();
+        return;
+    }
+
+    bool bResizedRidgeDirections = false;
+
+    if (VertexCrustAge.Num() != VertexCount)
+    {
+        VertexCrustAge.SetNumZeroed(VertexCount);
+    }
+
+    if (VertexAmplifiedElevation.Num() != VertexCount)
+    {
+        VertexAmplifiedElevation.SetNumZeroed(VertexCount);
+    }
+
+    if (VertexRidgeDirections.Num() != VertexCount)
+    {
+        VertexRidgeDirections.SetNum(VertexCount);
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            VertexRidgeDirections[Index] = FVector3d::ZAxisVector;
+        }
+        bResizedRidgeDirections = true;
+    }
+
+    if (bResizedRidgeDirections)
+    {
+        MarkAllRidgeDirectionsDirty();
+    }
+}
+
 void UTectonicSimulationService::RebuildStageBForCurrentLOD()
 {
     TRACE_CPUPROFILER_EVENT_SCOPE(RebuildStageBForCurrentLOD);
@@ -6543,6 +6674,7 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
         return;
     }
 
+    EnsureStageBPrimed();
     InitializeAmplifiedElevationBaseline();
 
     const bool bMeetsAmplificationLOD = Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;

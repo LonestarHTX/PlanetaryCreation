@@ -8,6 +8,8 @@
 
 class UTectonicSimulationService;
 class UTexture2D;
+class UMaterial;
+class UMaterialInstanceDynamic;
 
 /** Milestone 3 Task 2.4: Elevation visualization mode. */
 enum class EElevationMode : uint8
@@ -131,6 +133,11 @@ public:
     void SetBoundaryOverlayMode(int32 InMode);
     int32 GetBoundaryOverlayMode() const { return BoundaryOverlayMode; }
 
+    /** Enable or disable PBR shading for the preview mesh. */
+    void SetPBRShadingEnabled(bool bEnabled);
+    bool IsPBRShadingEnabled() const { return bUsePBRShading; }
+    static FTectonicSimulationController* GetActiveController();
+
     /** Milestone 4 Phase 4.1: Update camera distance and recompute target LOD. */
     void UpdateLOD();
 
@@ -205,6 +212,12 @@ private:
         RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
 
     bool UpdateCachedMeshFromSnapshot(FCachedLODMesh& CachedMesh, const FMeshBuildSnapshot& Snapshot, int32 NewSurfaceDataVersion);
+    UMaterial* CreateVertexColorMaterial(bool bEnablePBR) const;
+    UMaterialInterface* ResolveGPUPreviewMaterial() const;
+    UMaterial* CreateGPUPreviewMaterial() const;
+    void ApplyCPUMaterial(class URealtimeMeshComponent* Component);
+    void ApplyPreviewMaterialMode();
+    void ApplyPreviewMaterialParameters() const;
     bool TryFastSurfaceRefresh(FCachedLODMesh& CachedMesh, const UTectonicSimulationService& Service, int32 NewSurfaceDataVersion);
     bool TryUpdatePreviewMeshInPlace(const FCachedLODMesh& CachedMesh);
     void ApplyCachedMeshToPreview(const FCachedLODMesh& CachedMesh);
@@ -226,6 +239,8 @@ private:
     bool bShowBoundaries = false;
     /** 0 = raw edges, 1 = simplified polylines */
     int32 BoundaryOverlayMode = 0;
+    bool bUsePBRShading = false; // Paper defaults favour unlit vertex colors; toggle PBR via UI or PaperDefaults command when lighting is available.
+    float PBRRoughness = 0.7f;
 
     /** Milestone 3 Task 4.3: Async mesh build state. */
     mutable std::atomic<bool> bAsyncMeshBuildInProgress{false};
@@ -253,6 +268,10 @@ private:
     mutable FTextureRHIRef GPUHeightTexture;
     mutable FIntPoint HeightTextureSize = FIntPoint(2048, 1024);
     mutable TStrongObjectPtr<UTexture2D> GPUHeightTextureAsset;
+    mutable TWeakObjectPtr<UMaterial> GPUPreviewUnlitMaterial;
+    mutable TStrongObjectPtr<UMaterial> GPUPreviewPBRMaterial;
+    mutable TWeakObjectPtr<UMaterialInstanceDynamic> PreviewCPUInstance;
+    mutable TWeakObjectPtr<UMaterialInstanceDynamic> PreviewGPUInstance;
 
     struct FStaticLODData
     {

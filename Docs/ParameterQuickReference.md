@@ -8,7 +8,7 @@ This sheet captures the core simulation knobs now that the system operates in me
 |-----------|-------|---------|-----------------|-------|
 | `PlanetRadius` | m | 127,400 | 10,000 - 10,000,000 | Physical radius used for all geodesic math; keep consistent between runs for determinism. |
 | `SubdivisionLevel` | - | 0 | 0 - 3 | Controls plate count (20 -> 1280). Higher values increase sim cost. |
-| `RenderSubdivisionLevel` | - | 0 | 0 - 6 | Visualization mesh density (20 -> 81,920 faces). Adjust on demand with `SetRenderSubdivisionLevel`. |
+| `RenderSubdivisionLevel` | - | 5 | 0 - 6 | Visualization mesh density (20 -> 81,920 faces). Paper defaults launch at L5; drop lower when profiling CPU-only paths. |
 | `LloydIterations` | - | 8 | 0 - 10 | Plate centroid relaxation passes; reduce when rapid prototyping. |
 | `ElevationScale` | - | 1.0 | 0.5 - 3.0 | Multiplies stress-derived uplift; with the meter pipeline, 1.0 ~ 100 m per 1 MPa. |
 
@@ -57,9 +57,19 @@ This sheet captures the core simulation knobs now that the system operates in me
 | `OceanicAgeSubsidenceCoeff` | m / sqrtMy | 350.0 | 250 - 400 | Depth gain per sqrtage for oceanic crust. |
 | `bEnableOceanicDampening` | toggle | false | - | Turns on age-based subsidence and seafloor smoothing. |
 
+## Stage B Amplification
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `bEnableOceanicAmplification` | true | Paper default; disable via `r.PlanetaryCreation.PaperDefaults 0` or the Stage B toggle when profiling CPU baselines. |
+| `bEnableContinentalAmplification` | true | Paper default matching the published exemplar pipeline; revert with `r.PlanetaryCreation.PaperDefaults 0`. |
+| `bSkipCPUAmplification` | true | GPU preview renders Stage B directly; set to false if you need the CPU fallback for comparison tests. |
+| `MinAmplificationLOD` | 5 | Stage B only runs at or above this render LOD. |
+
 ## Usage Tips
 
 - Adjust `PlanetRadius` and LODs first; other distances (camera, rift widths) should then make intuitive sense.
 - Toggle erosion/sediment/dampening together to observe the full Phase 5 weathering workflow.
 - Keep deterministic runs locked to a single parameter set; changing any value mid-run alters snapshot fingerprints.
+- Use `r.PlanetaryCreation.PaperDefaults 0/1` to flip between the paper-authentic defaults (LOD 5, Stage B/GPU/PBR on) and the lighter M5 baseline for CPU-only profiling.
 

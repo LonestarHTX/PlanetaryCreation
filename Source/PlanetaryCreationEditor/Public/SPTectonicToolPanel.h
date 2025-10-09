@@ -81,6 +81,10 @@ private:
     ECheckBoxState GetGPUPreviewState() const;
     void OnGPUPreviewChanged(ECheckBoxState NewState);
 
+    // PBR shading toggle for preview material
+    ECheckBoxState GetPBRShadingState() const;
+    void OnPBRShadingChanged(ECheckBoxState NewState);
+
     // Visualization mode picker (plate/elevation/velocity/stress)
     void InitializeVisualizationOptions();
     void RefreshSelectedVisualizationOption();
@@ -128,6 +132,15 @@ private:
     FReply HandleZoomOutClicked();
     FReply HandleResetCameraClicked();
     FText GetCameraStatusText() const;
+
+    TSharedRef<SWidget> BuildStatsHeader();
+    TSharedRef<SWidget> BuildPrimaryActionRow();
+    TSharedRef<SWidget> BuildSimulationSection();
+    TSharedRef<SWidget> BuildPlaybackSection();
+    TSharedRef<SWidget> BuildVisualizationSection();
+    TSharedRef<SWidget> BuildStageBSection();
+    TSharedRef<SWidget> BuildSurfaceProcessesSection();
+    TSharedRef<SWidget> BuildCameraSection();
 
     TWeakPtr<FTectonicSimulationController> ControllerWeak;
 

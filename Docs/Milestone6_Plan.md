@@ -314,7 +314,7 @@ int32 GenerateTerraneID(int32 SourcePlateID, double ExtractionTime_My, const TAr
 
 **Goal:** Implement paper Section 5 amplification to generate ~100m resolution detail on the base tectonic crust.
 
-**Status (2025-10-10):** Phase 2 complete. Oceanic/continental GPU compute shaders operational, mesh streaming integrated, GPU parity tests passing. Material polish (PBR overlays) deferred to M7.
+**Status (2025-10-10):** Phase 2 complete. Oceanic/continental GPU compute shaders operational, mesh streaming integrated, GPU parity tests passing. Runtime PBR shading toggle (UI + `r.PlanetaryCreation.UsePBRShading`) now lights the preview mesh in both CPU and GPU paths; biome-specific material polish remains earmarked for M7.
 
 #### Task 2.0: Visualization Mode Unification *(✅ Completed 2025-10-06)*
 **Owner:** Tools Engineer, Rendering Engineer  
@@ -554,7 +554,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - ✅ GPU mesh streaming: Async upload via dedicated `StageBHeight` vertex buffer
 - ✅ Visualization modes: **Amplified Stage B** (delta heatmap) and **Amplification Blend** (plate colors + Stage B tint)
 - ✅ Material integration: GPU preview MID receives correct elevation scale from simulation parameters
-- ⏸️ PBR shaders: Deferred to M7 (surface material polish)
+- ✅ Preview PBR toggle: Runtime material builder + console hook light the preview mesh (advanced biome polish still M7)
 
 **Technical Notes:**
 - Amplification is **render-only**: Simulation uses coarse M5 mesh
@@ -580,7 +580,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - ✅ GPU mesh streaming handles 4× vertex density increase via dedicated `StageBHeight` buffer
 - ✅ Cached LODs inherit amplified elevations automatically (no simulation advance required)
 - ✅ GPU preview materials consume exact amplified heights with correct elevation scale
-- ⏸️ Material system highlights tectonic features (PBR shading, blended overlays) - deferred to M7
+- ✅ Material system toggle: Preview mesh can switch between flat and PBR shading; biome/texture polish still scheduled for M7
 - ✅ Visualization modes: **Amplified Stage B** and **Amplification Blend** enable Stage B-focused analysis
 
 **Status (2025-10-10):** ✅ Complete. Stage B cascade triggers automatically after `SetRenderSubdivisionLevel()` so cached LODs inherit amplified elevations without simulation advance. The controller streams amplified elevations into a dedicated `StageBHeight` vertex buffer for every realtime mesh update, propagates the live elevation scale to the GPU preview material, and exposes new visualization modes (`r.PlanetaryCreation.VisualizationMode` 0-5):
@@ -591,7 +591,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - Mode 4: **Amplified Stage B** (delta heatmap showing Stage B contribution)
 - Mode 5: **Amplification Blend** (plate colors tinted by Stage B deltas)
 
-New modes added to tool panel combo box (`SPTectonicToolPanel.cpp:863,933`) and async mesh build paths (`TectonicSimulationController.cpp:1089,1810,1999`). Material polish (PBR shading) deferred to M7.
+New modes added to tool panel combo box (`SPTectonicToolPanel.cpp:863,933`) and async mesh build paths (`TectonicSimulationController.cpp:1089,1810,1999`). The panel also exposes the new **Enable PBR Shading** checkbox (backs `r.PlanetaryCreation.UsePBRShading`), and the controller builds a runtime PBR material when GPU preview is active so both CPU and GPU paths share the same lighting toggle. The tool panel UX was cleaned up in Oct 2025: primary actions are pinned to a header ribbon and the remaining controls live in collapsible sections (*Simulation Setup*, *Playback & History*, *Visualization & Preview*, *Stage B & Detail*, *Surface Processes*, *Camera & View*) so reviewers can jump straight to the knobs they need. The Stage B priming button now seeds crust-age/ridge buffers before forcing a rebuild so enabling the GPU pipeline from a fresh session no longer trips the VertexCrustAge assert. Detailed biome/texture polish is still targeted for M7. A new `r.PlanetaryCreation.PaperDefaults` toggle flips the whole bundle on/off for profiling so automation can opt into the lighter M5 baseline when needed.
 
 ---
 

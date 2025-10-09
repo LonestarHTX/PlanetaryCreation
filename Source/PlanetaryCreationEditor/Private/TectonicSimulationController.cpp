@@ -20,6 +20,12 @@
 #include "MaterialDomain.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionVertexColor.h"
+#include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialExpressionComponentMask.h"
+#include "Materials/MaterialExpressionMultiply.h"
+#include "Materials/MaterialExpressionTextureCoordinate.h"
+#include "Materials/MaterialExpressionTextureSampleParameter2D.h"
+#include "Materials/MaterialExpressionVertexNormalWS.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TectonicSimulationService.h"
 #include "UObject/ConstructorHelpers.h"
@@ -31,9 +37,7 @@
 #include "HAL/PlatformTime.h"
 #include "HeightmapColorPalette.h"
 #include "Engine/Texture2D.h"
-#if UE_BUILD_DEVELOPMENT
 #include "HAL/IConsoleManager.h"
-#endif
 
 namespace PlanetaryCreation
 {
@@ -41,6 +45,8 @@ namespace PlanetaryCreation
     {
         static const FName HeightTextureParamName(TEXT("HeightTexture"));
         static const FName ElevationScaleParamName(TEXT("ElevationScale"));
+        static const FName UsePBRParamName(TEXT("UsePBR"));
+        static const FName RoughnessParamName(TEXT("PBR_Roughness"));
     }
 
     namespace MeshStreams
@@ -49,6 +55,39 @@ namespace PlanetaryCreation
             ERealtimeMeshStreamType::Vertex, FName(TEXT("StageBHeight")));
     }
 }
+
+static FTectonicSimulationController* GActiveSimulationController = nullptr;
+static bool bApplyingPBRFromController = false;
+
+FTectonicSimulationController* FTectonicSimulationController::GetActiveController()
+{
+    return GActiveSimulationController;
+}
+
+static void HandleUsePBRShadingChanged(IConsoleVariable* Variable)
+{
+    if (!Variable)
+    {
+        return;
+    }
+
+    if (bApplyingPBRFromController)
+    {
+        return;
+    }
+
+    const bool bEnable = Variable->GetInt() != 0;
+    if (GActiveSimulationController)
+    {
+        GActiveSimulationController->SetPBRShadingEnabled(bEnable);
+    }
+}
+
+static TAutoConsoleVariable<int32> CVarPlanetaryCreationUsePBRShading(
+    TEXT("r.PlanetaryCreation.UsePBRShading"),
+    0,
+    TEXT("Enable PBR shading for the tectonic preview mesh (0 = flat shading [default], 1 = PBR)."),
+    FConsoleVariableDelegate::CreateStatic(&HandleUsePBRShadingChanged));
 
 namespace
 {
@@ -179,6 +218,16 @@ void FTectonicSimulationController::Initialize()
 {
     bShutdownRequested.store(false, std::memory_order_relaxed);
     CachedService = GetService();
+    GActiveSimulationController = this;
+    const bool bInitialPBR = CVarPlanetaryCreationUsePBRShading.GetValueOnAnyThread() != 0;
+    SetPBRShadingEnabled(bInitialPBR);
+
+    bool bInitialGPUPreview = true;
+    if (UTectonicSimulationService* Service = CachedService.Get())
+    {
+        bInitialGPUPreview = Service->ShouldUseGPUAmplification();
+    }
+    SetGPUPreviewMode(bInitialGPUPreview);
 }
 
 void FTectonicSimulationController::Shutdown()
@@ -217,6 +266,10 @@ void FTectonicSimulationController::Shutdown()
     bAsyncMeshBuildInProgress.store(false);
     ActiveAsyncTasks.store(0, std::memory_order_relaxed);
     CachedService.Reset();
+    if (GActiveSimulationController == this)
+    {
+        GActiveSimulationController = nullptr;
+    }
 }
 
 void FTectonicSimulationController::StepSimulation(int32 Steps)
@@ -843,6 +896,8 @@ void FTectonicSimulationController::SetGPUPreviewMode(bool bEnabled)
         {
             RebuildPreview();
         }
+
+        ApplyPreviewMaterialMode();
     }
 }
 
@@ -867,6 +922,300 @@ void FTectonicSimulationController::SetBoundaryOverlayMode(int32 InMode)
 void FTectonicSimulationController::RefreshBoundaryOverlay()
 {
     DrawHighResolutionBoundaryOverlay();
+}
+
+void FTectonicSimulationController::SetPBRShadingEnabled(bool bEnabled)
+{
+    if (bUsePBRShading == bEnabled)
+    {
+        return;
+    }
+
+    bUsePBRShading = bEnabled;
+
+    bApplyingPBRFromController = true;
+    if (IConsoleVariable* Var = CVarPlanetaryCreationUsePBRShading.AsVariable())
+    {
+        const int32 TargetValue = bEnabled ? 1 : 0;
+        if (Var->GetInt() != TargetValue)
+        {
+            Var->Set(TargetValue, ECVF_SetByCode);
+        }
+    }
+    bApplyingPBRFromController = false;
+
+    ApplyPreviewMaterialMode();
+    ApplyPreviewMaterialParameters();
+
+    if (!bUseGPUPreviewMode)
+    {
+        RefreshPreviewColors();
+    }
+}
+
+UMaterial* FTectonicSimulationController::CreateVertexColorMaterial(bool bEnablePBR) const
+{
+    UMaterial* Material = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+    if (!Material)
+    {
+        return nullptr;
+    }
+
+    Material->MaterialDomain = EMaterialDomain::MD_Surface;
+    Material->BlendMode = EBlendMode::BLEND_Opaque;
+    Material->TwoSided = false;
+    Material->SetShadingModel(bEnablePBR ? EMaterialShadingModel::MSM_DefaultLit : EMaterialShadingModel::MSM_Unlit);
+
+    auto AddExpression = [Material](auto* Expression)
+    {
+        Expression->Material = Material;
+        Material->GetExpressionCollection().AddExpression(Expression);
+        return Expression;
+    };
+
+    UMaterialExpressionVertexColor* VertexColorNode = AddExpression(NewObject<UMaterialExpressionVertexColor>(Material));
+
+    if (bEnablePBR)
+    {
+        Material->GetEditorOnlyData()->BaseColor.Expression = VertexColorNode;
+
+        UMaterialExpressionScalarParameter* RoughnessParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
+        RoughnessParam->ParameterName = PlanetaryCreation::Preview::RoughnessParamName;
+        RoughnessParam->DefaultValue = PBRRoughness;
+        Material->GetEditorOnlyData()->Roughness.Expression = RoughnessParam;
+
+        UMaterialExpressionScalarParameter* MetallicParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
+        MetallicParam->ParameterName = TEXT("PBR_Metallic");
+        MetallicParam->DefaultValue = 0.0f;
+        Material->GetEditorOnlyData()->Metallic.Expression = MetallicParam;
+    }
+    else
+    {
+        Material->GetEditorOnlyData()->EmissiveColor.Expression = VertexColorNode;
+    }
+
+    Material->PostEditChange();
+#if WITH_EDITOR
+    Material->ForceRecompileForRendering();
+#endif
+    return Material;
+}
+
+UMaterial* FTectonicSimulationController::CreateGPUPreviewMaterial() const
+{
+    UMaterial* Material = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+    if (!Material)
+    {
+        return nullptr;
+    }
+
+    Material->MaterialDomain = EMaterialDomain::MD_Surface;
+    Material->BlendMode = EBlendMode::BLEND_Opaque;
+    Material->TwoSided = false;
+    Material->SetShadingModel(EMaterialShadingModel::MSM_DefaultLit);
+    Material->bUseMaterialAttributes = false;
+
+    auto AddExpression = [Material](auto* Expression)
+    {
+        Expression->Material = Material;
+        Material->GetExpressionCollection().AddExpression(Expression);
+        return Expression;
+    };
+
+    UMaterialExpressionVertexColor* VertexColorNode = AddExpression(NewObject<UMaterialExpressionVertexColor>(Material));
+    Material->GetEditorOnlyData()->BaseColor.Expression = VertexColorNode;
+
+    UMaterialExpressionScalarParameter* RoughnessParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
+    RoughnessParam->ParameterName = PlanetaryCreation::Preview::RoughnessParamName;
+    RoughnessParam->DefaultValue = PBRRoughness;
+    Material->GetEditorOnlyData()->Roughness.Expression = RoughnessParam;
+
+    UMaterialExpressionScalarParameter* MetallicParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
+    MetallicParam->ParameterName = TEXT("PBR_Metallic");
+    MetallicParam->DefaultValue = 0.0f;
+    Material->GetEditorOnlyData()->Metallic.Expression = MetallicParam;
+
+    Material->GetEditorOnlyData()->Specular.Constant = 0.0f;
+
+    // World Position Offset = (HeightTexture.R * ElevationScale) * VertexNormalWS
+    UMaterialExpressionTextureCoordinate* UVNode = AddExpression(NewObject<UMaterialExpressionTextureCoordinate>(Material));
+
+    UMaterialExpressionTextureSampleParameter2D* HeightSample = AddExpression(NewObject<UMaterialExpressionTextureSampleParameter2D>(Material));
+    HeightSample->ParameterName = PlanetaryCreation::Preview::HeightTextureParamName;
+    HeightSample->SamplerType = SAMPLERTYPE_Color;  // Changed from LinearGrayscale - default texture is Color type
+    HeightSample->Coordinates.Expression = UVNode;
+
+    UMaterialExpressionComponentMask* HeightMask = AddExpression(NewObject<UMaterialExpressionComponentMask>(Material));
+    HeightMask->Input.Expression = HeightSample;
+    HeightMask->R = true;
+
+    UMaterialExpressionScalarParameter* ElevationParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
+    ElevationParam->ParameterName = PlanetaryCreation::Preview::ElevationScaleParamName;
+    ElevationParam->DefaultValue = 100.0f;
+
+    UMaterialExpressionMultiply* HeightTimesScale = AddExpression(NewObject<UMaterialExpressionMultiply>(Material));
+    HeightTimesScale->A.Expression = HeightMask;
+    HeightTimesScale->B.Expression = ElevationParam;
+
+    UMaterialExpressionVertexNormalWS* VertexNormal = AddExpression(NewObject<UMaterialExpressionVertexNormalWS>(Material));
+
+    UMaterialExpressionMultiply* OffsetVector = AddExpression(NewObject<UMaterialExpressionMultiply>(Material));
+    OffsetVector->A.Expression = VertexNormal;
+    OffsetVector->B.Expression = HeightTimesScale;
+    Material->GetEditorOnlyData()->WorldPositionOffset.Expression = OffsetVector;
+
+    Material->PostEditChange();
+#if WITH_EDITOR
+    Material->ForceRecompileForRendering();
+#endif
+    return Material;
+}
+
+UMaterialInterface* FTectonicSimulationController::ResolveGPUPreviewMaterial() const
+{
+    if (!bUsePBRShading)
+    {
+        if (!GPUPreviewUnlitMaterial.IsValid())
+        {
+            if (UMaterial* Loaded = LoadObject<UMaterial>(nullptr, TEXT("/Game/M_PlanetSurface_GPUDisplacement.M_PlanetSurface_GPUDisplacement")))
+            {
+                GPUPreviewUnlitMaterial = Loaded;
+            }
+        }
+        return GPUPreviewUnlitMaterial.Get();
+    }
+
+    if (!GPUPreviewPBRMaterial.IsValid())
+    {
+        if (UMaterial* PBRMaterial = CreateGPUPreviewMaterial())
+        {
+            GPUPreviewPBRMaterial.Reset(PBRMaterial);
+        }
+    }
+    return GPUPreviewPBRMaterial.Get();
+}
+
+void FTectonicSimulationController::ApplyCPUMaterial(URealtimeMeshComponent* Component)
+{
+    if (!Component)
+    {
+        PreviewCPUInstance.Reset();
+        return;
+    }
+
+    PreviewGPUInstance.Reset();
+
+    if (bUsePBRShading && PreviewCPUInstance.IsValid())
+    {
+        Component->SetMaterial(0, PreviewCPUInstance.Get());
+        return;
+    }
+
+    UMaterial* BaseMaterial = nullptr;
+
+    if (bUsePBRShading)
+    {
+        // Load the static PBR material asset created in Content Browser
+        BaseMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/M_TectonicPBR.M_TectonicPBR"));
+        if (!BaseMaterial)
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load M_TectonicPBR material asset"));
+            return;
+        }
+    }
+    else
+    {
+        // For unlit, create runtime material
+        BaseMaterial = CreateVertexColorMaterial(bUsePBRShading);
+        if (!BaseMaterial)
+        {
+            return;
+        }
+    }
+
+    if (bUsePBRShading)
+    {
+        if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseMaterial, Component))
+        {
+            MID->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
+            Component->SetMaterial(0, MID);
+            PreviewCPUInstance = MID;
+        }
+    }
+    else
+    {
+        Component->SetMaterial(0, BaseMaterial);
+        PreviewCPUInstance.Reset();
+    }
+}
+
+void FTectonicSimulationController::ApplyPreviewMaterialMode()
+{
+    if (!PreviewActor.IsValid())
+    {
+        return;
+    }
+
+    if (URealtimeMeshComponent* Component = PreviewActor->GetRealtimeMeshComponent())
+    {
+        if (!bUseGPUPreviewMode)
+        {
+            ApplyCPUMaterial(Component);
+        }
+        else
+        {
+            if (UMaterialInterface* DesiredMaterial = ResolveGPUPreviewMaterial())
+            {
+                UMaterialInstanceDynamic* MID = PreviewGPUInstance.Get();
+                if (!MID || MID->Parent != DesiredMaterial)
+                {
+                    MID = UMaterialInstanceDynamic::Create(DesiredMaterial, Component);
+                    if (MID)
+                    {
+                        Component->SetMaterial(0, MID);
+                    }
+                }
+                else
+                {
+                    Component->SetMaterial(0, MID);
+                }
+
+                if (MID)
+                {
+                    PreviewGPUInstance = MID;
+
+                    UTectonicSimulationService* Service = GetService();
+                    if (GPUHeightTextureAsset.IsValid())
+                    {
+                        MID->SetTextureParameterValue(PlanetaryCreation::Preview::HeightTextureParamName, GPUHeightTextureAsset.Get());
+                    }
+                    if (Service)
+                    {
+                        const float ElevationScaleUE = MetersToUE(Service->GetParameters().ElevationScale);
+                        MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, ElevationScaleUE);
+                    }
+                    MID->SetScalarParameterValue(PlanetaryCreation::Preview::UsePBRParamName, bUsePBRShading ? 1.0f : 0.0f);
+                    MID->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
+                }
+            }
+        }
+    }
+
+    ApplyPreviewMaterialParameters();
+}
+
+void FTectonicSimulationController::ApplyPreviewMaterialParameters() const
+{
+    if (PreviewCPUInstance.IsValid())
+    {
+        PreviewCPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
+    }
+
+    if (PreviewGPUInstance.IsValid())
+    {
+        PreviewGPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::UsePBRParamName, bUsePBRShading ? 1.0f : 0.0f);
+        PreviewGPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
+    }
 }
 
 UTectonicSimulationService* FTectonicSimulationController::GetService() const
@@ -963,11 +1312,9 @@ void FTectonicSimulationController::EnsurePreviewActor() const
             // Milestone 6: Use GPU displacement material when GPU preview mode is enabled
             if (bUseGPUPreviewMode)
             {
-                // Load the GPU displacement material
-                UMaterial* GPUDisplacementMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/M_PlanetSurface_GPUDisplacement.M_PlanetSurface_GPUDisplacement"));
-                if (GPUDisplacementMaterial)
+                if (UMaterialInterface* GPUBaseMaterial = ResolveGPUPreviewMaterial())
                 {
-                    Component->SetMaterial(0, GPUDisplacementMaterial);
+                    Component->SetMaterial(0, GPUBaseMaterial);
                     UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUPreview] GPU displacement material applied"));
                     EnsureGPUPreviewTextureAsset();
                 }
@@ -980,22 +1327,13 @@ void FTectonicSimulationController::EnsurePreviewActor() const
 
             if (!bUseGPUPreviewMode)
             {
-                // Create simple unlit material that displays vertex colors
-                UMaterial* VertexColorMaterial = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
-                VertexColorMaterial->MaterialDomain = EMaterialDomain::MD_Surface;
-                VertexColorMaterial->SetShadingModel(EMaterialShadingModel::MSM_Unlit);
-
-                UMaterialExpressionVertexColor* VertexColorNode = NewObject<UMaterialExpressionVertexColor>(VertexColorMaterial);
-                VertexColorMaterial->GetExpressionCollection().AddExpression(VertexColorNode);
-                VertexColorMaterial->GetEditorOnlyData()->EmissiveColor.Expression = VertexColorNode;
-
-                VertexColorMaterial->PostEditChange();
-
-                Component->SetMaterial(0, VertexColorMaterial);
+                const_cast<FTectonicSimulationController*>(this)->ApplyCPUMaterial(Component);
             }
 
             PreviewMesh = Mesh;
             bPreviewInitialized = false;
+
+            const_cast<FTectonicSimulationController*>(this)->ApplyPreviewMaterialMode();
         }
     }
 #endif
@@ -1291,6 +1629,9 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     {
         ElevationRangeMeters = 1.0;
     }
+
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[ElevationDebug] MinElev=%.1fm MaxElev=%.1fm Range=%.1fm VertexCount=%d"),
+        MinElevationMeters, MaxElevationMeters, ElevationRangeMeters, SourceVertexCount);
 
     static const FLinearColor HeightGradientStops[] = {
         FLinearColor(0.015f, 0.118f, 0.341f),
@@ -2666,6 +3007,9 @@ void FTectonicSimulationController::FinalizePreviewMeshUpdate(int32 VertexCount,
                                 const float ElevationScaleUE = MetersToUE(Service->GetParameters().ElevationScale);
                                 MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, ElevationScaleUE);
                                 MID->SetScalarParameterValue(TEXT("DebugOverlayOpacity"), 0.5f);
+
+                                PreviewGPUInstance = MID;
+                                ApplyPreviewMaterialParameters();
 
                                 UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Height texture bound to material (%dx%d)"),
                                     HeightTextureSize.X, HeightTextureSize.Y);

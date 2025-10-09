@@ -36,6 +36,7 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
 ```bash
 "C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor.exe" "<ProjectPath>\PlanetaryCreation.uproject"
 ```
+- The editor now boots with the paper-authentic stack (LOD 5, Stage B amplification, GPU preview, and PBR). To revert to the lean M5 baseline for profiling or legacy tests, run `r.PlanetaryCreation.PaperDefaults 0` in the console (or prepend it to automation commands).
 
 ## Running Tests
 
@@ -47,7 +48,7 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
 
 **Command-line automation:**
 ```bash
-"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<ProjectPath>\PlanetaryCreation.uproject" -ExecCmds="Automation RunTests PlanetaryCreation; Quit" -unattended -nop4 -nosplash
+"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<ProjectPath>\PlanetaryCreation.uproject" -ExecCmds="r.PlanetaryCreation.PaperDefaults 0; Automation RunTests PlanetaryCreation; Quit" -unattended -nop4 -nosplash
 ```
 
 **RHI selection for automation suites:**

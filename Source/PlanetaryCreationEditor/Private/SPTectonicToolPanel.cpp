@@ -11,6 +11,8 @@
 #include "Widgets/Input/SSpinBox.h"
 #include "Widgets/Input/SSlider.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SExpandableArea.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
@@ -67,644 +69,704 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
         [
             SNew(SVerticalBox)
 
-            // Time display
             + SVerticalBox::Slot()
             .AutoHeight()
             [
-                SNew(STextBlock)
-                .Text(this, &SPTectonicToolPanel::GetCurrentTimeLabel)
+                BuildStatsHeader()
             ]
 
-            // Plate count display
             + SVerticalBox::Slot()
             .AutoHeight()
+            .Padding(0.0f, 8.0f, 0.0f, 0.0f)
             [
-                SNew(STextBlock)
-                .Text(this, &SPTectonicToolPanel::GetPlateCountLabel)
+                BuildPrimaryActionRow()
             ]
 
-            // Performance stats (Milestone 3 Task 4.5)
             + SVerticalBox::Slot()
-            .AutoHeight()
+            .FillHeight(1.0f)
             [
-                SNew(STextBlock)
-                .Text(this, &SPTectonicToolPanel::GetPerformanceStatsLabel)
-                .ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
-            ]
+                SNew(SScrollBox)
 
-            // Retessellation cadence telemetry
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            [
-                SNew(STextBlock)
-                .Text(this, &SPTectonicToolPanel::GetRetessellationStatsLabel)
-                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
-                .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
-            ]
-
-            // Seed input
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 12.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .AutoWidth()
-                .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                + SScrollBox::Slot()
                 [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "SeedLabel", "Seed:"))
+                    SNew(SExpandableArea)
+                    .AreaTitle(NSLOCTEXT("PlanetaryCreation", "SimulationSetupHeader", "Simulation Setup"))
+                    .InitiallyCollapsed(false)
+                    .BodyContent()
+                    [
+                        BuildSimulationSection()
+                    ]
                 ]
-                + SHorizontalBox::Slot()
-                .FillWidth(1.0f)
+
+                + SScrollBox::Slot()
+                .Padding(0.0f, 4.0f, 0.0f, 0.0f)
                 [
-                    SNew(SSpinBox<int32>)
-                    .Value(this, &SPTectonicToolPanel::GetSeedValue)
-                    .OnValueChanged(this, &SPTectonicToolPanel::OnSeedValueChanged)
-                    .MinValue(0)
-                    .MaxValue(999999)
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SeedTooltip", "Random seed for deterministic plate generation (Paper Section 2.1)"))
+                    SNew(SExpandableArea)
+                    .AreaTitle(NSLOCTEXT("PlanetaryCreation", "PlaybackSectionHeader", "Playback & History"))
+                    .InitiallyCollapsed(false)
+                    .BodyContent()
+                    [
+                        BuildPlaybackSection()
+                    ]
+                ]
+
+                + SScrollBox::Slot()
+                .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+                [
+                    SNew(SExpandableArea)
+                    .AreaTitle(NSLOCTEXT("PlanetaryCreation", "VisualizationSectionHeader", "Visualization & Preview"))
+                    .InitiallyCollapsed(false)
+                    .BodyContent()
+                    [
+                        BuildVisualizationSection()
+                    ]
+                ]
+
+                + SScrollBox::Slot()
+                .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+                [
+                    SNew(SExpandableArea)
+                    .AreaTitle(NSLOCTEXT("PlanetaryCreation", "StageBSectionHeader", "Stage B & Detail"))
+                    .InitiallyCollapsed(true)
+                    .BodyContent()
+                    [
+                        BuildStageBSection()
+                    ]
+                ]
+
+                + SScrollBox::Slot()
+                .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+                [
+                    SNew(SExpandableArea)
+                    .AreaTitle(NSLOCTEXT("PlanetaryCreation", "SurfaceSectionHeader", "Surface Processes"))
+                    .InitiallyCollapsed(true)
+                    .BodyContent()
+                    [
+                        BuildSurfaceProcessesSection()
+                    ]
+                ]
+
+                + SScrollBox::Slot()
+                .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+                [
+                    SNew(SExpandableArea)
+                    .AreaTitle(NSLOCTEXT("PlanetaryCreation", "CameraSectionHeader", "Camera & View"))
+                    .InitiallyCollapsed(true)
+                    .BodyContent()
+                    [
+                        BuildCameraSection()
+                    ]
                 ]
             ]
+        ]
+    ];
 
-            // Render subdivision level
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .AutoWidth()
-                .Padding(0.0f, 0.0f, 8.0f, 0.0f)
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "SubdivisionLabel", "Render Detail:"))
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(1.0f)
-                [
-                    SNew(SSpinBox<int32>)
-                    .Value(this, &SPTectonicToolPanel::GetSubdivisionValue)
-                    .OnValueChanged(this, &SPTectonicToolPanel::OnSubdivisionValueChanged)
-                    .OnValueCommitted(this, &SPTectonicToolPanel::OnSubdivisionValueCommitted)
-                    .MinValue(0)
-                    .MaxValue(8)
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SubdivisionTooltip", "Render mesh density (0=20, 1=80, 2=320, 3=1280, 4=5120, 5=20480, 6=81920, 7=327680, 8=1.3M faces)"))
-                ]
-            ]
+    RefreshSelectedVisualizationOption();
+}
 
-            // Regenerate button
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SButton)
-                .Text(NSLOCTEXT("PlanetaryCreation", "RegenerateButtonLabel", "Regenerate Plates"))
-                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RegenerateButtonTooltip", "Reset simulation with current seed and regenerate plate layout"))
-                .OnClicked(this, &SPTectonicToolPanel::HandleRegenerateClicked)
-            ]
+TSharedRef<SWidget> SPTectonicToolPanel::BuildStatsHeader()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetCurrentTimeLabel)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetPlateCountLabel)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetPerformanceStatsLabel)
+            .ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetRetessellationStatsLabel)
+            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+            .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
+        ];
+}
 
-            // Step button
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 12.0f)
+TSharedRef<SWidget> SPTectonicToolPanel::BuildPrimaryActionRow()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
             [
                 SNew(SButton)
                 .Text(NSLOCTEXT("PlanetaryCreation", "StepButtonLabel", "Step (2 My)"))
                 .ToolTipText(NSLOCTEXT("PlanetaryCreation", "StepButtonTooltip", "Advance the tectonic simulation by one iteration (2 My)."))
                 .OnClicked(this, &SPTectonicToolPanel::HandleStepClicked)
             ]
-
-            // Milestone 5 Task 1.3: Undo/Redo buttons
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 8.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "UndoButtonLabel", "Undo (Ctrl+Z)"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "UndoButtonTooltip", "Undo the last simulation step"))
-                    .IsEnabled(this, &SPTectonicToolPanel::IsUndoEnabled)
-                    .OnClicked(this, &SPTectonicToolPanel::HandleUndoClicked)
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "RedoButtonLabel", "Redo (Ctrl+Y)"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RedoButtonTooltip", "Redo the next simulation step"))
-                    .IsEnabled(this, &SPTectonicToolPanel::IsRedoEnabled)
-                    .OnClicked(this, &SPTectonicToolPanel::HandleRedoClicked)
-                ]
-            ]
-
-            // History status text
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(STextBlock)
-                .Text(this, &SPTectonicToolPanel::GetHistoryStatusText)
-                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
-                .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
-            ]
-
-            // Milestone 5 Task 1.2: Camera controls separator
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 12.0f)
-            [
-                SNew(SSeparator)
-            ]
-
-            // Camera controls label
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(STextBlock)
-                .Text(NSLOCTEXT("PlanetaryCreation", "CameraControlsLabel", "Camera Controls"))
-                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
-            ]
-
-            // Camera status text
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(STextBlock)
-                .Text(this, &SPTectonicToolPanel::GetCameraStatusText)
-                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
-                .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
-            ]
-
-            // Rotation controls (Left/Right)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "RotateLeftButton", "← Rotate Left"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RotateLeftTooltip", "Rotate camera 15° left"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandleRotateLeftClicked)
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "RotateRightButton", "Rotate Right →"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RotateRightTooltip", "Rotate camera 15° right"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandleRotateRightClicked)
-                ]
-            ]
-
-            // Tilt controls (Up/Down)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "TiltUpButton", "↑ Tilt Up"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TiltUpTooltip", "Tilt camera 10° up"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandleTiltUpClicked)
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "TiltDownButton", "↓ Tilt Down"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TiltDownTooltip", "Tilt camera 10° down"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandleTiltDownClicked)
-                ]
-            ]
-
-            // Zoom controls (In/Out)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(0.0f, 0.0f, 4.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "ZoomInButton", "+ Zoom In"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomInTooltip", "Zoom in 1.5M km"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandleZoomInClicked)
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(0.5f)
-                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "ZoomOutButton", "- Zoom Out"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomOutTooltip", "Zoom out 1.5M km"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandleZoomOutClicked)
-                ]
-            ]
-
-            // Reset camera button
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
             [
                 SNew(SButton)
-                .Text(NSLOCTEXT("PlanetaryCreation", "ResetCameraButton", "Reset Camera"))
-                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ResetCameraTooltip", "Reset camera to default view"))
-                .OnClicked(this, &SPTectonicToolPanel::HandleResetCameraClicked)
+                .Text(this, &SPTectonicToolPanel::GetPlaybackButtonText)
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PlayPauseTooltip", "Start/pause continuous playback (Space)"))
+                .OnClicked(this, &SPTectonicToolPanel::HandlePlayClicked)
             ]
-
-            // Milestone 5 Task 1.1: Playback controls separator
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 12.0f)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
             [
-                SNew(SSeparator)
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "StopButtonLabel", "Stop"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "StopTooltip", "Stop playback and reset"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleStopClicked)
             ]
-
-            // Playback controls label
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
             [
-                SNew(STextBlock)
-                .Text(NSLOCTEXT("PlanetaryCreation", "PlaybackControlsLabel", "Continuous Playback"))
-                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 10))
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "RegenerateButtonLabel", "Regenerate Plates"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RegenerateButtonTooltip", "Reset simulation with current seed and regenerate plate layout"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleRegenerateClicked)
             ]
+        ];
+}
 
-            // Play/Pause/Stop buttons
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .FillWidth(1.0f)
-                .Padding(0.0f, 0.0f, 2.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(this, &SPTectonicToolPanel::GetPlaybackButtonText)
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PlayPauseTooltip", "Start/pause continuous playback (Space)"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandlePlayClicked)
-                    // Play button is always enabled (can start from Stopped or resume from Paused)
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(1.0f)
-                .Padding(2.0f, 0.0f, 0.0f, 0.0f)
-                [
-                    SNew(SButton)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "StopButtonLabel", "Stop"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "StopTooltip", "Stop playback and reset"))
-                    .OnClicked(this, &SPTectonicToolPanel::HandleStopClicked)
-                ]
-            ]
-
-            // Playback speed control
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .AutoWidth()
-                .Padding(0.0f, 0.0f, 8.0f, 0.0f)
-                [
-                    SNew(STextBlock)
-                    .Text(this, &SPTectonicToolPanel::GetPlaybackSpeedLabel)
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(1.0f)
-                [
-                    SNew(SSlider)
-                    .Value(this, &SPTectonicToolPanel::GetPlaybackSpeed)
-                    .OnValueChanged(this, &SPTectonicToolPanel::OnPlaybackSpeedChanged)
-                    .MinValue(0.5f)
-                    .MaxValue(10.0f)
-                    .StepSize(0.5f)
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PlaybackSpeedTooltip", "Adjust playback speed (0.5× to 10×)"))
-                ]
-            ]
-
-            // Timeline scrubber
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 8.0f)
+TSharedRef<SWidget> SPTectonicToolPanel::BuildSimulationSection()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
             [
                 SNew(STextBlock)
-                .Text(this, &SPTectonicToolPanel::GetTimelineLabel)
-                .ColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f)))
+                .Text(NSLOCTEXT("PlanetaryCreation", "SeedLabel", "Seed:"))
             ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
+            + SHorizontalBox::Slot()
+            .FillWidth(1.0f)
             [
-                SNew(SSlider)
-                .Value(this, &SPTectonicToolPanel::GetTimelineValue)
-                .OnValueChanged(this, &SPTectonicToolPanel::OnTimelineScrubbed)
-                .MinValue(0.0f)
-                .MaxValue(1000.0f)
-                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TimelineScrubberTooltip", "Jump to any point in simulation history (← / →)"))
+                SNew(SSpinBox<int32>)
+                .Value(this, &SPTectonicToolPanel::GetSeedValue)
+                .OnValueChanged(this, &SPTectonicToolPanel::OnSeedValueChanged)
+                .MinValue(0)
+                .MaxValue(999999)
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SeedTooltip", "Random seed for deterministic plate generation (Paper Section 2.1)"))
             ]
-
-            // Export metrics button
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "SubdivisionLabel", "Render Detail:"))
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(1.0f)
+            [
+                SNew(SSpinBox<int32>)
+                .Value(this, &SPTectonicToolPanel::GetSubdivisionValue)
+                .OnValueChanged(this, &SPTectonicToolPanel::OnSubdivisionValueChanged)
+                .OnValueCommitted(this, &SPTectonicToolPanel::OnSubdivisionValueCommitted)
+                .MinValue(0)
+                .MaxValue(8)
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SubdivisionTooltip", "Render mesh density (0=20, 1=80, 2=320, 3=1280, 4=5120, 5=20480, 6=81920, 7=327680, 8=1.3M faces)"))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 8.0f, 0.0f, 0.0f)
+        [
+            SNew(SSeparator)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
             [
                 SNew(SButton)
                 .Text(NSLOCTEXT("PlanetaryCreation", "ExportMetricsLabel", "Export Metrics CSV"))
                 .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ExportMetricsTooltip", "Export current simulation state to Saved/TectonicMetrics/ for analysis"))
                 .OnClicked(this, &SPTectonicToolPanel::HandleExportMetricsClicked)
             ]
-
-            // Export terrane lifecycle button
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
             [
                 SNew(SButton)
                 .Text(NSLOCTEXT("PlanetaryCreation", "ExportTerranesLabel", "Export Terranes CSV"))
                 .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ExportTerranesTooltip", "Export active terrane lifecycle data to Saved/TectonicMetrics/ for analysis"))
                 .OnClicked(this, &SPTectonicToolPanel::HandleExportTerranesClicked)
             ]
+        ];
+}
 
-            // Visualization mode selector (plate colors, elevation, velocity, stress)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 12.0f)
-            [
-                SNew(SHorizontalBox)
-                + SHorizontalBox::Slot()
-                .AutoWidth()
-                .VAlign(VAlign_Center)
-                .Padding(FMargin(0.f, 0.f, 8.f, 0.f))
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "VisualizationLabel", "Visualization"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "VisualizationTooltip", "Choose the active vertex color overlay (plates, elevation heatmap, velocity, or stress)."))
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(1.0f)
-                [
-                    SAssignNew(VisualizationCombo, SComboBox<TSharedPtr<ETectonicVisualizationMode>>)
-                    .OptionsSource(&VisualizationOptions)
-                    .OnGenerateWidget(this, &SPTectonicToolPanel::GenerateVisualizationOptionWidget)
-                    .OnSelectionChanged(this, &SPTectonicToolPanel::OnVisualizationModeChanged)
-                    .Content()
-                    [
-                        SNew(STextBlock)
-                        .Text(this, &SPTectonicToolPanel::GetCurrentVisualizationText)
-                    ]
-                ]
-            ]
-
-            // Elevation mode toggle (Milestone 3 Task 2.4)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetElevationModeState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnElevationModeChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "ElevationModeLabel", "Displaced Elevation"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ElevationModeTooltip", "Enable geometric displacement from elevation data. Elevation gradient colors are shown in both modes (blue=low → red=high). Unchecked = flat sphere with color gradient only."))
-                ]
-            ]
-
-            // Boundary overlay toggle (Milestone 3 Task 3.2)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetBoundaryOverlayState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnBoundaryOverlayChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "BoundaryOverlayLabel", "Show Plate Boundaries"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "BoundaryOverlayTooltip", "Visualize plate boundaries as colored lines (red=convergent, green=divergent, yellow=transform)"))
-                ]
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(16.0f, 2.0f)
-            [
-                SNew(SHorizontalBox)
-                .Visibility(this, &SPTectonicToolPanel::GetBoundaryModeRowVisibility)
-                + SHorizontalBox::Slot()
-                .AutoWidth()
-                .VAlign(VAlign_Center)
-                .Padding(0.0f, 0.0f, 8.0f, 0.0f)
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "BoundaryModeLabel", "Boundary Mode:"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "BoundaryModeTooltip", "Choose between detailed boundary ribbons or simplified seam polylines."))
-                ]
-                + SHorizontalBox::Slot()
-                .FillWidth(1.0f)
-                [
-                    SAssignNew(BoundaryModeCombo, SComboBox<TSharedPtr<int32>>)
-                    .OptionsSource(&BoundaryModeOptions)
-                    .InitiallySelectedItem(SelectedBoundaryMode)
-                    .OnGenerateWidget(this, &SPTectonicToolPanel::GenerateBoundaryModeWidget)
-                    .OnSelectionChanged(this, &SPTectonicToolPanel::OnBoundaryOverlayModeChanged)
-                    .IsEnabled(this, &SPTectonicToolPanel::IsBoundaryModeSelectorEnabled)
-                    .Content()
-                    [
-                        SNew(STextBlock)
-                        .Text(this, &SPTectonicToolPanel::GetCurrentBoundaryModeText)
-                    ]
-                ]
-            ]
-
-            // Automatic LOD toggle (Milestone 4 Phase 4.1)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetAutomaticLODState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnAutomaticLODChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "AutomaticLODLabel", "Automatic LOD"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "AutomaticLODTooltip", "Automatically adjust render detail based on camera distance. Disable to manually control LOD."))
-                ]
-            ]
-
-            // GPU preview toggle (Stage B preview path)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 4.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetGPUPreviewState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnGPUPreviewChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "GPUPreviewLabel", "GPU Preview Mode"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "GPUPreviewTooltip", "Use the GPU height texture preview path (World Position Offset) to eliminate CPU readback stalls. Visualization-only; collision stays CPU-side."))
-                ]
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
+TSharedRef<SWidget> SPTectonicToolPanel::BuildPlaybackSection()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
             [
                 SNew(STextBlock)
-                .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapLegendLabel", "Legend: deep ocean → coastal shelf → alpine"))
-                .WrapTextAt(340.0f)
-                .ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
+                .Text(this, &SPTectonicToolPanel::GetPlaybackSpeedLabel)
             ]
-
-            // Sea-level highlight toggle
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
+            + SHorizontalBox::Slot()
+            .FillWidth(1.0f)
             [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetSeaLevelHighlightState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnSeaLevelHighlightChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightLabel", "Emphasize Sea Level"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightTooltip", "Render a thin white isoline near 0 m to highlight coastlines."))
-                ]
-            ]
-
-            // Surface process toggles (reset simulation on change)
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 12.0f, 0.0f, 0.0f)
-            [
-                SNew(STextBlock)
-                .Text(NSLOCTEXT("PlanetaryCreation", "SurfaceProcessHeader", "Surface Processes (resets simulation)"))
-                .ColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f)))
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetContinentalErosionState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnContinentalErosionChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "ErosionToggleLabel", "Enable continental erosion"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ErosionToggleTooltip", "Apply continental erosion each step. Changing this resets the simulation."))
-                ]
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetSedimentTransportState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnSedimentTransportChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "SedimentToggleLabel", "Enable sediment transport"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SedimentToggleTooltip", "Redistribute eroded material to neighbours. Changing this resets the simulation."))
-                ]
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetOceanicDampeningState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnOceanicDampeningChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "OceanicDampeningToggleLabel", "Enable oceanic dampening"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "OceanicDampeningToggleTooltip", "Activate age-based subsidence and smoothing for oceanic crust. Changing this resets the simulation."))
-                ]
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetOceanicAmplificationState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnOceanicAmplificationChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "OceanicAmplificationToggleLabel", "Enable oceanic amplification"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "OceanicAmplificationToggleTooltip", "Adds Stage B oceanic detail (transform faults, fine detail). Changing this resets the simulation."))
-                ]
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 2.0f)
-            [
-                SNew(SCheckBox)
-                .IsChecked(this, &SPTectonicToolPanel::GetContinentalAmplificationState)
-                .OnCheckStateChanged(this, &SPTectonicToolPanel::OnContinentalAmplificationChanged)
-                .Content()
-                [
-                    SNew(STextBlock)
-                    .Text(NSLOCTEXT("PlanetaryCreation", "ContinentalAmplificationToggleLabel", "Enable continental amplification"))
-                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ContinentalAmplificationToggleTooltip", "Blend exemplar heightfields for continental Stage B detail. Changing this resets the simulation."))
-                ]
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            .Padding(0.0f, 6.0f, 0.0f, 2.0f)
-            [
-                SNew(SButton)
-                .Text(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonLabel", "Prime GPU Stage B"))
-                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonTooltip", "Enable both Stage B passes, keep CPU fallbacks active, and switch the GPU path on in one click (resets simulation if Stage B settings change)."))
-                .OnClicked(this, &SPTectonicToolPanel::HandlePrimeGPUStageBClicked)
-            ]
-
-            + SVerticalBox::Slot()
-            .AutoHeight()
-            [
-                SNew(STextBlock)
-                .Text(NSLOCTEXT("PlanetaryCreation", "BatchHint", "Batch stepping and fast-forward presets will arrive in later milestones."))
-                .WrapTextAt(340.0f)
-                .ColorAndOpacity(FSlateColor(FLinearColor::Gray))
+                SNew(SSlider)
+                .Value(this, &SPTectonicToolPanel::GetPlaybackSpeed)
+                .OnValueChanged(this, &SPTectonicToolPanel::OnPlaybackSpeedChanged)
+                .MinValue(0.5f)
+                .MaxValue(10.0f)
+                .StepSize(0.5f)
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PlaybackSpeedTooltip", "Adjust playback speed (0.5× to 10×)"))
             ]
         ]
-    ];
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 8.0f, 0.0f, 0.0f)
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetTimelineLabel)
+            .ColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f)))
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SSlider)
+            .Value(this, &SPTectonicToolPanel::GetTimelineValue)
+            .OnValueChanged(this, &SPTectonicToolPanel::OnTimelineScrubbed)
+            .MinValue(0.0f)
+            .MaxValue(1000.0f)
+            .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TimelineScrubberTooltip", "Jump to any point in simulation history (← / →)"))
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 8.0f, 0.0f, 0.0f)
+        [
+            SNew(SSeparator)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "UndoButtonLabel", "Undo (Ctrl+Z)"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "UndoButtonTooltip", "Undo the last simulation step"))
+                .IsEnabled(this, &SPTectonicToolPanel::IsUndoEnabled)
+                .OnClicked(this, &SPTectonicToolPanel::HandleUndoClicked)
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "RedoButtonLabel", "Redo (Ctrl+Y)"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RedoButtonTooltip", "Redo the next simulation step"))
+                .IsEnabled(this, &SPTectonicToolPanel::IsRedoEnabled)
+                .OnClicked(this, &SPTectonicToolPanel::HandleRedoClicked)
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetHistoryStatusText)
+            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+            .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
+        ];
+}
 
-    RefreshSelectedVisualizationOption();
+TSharedRef<SWidget> SPTectonicToolPanel::BuildVisualizationSection()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .VAlign(VAlign_Center)
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "VisualizationLabel", "Visualization"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "VisualizationTooltip", "Choose the active vertex color overlay (plates, elevation heatmap, velocity, or stress)."))
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(1.0f)
+            [
+                SAssignNew(VisualizationCombo, SComboBox<TSharedPtr<ETectonicVisualizationMode>>)
+                .OptionsSource(&VisualizationOptions)
+                .OnGenerateWidget(this, &SPTectonicToolPanel::GenerateVisualizationOptionWidget)
+                .OnSelectionChanged(this, &SPTectonicToolPanel::OnVisualizationModeChanged)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(this, &SPTectonicToolPanel::GetCurrentVisualizationText)
+                ]
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetElevationModeState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnElevationModeChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ElevationModeLabel", "Displaced Elevation"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ElevationModeTooltip", "Enable geometric displacement from elevation data. Elevation gradient colors are shown in both modes (blue=low → red=high). Unchecked = flat sphere with color gradient only."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetBoundaryOverlayState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnBoundaryOverlayChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "BoundaryOverlayLabel", "Show Plate Boundaries"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "BoundaryOverlayTooltip", "Visualize plate boundaries as colored lines (red=convergent, green=divergent, yellow=transform)"))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(16.0f, 2.0f, 0.0f, 0.0f)
+        [
+            SNew(SHorizontalBox)
+            .Visibility(this, &SPTectonicToolPanel::GetBoundaryModeRowVisibility)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .VAlign(VAlign_Center)
+            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "BoundaryModeLabel", "Boundary Mode:"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "BoundaryModeTooltip", "Choose between detailed boundary ribbons or simplified seam polylines."))
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(1.0f)
+            [
+                SAssignNew(BoundaryModeCombo, SComboBox<TSharedPtr<int32>>)
+                .OptionsSource(&BoundaryModeOptions)
+                .InitiallySelectedItem(SelectedBoundaryMode)
+                .OnGenerateWidget(this, &SPTectonicToolPanel::GenerateBoundaryModeWidget)
+                .OnSelectionChanged(this, &SPTectonicToolPanel::OnBoundaryOverlayModeChanged)
+                .IsEnabled(this, &SPTectonicToolPanel::IsBoundaryModeSelectorEnabled)
+                .Content()
+                [
+                    SNew(STextBlock)
+                    .Text(this, &SPTectonicToolPanel::GetCurrentBoundaryModeText)
+                ]
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetSeaLevelHighlightState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnSeaLevelHighlightChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightLabel", "Emphasize Sea Level"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SeaLevelHighlightTooltip", "Render a thin white isoline near 0 m to highlight coastlines."))
+            ]
+        ];
+}
+
+TSharedRef<SWidget> SPTectonicToolPanel::BuildStageBSection()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetAutomaticLODState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnAutomaticLODChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "AutomaticLODLabel", "Automatic LOD"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "AutomaticLODTooltip", "Automatically adjust render detail based on camera distance. Disable to manually control LOD."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetGPUPreviewState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnGPUPreviewChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "GPUPreviewLabel", "GPU Preview Mode"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "GPUPreviewTooltip", "Use the GPU height texture preview path (World Position Offset) to eliminate CPU readback stalls. Visualization-only; collision stays CPU-side."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetPBRShadingState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnPBRShadingChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "PBRShadingLabel", "Enable PBR Shading"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PBRShadingTooltip", "Blend realistic lighting (roughness/metallic) into the preview material. Keeps visualization colors intact; toggle independently of visualization mode."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapLegendLabel", "Legend: deep ocean → coastal shelf → alpine"))
+            .WrapTextAt(340.0f)
+            .ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 8.0f, 0.0f, 0.0f)
+        [
+            SNew(SSeparator)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetOceanicAmplificationState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnOceanicAmplificationChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "OceanicAmplificationToggleLabel", "Enable oceanic amplification"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "OceanicAmplificationToggleTooltip", "Adds Stage B oceanic detail (transform faults, fine detail). Changing this resets the simulation."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 2.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetContinentalAmplificationState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnContinentalAmplificationChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ContinentalAmplificationToggleLabel", "Enable continental amplification"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ContinentalAmplificationToggleTooltip", "Blend exemplar heightfields for continental Stage B detail. Changing this resets the simulation."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 6.0f, 0.0f, 2.0f)
+        [
+            SNew(SButton)
+            .Text(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonLabel", "Prime GPU Stage B"))
+            .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonTooltip", "Enable both Stage B passes, keep CPU fallbacks active, and switch the GPU path on in one click (resets simulation if Stage B settings change)."))
+            .OnClicked(this, &SPTectonicToolPanel::HandlePrimeGPUStageBClicked)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(NSLOCTEXT("PlanetaryCreation", "BatchHint", "Batch stepping and fast-forward presets will arrive in later milestones."))
+            .WrapTextAt(340.0f)
+            .ColorAndOpacity(FSlateColor(FLinearColor::Gray))
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(STextBlock)
+            .Text(NSLOCTEXT("PlanetaryCreation", "PaperDefaultsHint", "Profiling CPU-only? Run `r.PlanetaryCreation.PaperDefaults 0` to revert to the M5 baseline."))
+            .WrapTextAt(340.0f)
+            .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
+        ];
+}
+
+TSharedRef<SWidget> SPTectonicToolPanel::BuildSurfaceProcessesSection()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetContinentalErosionState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnContinentalErosionChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ErosionToggleLabel", "Enable continental erosion"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ErosionToggleTooltip", "Apply continental erosion each step. Changing this resets the simulation."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 2.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetSedimentTransportState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnSedimentTransportChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "SedimentToggleLabel", "Enable sediment transport"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "SedimentToggleTooltip", "Redistribute eroded material to neighbours. Changing this resets the simulation."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 2.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetOceanicDampeningState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnOceanicDampeningChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "OceanicDampeningToggleLabel", "Enable oceanic dampening"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "OceanicDampeningToggleTooltip", "Activate age-based subsidence and smoothing for oceanic crust. Changing this resets the simulation."))
+            ]
+        ];
+}
+
+TSharedRef<SWidget> SPTectonicToolPanel::BuildCameraSection()
+{
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetCameraStatusText)
+            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 8))
+            .ColorAndOpacity(FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f)))
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 8.0f, 0.0f, 0.0f)
+        [
+            SNew(SSeparator)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "RotateLeftButton", "← Rotate Left"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RotateLeftTooltip", "Rotate camera 15° left"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleRotateLeftClicked)
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "RotateRightButton", "Rotate Right →"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "RotateRightTooltip", "Rotate camera 15° right"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleRotateRightClicked)
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "TiltUpButton", "↑ Tilt Up"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TiltUpTooltip", "Tilt camera 10° up"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleTiltUpClicked)
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "TiltDownButton", "↓ Tilt Down"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "TiltDownTooltip", "Tilt camera 10° down"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleTiltDownClicked)
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(0.0f, 0.0f, 4.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ZoomInButton", "+ Zoom In"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomInTooltip", "Zoom in 1.5M km"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleZoomInClicked)
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(0.5f)
+            .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ZoomOutButton", "- Zoom Out"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ZoomOutTooltip", "Zoom out 1.5M km"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleZoomOutClicked)
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SButton)
+            .Text(NSLOCTEXT("PlanetaryCreation", "ResetCameraButton", "Reset Camera"))
+            .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ResetCameraTooltip", "Reset camera to default view"))
+            .OnClicked(this, &SPTectonicToolPanel::HandleResetCameraClicked)
+        ];
 }
 
 FReply SPTectonicToolPanel::HandleStepClicked()
@@ -1115,6 +1177,25 @@ void SPTectonicToolPanel::OnGPUPreviewChanged(ECheckBoxState NewState)
         const bool bEnabled = (NewState == ECheckBoxState::Checked);
         Controller->SetGPUPreviewMode(bEnabled);
         UE_LOG(LogPlanetaryCreation, Log, TEXT("GPU preview mode %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
+    }
+}
+
+ECheckBoxState SPTectonicToolPanel::GetPBRShadingState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        return Controller->IsPBRShadingEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnPBRShadingChanged(ECheckBoxState NewState)
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        const bool bEnabled = (NewState == ECheckBoxState::Checked);
+        Controller->SetPBRShadingEnabled(bEnabled);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("PBR shading %s"), bEnabled ? TEXT("enabled") : TEXT("disabled"));
     }
 }
 

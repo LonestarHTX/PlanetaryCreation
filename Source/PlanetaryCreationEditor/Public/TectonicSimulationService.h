@@ -513,7 +513,7 @@ struct FTectonicSimulationParameters
 
     /** Render mesh subdivision level (0-6). Level 0=20, 1=80, 2=320, 3=1280, 4=5120, 5=20480, 6=81920 faces. */
     UPROPERTY()
-    int32 RenderSubdivisionLevel = 0;
+    int32 RenderSubdivisionLevel = 5;
 
     /**
      * Milestone 3 Task 2.4: Elevation displacement scale.
@@ -587,10 +587,10 @@ struct FTectonicSimulationParameters
      * Milestone 4 Phase 4.1: Enable automatic LOD based on camera distance.
      * When true, render subdivision level automatically adjusts based on viewport camera distance.
      * When false, manual render subdivision level setting is respected.
-     * Default true for normal usage, false to force specific LOD for debugging/screenshots.
+     * Paper default: false (locks LOD to 5 for Stage B). Enable when profiling the adaptive M5 workflow.
      */
     UPROPERTY()
-    bool bEnableAutomaticLOD = true;
+    bool bEnableAutomaticLOD = false;
 
     /** Mantle viscosity coefficient (placeholder - used in Milestone 3). */
     UPROPERTY()
@@ -600,9 +600,9 @@ struct FTectonicSimulationParameters
     UPROPERTY()
     double ThermalDiffusion = 1.0;
 
-    /** Visualization overlay applied to preview mesh. */
+    /** Visualization overlay applied to preview mesh (paper default: `AmplificationBlend`). */
     UPROPERTY()
-    ETectonicVisualizationMode VisualizationMode = ETectonicVisualizationMode::PlateColors;
+    ETectonicVisualizationMode VisualizationMode = ETectonicVisualizationMode::AmplificationBlend;
 
     /**
      * Milestone 4 Task 1.2: Plate split velocity threshold (rad/My).
@@ -776,10 +776,10 @@ struct FTectonicSimulationParameters
      * Milestone 6 GPU Preview: Skip CPU amplification path when controller handles GPU preview.
      * When true, AdvanceSteps() skips ApplyOceanicAmplification/ApplyContinentalAmplification CPU paths.
      * Controller sets this when bUseGPUPreviewMode is active to avoid redundant CPU work.
-     * Default false (normal CPU/GPU-with-readback path).
+     * Paper default: true (GPU path on first frame).
      */
     UPROPERTY()
-    bool bSkipCPUAmplification = false;
+    bool bSkipCPUAmplification = true;
 
     /**
      * Milestone 5 Task 2.2: Sediment diffusion rate (dimensionless, 0-1).
@@ -825,10 +825,10 @@ struct FTectonicSimulationParameters
 
     /**
      * Milestone 6 Task 2.1: Enable Stage B oceanic amplification (transform faults, fine detail).
-     * Default false for backward compatibility. Set true to activate oceanic amplification.
+     * Paper default: true. Disable when profiling CPU-only baselines.
      */
     UPROPERTY()
-    bool bEnableOceanicAmplification = false;
+    bool bEnableOceanicAmplification = true;
 
     /**
      * Milestone 6 Task 2.1: Ridge amplitude applied to transform faults (meters).
@@ -853,10 +853,10 @@ struct FTectonicSimulationParameters
 
     /**
      * Milestone 6 Task 2.2: Enable Stage B continental amplification (exemplar-based terrain synthesis).
-     * Default false for backward compatibility. Set true to activate continental amplification.
+     * Paper default: true. Disable when profiling CPU-only baselines.
      */
     UPROPERTY()
-    bool bEnableContinentalAmplification = false;
+    bool bEnableContinentalAmplification = true;
 
     /**
      * Milestone 6 Task 2.1: Minimum render subdivision level for amplification.
@@ -1520,6 +1520,8 @@ private:
 
     /** Ensures VertexAmplifiedElevation starts from the latest base elevation before Stage B passes. */
     void InitializeAmplifiedElevationBaseline();
+    /** Ensure Stage B data structures (crust age, ridge directions, amplified buffers) are sized before running amplification. */
+    void EnsureStageBPrimed();
 
     /** Rebuilds Stage B amplification for the current render LOD without advancing simulation time. */
     void RebuildStageBForCurrentLOD();
