@@ -21,22 +21,29 @@ Logs for every run are written to `Saved/Logs/PlanetaryCreation.log`. The Stage�
 ## Results Snapshot
 
 ### Stage B Profiling (LOD 7)
-`Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity` runs the CPU pass, a deterministic CPU replay, then the GPU path with profiling enabled.
 
-| Step | Total (ms) | Stage B Total (ms) | Baseline | Ridge | Oceanic | Continental | Readback |
+`Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity` and `…ContinentalParity` drive the CPU baseline + replay followed by the GPU path with Stage B profiling enabled.
+
+**Oceanic GPU parity**
+
+| Step Range | Total (ms) | Stage B (ms) | Baseline | Ridge | Oceanic | Continental | Readback |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 5 | 419.69 | 19.42 | 0.10 | 0.04 | 19.28 | 0.00 | 0.00 |
-| 6 | 162.65 | 19.67 | 0.10 | 0.04 | 19.53 | 0.00 | 0.00 |
-| 7 | 165.78 | 23.64 | 0.10 | 4.31 | 19.23 | 0.00 | 0.00 |
-| 8 | 240.12 | **14.50** | 0.10 | **4.35** | **10.05** | 0.00 | **0.00** |
+| 1 – 4 | 170.7 | 19.7 | 0.10 | 0.03 | 19.5 | 0.00 | 0.00 |
+| 5 – 7 | 169.2 | 19.6 | 0.10 | 0.03 | 19.4 | 0.00 | 0.00 |
+
+**Continental GPU parity**
+
+| Step Range | Total (ms) | Stage B (ms) | Baseline | Ridge | Oceanic | Continental | Readback |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 – 4 | 154.9 | 9.0 | 0.10 | 0.00 | 0.00 | 8.9 | 0.00 |
+| 5 – 7 | 153.0 | 8.8 | 0.10 | 0.00 | 0.00 | 8.7 | 0.00 |
 
 **Key takeaways**
-- Stage B now lands at **14.50 ms** on the GPU path with readback eliminated, comfortably under the 50 ms M6 allocation.
-- Undoing to the cached snapshot dirties the ridge cache once (Step 7), explaining the 4.31 ms spike before the steady-state 4.35 ms ridge cost on the GPU pass.
-- CPU baseline/replay remain ~19–24 ms with ridge work minimal unless the topology cache invalidates.
-- No `[StageB][GPU] … hash mismatch` warnings after the snapshot serial/hash fix; GPU parity exits with max delta **0.0003 m**.
-- `[StepTiming]` now prints Voronoi reassignment counts alongside ridge dirty/update/cache stats; the L7 undo replay only touched **192 vertices**, while the continental parity pass still reports full-mesh dirties (expected until exemplar caching lands).
-- Navigation-system repository ensure is now intercepted by the editor module handler; parity logs show a single warning (`NavigationSystem.cpp:3808`) without repeated error spam.
+- Steady-state Stage B cost is ~**19.6 ms** when running the oceanic GPU pass and ~**8.8 ms** for the continental pass; readback remains at zero in both cases.
+- Ridge recompute cost is effectively **0.03 ms** per step thanks to the incremental Voronoi dirtying and reduced default dirty-ring depth.
+- First post-reset step still reports the full Voronoi reassignment (`163 842*`) by design, but subsequent steps dirty only **72 vertices**; longer runs stabilize around **93 k** reassigned vertices without forcing a blanket refresh.
+- Snapshot serial/hash fix still holds—no `[StageB][GPU] … hash mismatch` warnings, and GPU parity exits with max delta **0.0003 m**.
+- Navigation system ensure remains suppressed by the module handler; parity logs show only the single warning (`NavigationSystem.cpp:3808`).
 
 ### Level 3 Baseline (M5 Regression Harness)
 

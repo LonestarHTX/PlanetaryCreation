@@ -2116,6 +2116,9 @@ bool FTectonicSimulationController::TryFastSurfaceRefresh(FCachedLODMesh& Cached
         return false;
     }
 
+    CachedMesh.Snapshot.RenderVertices = CurrentRenderVertices;
+    CachedMesh.Snapshot.RenderTriangles = CurrentRenderTriangles;
+
     CachedMesh.Snapshot.VertexPlateAssignments = Service.GetVertexPlateAssignments();
     CachedMesh.Snapshot.VertexVelocities = Service.GetVertexVelocities();
     CachedMesh.Snapshot.VertexStressValues = Service.GetVertexStressValues();

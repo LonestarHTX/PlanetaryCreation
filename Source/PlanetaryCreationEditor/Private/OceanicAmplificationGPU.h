@@ -26,5 +26,11 @@ namespace PlanetaryCreation::GPU
      * @param TextureSize Equirectangular texture dimensions (e.g., 2048x1024)
      * @return true if preview texture was written successfully, false on error
      */
-    bool ApplyOceanicAmplificationGPUPreview(UTectonicSimulationService& Service, FTextureRHIRef& OutHeightTexture, FIntPoint TextureSize);
+    bool ApplyOceanicAmplificationGPUPreview(
+        UTectonicSimulationService& Service,
+        FTextureRHIRef& OutHeightTexture,
+        FIntPoint TextureSize,
+        int32* OutLeftCoverage = nullptr,
+        int32* OutRightCoverage = nullptr,
+        int32* OutMirroredCoverage = nullptr);
 }

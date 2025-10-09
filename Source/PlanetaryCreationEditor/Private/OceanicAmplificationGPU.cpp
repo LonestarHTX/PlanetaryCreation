@@ -519,8 +519,27 @@ namespace PlanetaryCreation::GPU
         return true;
     }
 
-    bool ApplyOceanicAmplificationGPUPreview(UTectonicSimulationService& Service, FTextureRHIRef& OutHeightTexture, FIntPoint TextureSize)
+    bool ApplyOceanicAmplificationGPUPreview(
+        UTectonicSimulationService& Service,
+        FTextureRHIRef& OutHeightTexture,
+        FIntPoint TextureSize,
+        int32* OutLeftCoverage,
+        int32* OutRightCoverage,
+        int32* OutMirroredCoverage)
     {
+        if (OutLeftCoverage)
+        {
+            *OutLeftCoverage = 0;
+        }
+        if (OutRightCoverage)
+        {
+            *OutRightCoverage = 0;
+        }
+        if (OutMirroredCoverage)
+        {
+            *OutMirroredCoverage = 0;
+        }
+
         if (!SupportsGPUAmplification())
         {
             return false;
@@ -645,6 +664,19 @@ namespace PlanetaryCreation::GPU
         if (PositionArray)
         {
             ComputeSeamCoverageMetrics(*PositionArray, TextureSize.X, LeftSeamCoverage, RightSeamCoverage, MirroredCoverage);
+        }
+
+        if (OutLeftCoverage)
+        {
+            *OutLeftCoverage = LeftSeamCoverage;
+        }
+        if (OutRightCoverage)
+        {
+            *OutRightCoverage = RightSeamCoverage;
+        }
+        if (OutMirroredCoverage)
+        {
+            *OutMirroredCoverage = MirroredCoverage;
         }
 
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[OceanicGPUPreview] Height texture written (%dx%d, %d vertices, SeamLeft=%d, SeamRight=%d, Mirrored=%d)"),

@@ -665,6 +665,8 @@ void UTectonicSimulationService::ResetSimulation()
     PendingCrustAgeResetSeeds.Reset();
     PendingCrustAgeResetMask.Reset();
     StepsSinceLastVoronoiRefresh = 0;
+    CachedVoronoiAssignments.Reset();
+    bSkipNextVoronoiRefresh = true;
 
     // Milestone 4 Phase 5: Reset version counters for test isolation
     TopologyVersion = 0;
@@ -1110,55 +1112,65 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         const int32 VoronoiInterval = FMath::Max(1, Parameters.VoronoiRefreshIntervalSteps);
         if (StepsSinceLastVoronoiRefresh >= VoronoiInterval)
         {
-            TRACE_CPUPROFILER_EVENT_SCOPE(VoronoiRefresh);
-            const double VoronoiStart = FPlatformTime::Seconds();
-            BuildVoronoiMapping();
+            if (bSkipNextVoronoiRefresh)
+            {
+                bSkipNextVoronoiRefresh = false;
+                bLastVoronoiForcedFullRidgeUpdate = false;
+                LastVoronoiReassignedCount = 0;
+                StepsSinceLastVoronoiRefresh = 0;
+            }
+            else
+            {
+                TRACE_CPUPROFILER_EVENT_SCOPE(VoronoiRefresh);
+                const double VoronoiStart = FPlatformTime::Seconds();
+                BuildVoronoiMapping();
 #if UE_BUILD_DEVELOPMENT
-            LogBoundaryCacheState(TEXT("AfterBuildVoronoiMapping"));
+                LogBoundaryCacheState(TEXT("AfterBuildVoronoiMapping"));
 #endif
-            ComputeVelocityField();
-            InterpolateStressToVertices();
-            StepsSinceLastVoronoiRefresh = 0;
-            bSurfaceDataChanged = true;
+                ComputeVelocityField();
+                InterpolateStressToVertices();
+                StepsSinceLastVoronoiRefresh = 0;
+                bSurfaceDataChanged = true;
 #if UE_BUILD_DEVELOPMENT
-            UE_LOG(LogPlanetaryCreation, VeryVerbose,
-                TEXT("[AdvanceSteps] Recomputing ridge directions after Voronoi refresh (reassigned=%d, full=%s)"),
-                LastVoronoiReassignedCount,
-                bLastVoronoiForcedFullRidgeUpdate ? TEXT("yes") : TEXT("no"));
+                UE_LOG(LogPlanetaryCreation, VeryVerbose,
+                    TEXT("[AdvanceSteps] Recomputing ridge directions after Voronoi refresh (reassigned=%d, full=%s)"),
+                    LastVoronoiReassignedCount,
+                    bLastVoronoiForcedFullRidgeUpdate ? TEXT("yes") : TEXT("no"));
 #endif
-            {
-                TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirectionsPostVoronoi);
-                ComputeRidgeDirections();
-            }
+                {
+                    TRACE_CPUPROFILER_EVENT_SCOPE(ComputeRidgeDirectionsPostVoronoi);
+                    ComputeRidgeDirections();
+                }
 
-            // Re-run Stage B amplification with refreshed ridge vectors so stored elevations match final directions.
-            {
-                TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiAmplificationBaseline);
-                InitializeAmplifiedElevationBaseline();
-            }
+                // Re-run Stage B amplification with refreshed ridge vectors so stored elevations match final directions.
+                {
+                    TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiAmplificationBaseline);
+                    InitializeAmplifiedElevationBaseline();
+                }
 
-            if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
-            {
-                TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiOceanicAmplification);
-                ApplyOceanicAmplification();
-            }
+                if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
+                {
+                    TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiOceanicAmplification);
+                    ApplyOceanicAmplification();
+                }
 
-            if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
-            {
-                TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiContinentalAmplification);
-                ApplyContinentalAmplification();
-            }
+                if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD && !Parameters.bSkipCPUAmplification)
+                {
+                    TRACE_CPUPROFILER_EVENT_SCOPE(PostVoronoiContinentalAmplification);
+                    ApplyContinentalAmplification();
+                }
 
-            bSurfaceDataChanged = true;
-            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[Voronoi] Refresh completed in %.2f ms (interval=%d)"),
-                (FPlatformTime::Seconds() - VoronoiStart) * 1000.0,
-                VoronoiInterval);
+                bSurfaceDataChanged = true;
+                UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[Voronoi] Refresh completed in %.2f ms (interval=%d)"),
+                    (FPlatformTime::Seconds() - VoronoiStart) * 1000.0,
+                    VoronoiInterval);
 #if UE_BUILD_DEVELOPMENT
-            {
-                const FString Label = FString::Printf(TEXT("Step%d-AfterVoronoiRefresh"), AbsoluteStep);
-                LogPlateElevationMismatches(*Label);
-            }
+                {
+                    const FString Label = FString::Printf(TEXT("Step%d-AfterVoronoiRefresh"), AbsoluteStep);
+                    LogPlateElevationMismatches(*Label);
+                }
 #endif
+            }
         }
 
         // Milestone 4 Task 1.2: Detect and execute plate splits/merges
@@ -2345,8 +2357,7 @@ void UTectonicSimulationService::BuildVoronoiMapping()
 {
     const int32 VertexCount = RenderVertices.Num();
 
-    TArray<int32> PreviousAssignments = VertexPlateAssignments;
-    const bool bHadComparableAssignments = PreviousAssignments.Num() == VertexCount;
+    const bool bHadComparableAssignments = CachedVoronoiAssignments.Num() == VertexCount;
     LastVoronoiReassignedCount = 0;
     bLastVoronoiForcedFullRidgeUpdate = false;
 
@@ -2359,6 +2370,7 @@ void UTectonicSimulationService::BuildVoronoiMapping()
             MarkAllRidgeDirectionsDirty();
             bLastVoronoiForcedFullRidgeUpdate = true;
         }
+        CachedVoronoiAssignments.Reset();
         return;
     }
 
@@ -2369,10 +2381,7 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     VertexPlateAssignments.SetNumUninitialized(VertexCount);
 
     TArray<int32> ReassignedVertices;
-    if (bHadComparableAssignments)
-    {
-        ReassignedVertices.Reserve(VertexCount);
-    }
+    ReassignedVertices.Reserve(VertexCount);
 
     // Milestone 4 Task 5.0: Voronoi warping parameters
     const bool bUseWarping = Parameters.bEnableVoronoiWarping;
@@ -2422,13 +2431,9 @@ void UTectonicSimulationService::BuildVoronoiMapping()
 
         VertexPlateAssignments[i] = ClosestPlateID;
 
-        if (bHadComparableAssignments)
+        if (!CachedVoronoiAssignments.IsValidIndex(i) || CachedVoronoiAssignments[i] != ClosestPlateID)
         {
-            const int32 PreviousPlateID = PreviousAssignments.IsValidIndex(i) ? PreviousAssignments[i] : INDEX_NONE;
-            if (PreviousPlateID != ClosestPlateID)
-            {
-                ReassignedVertices.Add(i);
-            }
+            ReassignedVertices.Add(i);
         }
 
         if (ClosestPlate && VertexElevationValues.IsValidIndex(i))
@@ -2513,6 +2518,20 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     BuildRenderVertexBoundaryCache();
 
     // Ensure subsequent Stage B passes recompute ridge directions against the refreshed cache.
+    if (ReassignedVertices.Num() > 1)
+    {
+        ReassignedVertices.Sort();
+        int32 WriteIndex = 1;
+        for (int32 ReadIndex = 1; ReadIndex < ReassignedVertices.Num(); ++ReadIndex)
+        {
+            if (ReassignedVertices[ReadIndex] != ReassignedVertices[WriteIndex - 1])
+            {
+                ReassignedVertices[WriteIndex++] = ReassignedVertices[ReadIndex];
+            }
+        }
+        ReassignedVertices.SetNum(WriteIndex);
+    }
+
     if (!bHadComparableAssignments)
     {
         MarkAllRidgeDirectionsDirty();
@@ -2521,12 +2540,28 @@ void UTectonicSimulationService::BuildVoronoiMapping()
     }
     else
     {
+        int32 EffectiveRingDepth = Parameters.RidgeDirectionDirtyRingDepth;
+        if (ReassignedVertices.Num() > 0 && EffectiveRingDepth > 0)
+        {
+            const double DirtyRatio = static_cast<double>(ReassignedVertices.Num()) / static_cast<double>(VertexCount);
+            if (DirtyRatio >= 0.25)
+            {
+                EffectiveRingDepth = 0;
+            }
+            else if (DirtyRatio >= 0.1 && EffectiveRingDepth > 1)
+            {
+                EffectiveRingDepth -= 1;
+            }
+        }
+
         LastVoronoiReassignedCount = ReassignedVertices.Num();
         if (ReassignedVertices.Num() > 0)
         {
-            MarkRidgeRingDirty(ReassignedVertices, Parameters.RidgeDirectionDirtyRingDepth);
+            MarkRidgeRingDirty(ReassignedVertices, EffectiveRingDepth);
         }
     }
+
+    CachedVoronoiAssignments = VertexPlateAssignments;
 }
 
 void UTectonicSimulationService::BuildRenderVertexAdjacency()
@@ -3686,6 +3721,7 @@ bool UTectonicSimulationService::Undo()
     RenderVertices = Snapshot.RenderVertices;
     RenderTriangles = Snapshot.RenderTriangles;
     VertexPlateAssignments = Snapshot.VertexPlateAssignments;
+    CachedVoronoiAssignments = VertexPlateAssignments;
     VertexVelocities = Snapshot.VertexVelocities;
     VertexStressValues = Snapshot.VertexStressValues;
     VertexTemperatureValues = Snapshot.VertexTemperatureValues;
@@ -3731,6 +3767,7 @@ bool UTectonicSimulationService::Redo()
     RenderVertices = Snapshot.RenderVertices;
     RenderTriangles = Snapshot.RenderTriangles;
     VertexPlateAssignments = Snapshot.VertexPlateAssignments;
+    CachedVoronoiAssignments = VertexPlateAssignments;
     VertexVelocities = Snapshot.VertexVelocities;
     VertexStressValues = Snapshot.VertexStressValues;
     VertexTemperatureValues = Snapshot.VertexTemperatureValues;
@@ -3777,6 +3814,7 @@ bool UTectonicSimulationService::JumpToHistoryIndex(int32 Index)
     RenderVertices = Snapshot.RenderVertices;
     RenderTriangles = Snapshot.RenderTriangles;
     VertexPlateAssignments = Snapshot.VertexPlateAssignments;
+    CachedVoronoiAssignments = VertexPlateAssignments;
     VertexVelocities = Snapshot.VertexVelocities;
     VertexStressValues = Snapshot.VertexStressValues;
     VertexTemperatureValues = Snapshot.VertexTemperatureValues;
@@ -4144,6 +4182,7 @@ void UTectonicSimulationService::CompactRenderVertexData(const TArray<int32>& Ve
 
     if (bHasAssignments) { VertexPlateAssignments = MoveTemp(NewAssignments); }
     else { VertexPlateAssignments.SetNum(RenderVertices.Num()); }
+    CachedVoronoiAssignments = VertexPlateAssignments;
 }
 
 const FContinentalTerrane* UTectonicSimulationService::GetTerraneByID(int32 TerraneID) const
@@ -4563,6 +4602,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
             RenderVertices = BackupRenderVertices;
             RenderTriangles = BackupRenderTriangles;
             VertexPlateAssignments = BackupVertexAssignments;
+            CachedVoronoiAssignments = VertexPlateAssignments;
             VertexVelocities = BackupVertexVelocities;
             VertexStressValues = BackupVertexStress;
             VertexTemperatureValues = BackupVertexTemperature;
@@ -4712,6 +4752,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
                 RenderVertices = BackupRenderVertices;
                 RenderTriangles = BackupRenderTriangles;
                 VertexPlateAssignments = BackupVertexAssignments;
+                CachedVoronoiAssignments = VertexPlateAssignments;
                 VertexVelocities = BackupVertexVelocities;
                 VertexStressValues = BackupVertexStress;
                 VertexTemperatureValues = BackupVertexTemperature;
@@ -4755,6 +4796,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
             RenderVertices = BackupRenderVertices;
             RenderTriangles = BackupRenderTriangles;
             VertexPlateAssignments = BackupVertexAssignments;
+            CachedVoronoiAssignments = VertexPlateAssignments;
             VertexVelocities = BackupVertexVelocities;
             VertexStressValues = BackupVertexStress;
             VertexTemperatureValues = BackupVertexTemperature;
@@ -4785,6 +4827,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
             RenderVertices = BackupRenderVertices;
             RenderTriangles = BackupRenderTriangles;
             VertexPlateAssignments = BackupVertexAssignments;
+            CachedVoronoiAssignments = VertexPlateAssignments;
             VertexVelocities = BackupVertexVelocities;
             VertexStressValues = BackupVertexStress;
             VertexTemperatureValues = BackupVertexTemperature;
@@ -4815,6 +4858,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
             RenderVertices = BackupRenderVertices;
             RenderTriangles = BackupRenderTriangles;
             VertexPlateAssignments = BackupVertexAssignments;
+            CachedVoronoiAssignments = VertexPlateAssignments;
             VertexVelocities = BackupVertexVelocities;
             VertexStressValues = BackupVertexStress;
             VertexTemperatureValues = BackupVertexTemperature;
@@ -4860,6 +4904,7 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
         RenderVertices = BackupRenderVertices;
         RenderTriangles = BackupRenderTriangles;
         VertexPlateAssignments = BackupVertexAssignments;
+        CachedVoronoiAssignments = VertexPlateAssignments;
         VertexVelocities = BackupVertexVelocities;
         VertexStressValues = BackupVertexStress;
         VertexTemperatureValues = BackupVertexTemperature;
@@ -5107,6 +5152,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
             RenderVertices = BackupRenderVertices;
             RenderTriangles = BackupRenderTriangles;
             VertexPlateAssignments = BackupVertexAssignments;
+            CachedVoronoiAssignments = VertexPlateAssignments;
             VertexVelocities = BackupVertexVelocities;
             VertexStressValues = BackupVertexStress;
             VertexTemperatureValues = BackupVertexTemperature;
@@ -5136,6 +5182,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
             RenderVertices = BackupRenderVertices;
             RenderTriangles = BackupRenderTriangles;
             VertexPlateAssignments = BackupVertexAssignments;
+            CachedVoronoiAssignments = VertexPlateAssignments;
             VertexVelocities = BackupVertexVelocities;
             VertexStressValues = BackupVertexStress;
             VertexTemperatureValues = BackupVertexTemperature;
@@ -5171,6 +5218,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
             RenderVertices = BackupRenderVertices;
             RenderTriangles = BackupRenderTriangles;
             VertexPlateAssignments = BackupVertexAssignments;
+            CachedVoronoiAssignments = VertexPlateAssignments;
             VertexVelocities = BackupVertexVelocities;
             VertexStressValues = BackupVertexStress;
             VertexTemperatureValues = BackupVertexTemperature;
@@ -5214,6 +5262,7 @@ bool UTectonicSimulationService::ReattachTerrane(int32 TerraneID, int32 TargetPl
         RenderVertices = BackupRenderVertices;
         RenderTriangles = BackupRenderTriangles;
         VertexPlateAssignments = BackupVertexAssignments;
+        CachedVoronoiAssignments = VertexPlateAssignments;
         VertexVelocities = BackupVertexVelocities;
         VertexStressValues = BackupVertexStress;
         VertexTemperatureValues = BackupVertexTemperature;

@@ -854,7 +854,7 @@ struct FTectonicSimulationParameters
      * boundary edges.
      */
     UPROPERTY()
-    int32 RidgeDirectionDirtyRingDepth = 2;
+    int32 RidgeDirectionDirtyRingDepth = 1;
 };
 
 struct FOceanicAmplificationSnapshot
@@ -1555,6 +1555,10 @@ private:
     /** Metrics from the most recent Voronoi rebuild for ridge dirtying heuristics. */
     int32 LastVoronoiReassignedCount = 0;
     bool bLastVoronoiForcedFullRidgeUpdate = false;
+    /** Last Voronoi plate assignments captured for incremental ridge updates. */
+    TArray<int32> CachedVoronoiAssignments;
+    /** Skip flag to avoid immediately refreshing Voronoi the step after reset. */
+    bool bSkipNextVoronoiRefresh = false;
 
     /** Cadence counter for Voronoi refresh. */
     int32 StepsSinceLastVoronoiRefresh = 0;
