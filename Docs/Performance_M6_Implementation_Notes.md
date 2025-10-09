@@ -34,7 +34,7 @@
 
 ### ✅ GPU Compute Shaders (Stage B Amplification)
 
-**Decision:** Focus GPU compute efforts on Stage B amplification (the actual bottleneck at ~23ms), not thermal/velocity fields (only 0.6ms combined).
+**Decision:** Focus GPU compute efforts on Stage B amplification (the actual bottleneck at ~31 ms combined), not thermal/velocity fields (only 0.6 ms total).
 
 **Implementation:**
 - `OceanicAmplification.usf` - Perlin 3D noise, age-based fault amplitude, ridge-perpendicular transform faults
@@ -43,13 +43,15 @@
 - `OceanicAmplificationGPU.cpp` - RDG integration, async readback pooling, snapshot hashing
 
 **Results:**
-- Oceanic amplification: ~14.5ms (GPU) with <0.1m CPU parity
-- Continental amplification: ~8.8ms (GPU) with snapshot-backed replay
-- Async readback: ~0ms blocking cost (pooled FRHIGPUBufferReadback)
+- Oceanic amplification: **~10.9 ms** (GPU pass) with <0.1 m CPU parity
+- Continental amplification: **~19.6 ms** (GPU snapshot → CPU fallback replay) while we keep drift detection enabled
+- Async readback: ~0 ms blocking cost (pooled `FRHIGPUBufferReadback`)
+- Stage B elevations stream into the realtime mesh as a dedicated `StageBHeight` vertex buffer, so cached LODs and GPU preview materials consume the exact amplified heights with no CPU displacement step; the preview MID now takes the live elevation scale from simulation parameters.
+- Visualization modes expanded with **Amplified Stage B** (delta heatmap) and **Amplification Blend** (plate colours tinted by Stage B deltas) so perf captures can highlight how much detail Stage B contributes without swapping materials mid-run.
 - GPU parity tests: `GPUOceanicParity`, `GPUContinentalParity`, `GPUPreviewSeamMirroring`
 
 **Why Stage B Over Thermal/Velocity:**
-- Stage B: **23.3ms** (48% of M6 budget) → High-value GPU target
+- Stage B: **≈30.5 ms** combined (dominant share of M6 budget) → High-value GPU target
 - Thermal/Velocity: **0.6ms** (1.2% of M6 budget) → Low ROI
 - GPU transfer overhead would likely exceed savings for small fields
 - CPU thermal/velocity already well-optimized
@@ -97,20 +99,20 @@
 ```
 M5 Baseline (L3):               6.32 ms  ✅ (includes ParallelFor)
 + Terrane extraction/tracking:  2.00 ms  (amortized, rare events)
-+ Stage B Oceanic (GPU):       14.50 ms  ✅ (compute shader)
-+ Stage B Continental (GPU):    8.80 ms  ✅ (compute shader)
++ Stage B Oceanic (GPU):       10.90 ms  ✅ (compute shader pass, 0.1 m parity)
++ Stage B Continental (GPU snapshot + CPU fallback):   19.60 ms  ✅ (snapshot write, drift replay)
 + Hydraulic erosion:            8.00 ms  🔴 (planned, not implemented)
 - GPU async readback:          -0.00 ms  ✅ (pooled, non-blocking)
-= M6 Current Total:            39.62 ms  (target: <90ms, 56% headroom)
+= M6 Current Total:            38.82 ms  (target: <90ms, 57% headroom)
 
-With hydraulic erosion:        47.62 ms  (still 53% headroom)
+With hydraulic erosion:        46.82 ms  (still 48% headroom)
 ```
 
 **Notes:**
 - ParallelFor savings already baked into 6.32ms M5 baseline (not a separate line item)
 - SIMD exploration planned -2.1ms savings not implemented (ParallelFor superseded)
 - GPU thermal/velocity planned -0.45ms savings deferred (low priority)
-- Stage B GPU compute is the major M6 optimization win (~23ms)
+- Stage B GPU compute is the major M6 optimization win (~31 ms across oceanic + continental)
 
 ---
 

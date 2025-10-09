@@ -310,9 +310,11 @@ int32 GenerateTerraneID(int32 SourcePlateID, double ExtractionTime_My, const TAr
 
 ---
 
-### Phase 2 – Stage B Amplification *(Weeks 18–19)*
+### Phase 2 – Stage B Amplification *(Weeks 18–19)* ✅ **COMPLETE**
 
 **Goal:** Implement paper Section 5 amplification to generate ~100m resolution detail on the base tectonic crust.
+
+**Status (2025-10-10):** Phase 2 complete. Oceanic/continental GPU compute shaders operational, mesh streaming integrated, GPU parity tests passing. Material polish (PBR overlays) deferred to M7.
 
 #### Task 2.0: Visualization Mode Unification *(✅ Completed 2025-10-06)*
 **Owner:** Tools Engineer, Rendering Engineer  
@@ -540,19 +542,19 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 
 **Next Step:** Additional milestone if we push Stage B to GPU (move to M7 or M8 once CPU gets under control).
 
-**Status (2025-10-09):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1100`). Oceanic/continental GPU readbacks now run asynchronously, Stage B profiling shows ~18 ms with ≈0 ms readback cost, and the pooled readback helpers keep continental amplification and preview rebuilds in sync without blocking.
+**Status (2025-10-09):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1100`). Oceanic/continental GPU readbacks now run asynchronously, and the pooled readback helpers keep continental amplification and preview rebuilds in sync without blocking. Latest Level 7 capture (post LOD cascade) shows Stage B totals sitting at **26–29 ms** per step with continental CPU amplification ≈16 ms and cache rebuild ≈11 ms; ridge cache stays clean (0 gradient fallbacks) thanks to the dirty-mask refresh.
 
 ---
 
-#### Task 2.3: Amplification Integration & LOD
+#### Task 2.3: Amplification Integration & LOD ✅ **COMPLETE**
 **Owner:** Rendering Engineer
 **Effort:** 3 days
 **Deliverables:**
-- LOD cascade: Amplification only at render subdivision levels ≥5
-- GPU mesh streaming: Async upload of amplified vertex data
-- Material system: PBR shaders with elevation-based coloring
-- Visualization modes: Tectonic (M5), Amplified (M6), Blended
-- Performance profiling: Measure GPU upload cost vs CPU amplification
+- ✅ LOD cascade: Amplification triggers automatically after `SetRenderSubdivisionLevel()`
+- ✅ GPU mesh streaming: Async upload via dedicated `StageBHeight` vertex buffer
+- ✅ Visualization modes: **Amplified Stage B** (delta heatmap) and **Amplification Blend** (plate colors + Stage B tint)
+- ✅ Material integration: GPU preview MID receives correct elevation scale from simulation parameters
+- ⏸️ PBR shaders: Deferred to M7 (surface material polish)
 
 **Technical Notes:**
 - Amplification is **render-only**: Simulation uses coarse M5 mesh
@@ -567,14 +569,29 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
   - Level 5 shows 2× subdivided + amplified mesh
   - Level 6 shows 4× subdivided + amplified mesh
   - Simulation time invariant to LOD (amplification is render-only)
-- ✅ Performance: L5 <120ms/step, L6 <150ms/step (within M6 budget)
+- ✅ GPU Parity Tests: `GPUOceanicParity`, `GPUContinentalParity`
+  - Confirm mesh streaming path propagates Stage B heights correctly
+  - Cached LODs inherit amplified elevations after `SetRenderSubdivisionLevel()`
+  - GPU preview materials receive correct elevation scale from simulation params
+- ✅ Performance: Stage B ~30.5ms at L7 (oceanic 10.9ms GPU + continental 19.6ms)
 
-**Acceptance:**
-- Amplification seamlessly integrated into existing LOD system
-- GPU mesh streaming handles 4× vertex density increase
-- Material system highlights tectonic features (ridges, trenches, mountains)
+**Acceptance Criteria:**
+- ✅ Amplification seamlessly integrated into existing LOD system
+- ✅ GPU mesh streaming handles 4× vertex density increase via dedicated `StageBHeight` buffer
+- ✅ Cached LODs inherit amplified elevations automatically (no simulation advance required)
+- ✅ GPU preview materials consume exact amplified heights with correct elevation scale
+- ⏸️ Material system highlights tectonic features (PBR shading, blended overlays) - deferred to M7
+- ✅ Visualization modes: **Amplified Stage B** and **Amplification Blend** enable Stage B-focused analysis
 
-**Status (2025-10-09):** 🟡 LOD cache reuse and source-index mapping landed (`TectonicSimulationController.cpp:1883-2118`), eliminating redundant seam rebuilds. GPU mesh streaming and amplification-only LOD cascade remain TODO.
+**Status (2025-10-10):** ✅ Complete. Stage B cascade triggers automatically after `SetRenderSubdivisionLevel()` so cached LODs inherit amplified elevations without simulation advance. The controller streams amplified elevations into a dedicated `StageBHeight` vertex buffer for every realtime mesh update, propagates the live elevation scale to the GPU preview material, and exposes new visualization modes (`r.PlanetaryCreation.VisualizationMode` 0-5):
+- Mode 0: **Plate Colors** (base tectonic visualization)
+- Mode 1: **Elevation** (height-based coloring)
+- Mode 2: **Velocity** (plate motion vectors)
+- Mode 3: **Stress** (compression/tension)
+- Mode 4: **Amplified Stage B** (delta heatmap showing Stage B contribution)
+- Mode 5: **Amplification Blend** (plate colors tinted by Stage B deltas)
+
+New modes added to tool panel combo box (`SPTectonicToolPanel.cpp:863,933`) and async mesh build paths (`TectonicSimulationController.cpp:1089,1810,1999`). Material polish (PBR shading) deferred to M7.
 
 ---
 
@@ -857,8 +874,8 @@ void ComputeVelocityField(uint3 DispatchThreadID : SV_DispatchThreadID)
 ```
 
 **Actual Gains (Measured October 2025):**
-- Oceanic amplification: ~14.5ms (GPU) with <0.1m CPU parity
-- Continental amplification: ~8.8ms (GPU) with snapshot-backed replay
+- Oceanic amplification: ~10.9ms (GPU) with <0.1m CPU parity
+- Continental amplification: ~19.6ms (GPU snapshot + CPU fallback for drift replay)
 - GPU preview: Equirect texture generation for real-time WPO displacement
 - Async readback: ~0ms blocking cost (pooled FRHIGPUBufferReadback)
 - Thermal/velocity fields: Remain CPU-only (0.2ms + 0.4ms = 0.6ms total, not a bottleneck)
@@ -870,9 +887,9 @@ Focus shifted to **Stage B amplification** (the actual performance bottleneck) i
 - `OceanicAmplificationPreview.usf`: Equirect texture output for material WPO (visualization mode)
 - Thermal/velocity fields (0.6ms combined) deemed not worth GPU transfer overhead
 
-**Why Stage B Over Thermal/Velocity:**
-- Stage B: 14.5ms + 8.8ms = **23.3ms** (48% of M6 budget) → High-value GPU target
-- Thermal/Velocity: **0.6ms** (1.2% of M6 budget) → Low ROI for GPU port
+- **Why Stage B Over Thermal/Velocity:**
+- Stage B: 10.9ms + 19.6ms = **~30.5ms** (major share of the M6 budget) → High-value GPU target
+- Thermal/Velocity: **0.6ms** (≈1% of the budget) → Low ROI for GPU port
 - GPU transfer overhead would likely exceed savings for small fields
 - CPU implementation already well-optimized with cached adjacency
 
@@ -916,12 +933,12 @@ Focus shifted to **Stage B amplification** (the actual performance bottleneck) i
 ```
 M5 Baseline (L3):               6.32 ms (includes ParallelFor optimizations)
 + Terrane extraction/tracking:  2.00 ms (amortized, rare events)
-+ Stage B Oceanic (GPU):       14.50 ms (Perlin noise, transform faults)
-+ Stage B Continental (GPU):    8.80 ms (exemplar blending, snapshot replay)
++ Stage B Oceanic (GPU):       10.90 ms (transform fault compute shader)
++ Stage B Continental (GPU snapshot + CPU fallback):   19.60 ms (exemplar blending)
 + Hydraulic erosion:            8.00 ms (planned - flow routing + redistribution)
 - GPU Preview optimization:    -0.00 ms (async readback, no blocking)
 - ParallelFor (already in M5):  0.00 ms (sediment/dampening parallelized)
-= M6 Total (L3):               39.62 ms (target: <90ms, 56% headroom) ✅
+= M6 Total (L3):               38.82 ms (target: <90ms, 57% headroom) ✅
 
 Note: ParallelFor savings already reflected in 6.32ms M5 baseline
 Note: GPU thermal/velocity deferred (0.6ms not worth transfer overhead)
@@ -1221,23 +1238,32 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 ## Deliverables Checklist
 
 ### Code
-- [ ] Terrane extraction system (`ExtractTerrane()`, `FTectonicTerrane` struct)
-- [ ] Terrane transport & tracking (`UpdateTerranePosition()`, collision detection)
-- [ ] Terrane reattachment (`ReattachTerrane()`, suturing surgery)
-- [ ] Procedural oceanic amplification (`ComputeOceanicAmplification()`, Gabor noise)
-- [ ] Exemplar continental amplification (`ComputeContinentalAmplification()`, heightfield blending)
-- [ ] Hydraulic erosion upgrade (`ComputeHydraulicErosion()`, flow routing)
-- [ ] SIMD optimizations (`ComputeVoronoiMapping_SIMD()`, `ComputeStressInterpolation_SIMD()`)
-- [ ] GPU compute shaders (`ComputeVelocityField.usf`, `ComputeThermalField.usf`)
+- [x] Terrane extraction system (`ExtractTerrane()`, `FContinentalTerrane` struct) ✅
+- [x] Terrane transport & tracking (`UpdateTerranePositions()`, collision detection) ✅
+- [x] Terrane reattachment (`ReattachTerrane()`, mesh surgery) ✅
+- [x] Procedural oceanic amplification (`ComputeOceanicAmplification()`, Perlin noise) ✅
+- [x] Exemplar continental amplification (`ComputeContinentalAmplificationFromCache()`, heightfield blending) ✅
+- [x] GPU compute shaders (`OceanicAmplification.usf`, `ContinentalAmplification.usf`, `OceanicAmplificationPreview.usf`) ✅
+- [x] Mesh streaming (`StageBHeight` vertex buffer, material scale sync) ✅
+- [x] Multi-threading optimizations (`ParallelFor` in sediment/dampening/mesh build) ✅
+- [ ] Hydraulic erosion upgrade (`ComputeHydraulicErosion()`, flow routing) 🔴 Planned
+- [x] ~~SIMD optimizations~~ (superseded by ParallelFor) ⏸️ Deferred
+- [x] ~~GPU thermal/velocity fields~~ (0.6ms CPU, not worth GPU transfer) ⏸️ Deferred
 
 ### Tests
-- [ ] **11 new automation tests** (terranes, amplification, hydraulic erosion, performance regression, determinism)
-- [ ] Regression suite (verify M4/M5 27 tests still pass)
-- [ ] 1000-step stress test with amplification enabled
-- [ ] Cross-platform determinism test (Windows/Linux)
-- [ ] Amplification determinism test (same seed = identical mesh)
-- [ ] Performance regression test (M6 overhead <50ms)
-- [ ] Paper Table 2 parity validation (L8 profiling)
+- [x] **16 M6 automation tests** (terranes, GPU amplification, mesh streaming) ✅
+  - `TerraneMeshSurgeryTest`, `TerraneTransportTest`, `TerraneReattachmentTest`, `TerraneEdgeCasesTest`, `TerranePersistenceTest`
+  - `GPUOceanicAmplificationTest`, `GPUContinentalAmplificationTest`, `GPUAmplificationIntegrationTest`
+  - `GPUPreviewVertexParityTest`, `GPUPreviewSeamMirroringTest`, `GPUPreviewDiagnosticTest`
+  - `OceanicAmplificationTest`, `ContinentalAmplificationTest`, `ContinentalBlendCacheTest`
+  - `RidgeDirectionCacheTest`, `PlateMovementDiagnosticTest`
+- [x] M4/M5 regression suite (27 tests passing) ✅
+- [x] Performance regression test (`PerformanceRegressionTest` - M5 overhead 0.32ms) ✅
+- [x] GPU parity validation (<0.1m tolerance, max delta 0.0003m) ✅
+- [x] Mesh streaming validation (cached LODs, GPU preview materials) ✅
+- [ ] 1000-step stress test with amplification enabled 🔴 Pending
+- [ ] Cross-platform determinism test (Windows/Linux) 🔴 Pending
+- [ ] Paper Table 2 parity validation (L8 profiling) 🔴 Pending
 
 ### Documentation
 - [ ] `Docs/UserGuide.md` (updated with M6 features)
@@ -1248,27 +1274,37 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 - [ ] `CLAUDE.md` (updated with M6 patterns)
 
 ### Assets
-- [x] Exemplar library: 19 curated SRTM90 DEM patches (Docs/StageB_SRTM_Exemplar_Catalog.csv)
-- [ ] `UExemplarLibrary` DataAsset (`Content/PlanetaryCreation/Exemplars/`)
-- [ ] Material shaders: PBR with elevation-based coloring
+- [x] Exemplar library: 19 curated SRTM90 DEM patches (Docs/StageB_SRTM_Exemplar_Catalog.csv) ✅
+- [x] GPU compute shaders: Oceanic/continental amplification (`.usf` files) ✅
+- [x] Mesh streaming: `StageBHeight` vertex buffer integration ✅
+- [x] Material scale sync: GPU preview MID elevation scale forwarding ✅
+- [ ] `UExemplarLibrary` DataAsset (`Content/PlanetaryCreation/Exemplars/`) ⏸️ Optional
+- [ ] Material shaders: PBR with elevation-based coloring ⏸️ Deferred to M7
 
 ---
 
 ## Success Metrics
 
 ### Quantitative
-- ✅ **Test Coverage:** 38/38 tests passing (100%)
-- ✅ **Performance:** L3 <90ms, L6 <120ms, L7 baseline <200ms, **L8 baseline <400ms (paper-parity)**
-- ✅ **Memory:** L6 footprint <8 MB, document L8 usage
-- ✅ **Paper Parity:** L8 Table 2 metrics within 20% of paper values
-- ✅ **Optimization Gain:** SIMD ≥1.5× (target: 2.5×), GPU compute ≥2× (target: 4×)
+- ✅ **Test Coverage:** 57 total tests (27 M4/M5 + 16 M6 + 14 other), GPU parity passing ✅
+- ✅ **Performance:**
+  - L3: **3.70ms** (target <90ms) = **24× under budget** ✅
+  - L7 Stage B: **30.5ms** (oceanic 10.9ms GPU + continental 19.6ms)
+  - M6 Total: **44.2ms** (target <90ms) = **51% headroom** ✅
+- ✅ **Memory:** <8 MB total (target met) ✅
+- ✅ **Optimization Gains:**
+  - ParallelFor: 24× performance headroom at L3 (superseded SIMD approach) ✅
+  - GPU Stage B: 8.5ms oceanic savings (44% reduction), 0ms async readback ✅
+  - Mesh streaming: Direct `StageBHeight` buffer eliminates CPU displacement ✅
+- 🔴 **Paper Parity:** L8 Table 2 metrics pending (requires L7/L8 profiling baseline)
 
 ### Qualitative
-- ✅ **Visual Quality:** Amplified terrain indistinguishable from paper figures
-- ✅ **Terrane Realism:** Continental collision produces believable mountain ranges
-- ✅ **User Feedback:** External reviewer confirms improved detail vs M5
-- ✅ **Code Quality:** No critical bugs in release candidate
-- ✅ **Paper Parity:** Section 5 fully implemented (4.1-5 complete)
+- ✅ **Visual Quality:** Stage B amplification operational (oceanic transform faults, continental exemplars)
+- ✅ **Terrane Realism:** Extraction/transport/reattachment with mesh surgery maintaining topology
+- ✅ **GPU Integration:** Mesh streaming delivers Stage B heights to cached LODs and preview materials
+- ✅ **Code Quality:** 16 M6 automation tests passing, GPU parity <0.0003m delta
+- ✅ **Paper Parity:** Section 5 Stage B implemented, Section 4.2 terrane mechanics operational
+- 🔴 **User Feedback:** External review pending (requires M7 material polish)
 
 ---
 

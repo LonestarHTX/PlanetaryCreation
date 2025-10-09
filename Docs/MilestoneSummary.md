@@ -72,12 +72,13 @@ This document tracks milestone intent, delivery status, notable deviations from 
 - **Terrane Lifecycle Persistence** — `TectonicSimulationService.cpp`, `SPTectonicToolPanel.cpp`
   - Deterministic terrane IDs now derive from seed + plate + extraction timestamp hashes; undo/redo snapshots persist the salt for cross-platform parity.
   - `Export Terranes CSV` button writes `Terranes_*.csv` (Saved/TectonicMetrics) with centroid lat/lon, lifecycle state, area, and timestamps; `TerranePersistenceTest` exercises the pipeline.
-- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and pools readback buffers, keeping Stage B at ~14.5 ms with ≈0 ms readback cost during the L7 GPU pass
+- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and pools readback buffers, keeping the **GPU parity path** at ~10.9 ms (oceanic) with ≈0 ms readback cost during the L7 pass while continental replays remain ~19.6 ms for drift verification
   - Extraction snapshots full vertex payloads (position, velocity, stress, sediment, amplified elevation, duplicate mapping) and compacts render SoA arrays without orphaned vertices.
   - Reattachment removes patch triangles via sorted-key sets, restores duplicates, rebuilds adjacency, and keeps the mesh manifold; `TerraneMeshSurgeryTest` expanded to confirm no `INDEX_NONE` assignments remain.
   - Build + automation coverage: Win64 Development UBT (≈3 s incremental) and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` now succeed.
   - Async replay snapshots now bump the serial and recompute the hash immediately after mutation, preventing `ProcessPendingOceanicGPUReadbacks()` from dropping into the fallback path each frame.
-  - Stage B profiling output now reports ridge-cache health and Voronoi-change metrics (dirty counts, updates, cache hits, fallback counters, reassigned vertex totals) using the new cached Voronoi assignment snapshots; undo/redo restores cached ridge data so temporal jumps only touch the affected vertices (post-reset dirty counts ≈72, steady-state reassignment totals ≈93 k). Oceanic GPU parity steadies at ~14.5 ms, while continental GPU parity logs ~8.8 ms with readback removed.
+  - Stage B profiling output now reports ridge-cache health and Voronoi-change metrics (dirty counts, updates, cache hits, fallback counters, reassigned vertex totals) using the new cached Voronoi assignment snapshots; undo/redo restores cached ridge data so temporal jumps only touch the affected vertices (post-reset dirty counts ≈72, steady-state reassignment totals ≈93 k). After the LOD cascade fix, Level 7 totals sit at **26–29 ms** per step (continental CPU ≈16 ms, cache rebuild ≈11 ms) with zero ridge fallbacks logged.
+  - `TectonicSimulationService::RebuildStageBForCurrentLOD()` now runs automatically from `SetRenderSubdivisionLevel()`, so cached/pre-warmed LODs inherit the latest amplified elevations without advancing simulation time; the controller also streams amplified elevations into a dedicated `StageBHeight` vertex buffer for every realtime mesh update, forwards the simulation elevation scale to the GPU preview material, and surfaces Amplified/Blend visualization modes that let reviewers compare Stage B detail directly against plate colours. Oceanic/continental parity suites confirm the new path.
   - Voronoi refresh now trims reassignment lists, scales ring depth adaptively (default depth dropped from 2 → 1), and skips the redundant first-step rebuild via `bSkipNextVoronoiRefresh`, keeping ridge recomputes near 0 ms even with Stage B updates; `PlanetaryCreation.Milestone6.GPU.PreviewSeamMirroring` automation verifies the equirect seam stays balanced after the GPU preview shader changes.
 - **Sediment & Dampening Optimizations** — `SedimentTransport.cpp`, `OceanicDampening.cpp`, `TectonicSimulationService.cpp`
   - Diffusion loop now runs 6 passes normally / 4 passes under GPU preview (`Parameters.bSkipCPUAmplification`), trimming ~40 % inner-loop work.
@@ -90,7 +91,7 @@ This document tracks milestone intent, delivery status, notable deviations from 
 - **Stability & Diagnostics**
   - `Docs/plate_movement_debug_plan.md` drove root-cause analysis of “frozen plates” report.
   - `Docs/gpu_preview_plate_colors_fix.md` decoupled GPU heightmap displacement from vertex color overlays; new `GPUPreviewDiagnosticTest.cpp` exercises CPU vs GPU step parity.
-  - `Docs/gpu_system_review.md` confirms Stage B cost ~0.1 ms at L7, highlighting sediment/dampening as new hot spots.
+  - `Docs/gpu_system_review.md` snapshot updated with the post-cascade timings (L7 Stage B total ≈26 ms, cache + continental CPU the dominant contributors), highlighting sediment/dampening as the next hot spots.
   - Commandlet automation now installs a scoped ensure handler so the navigation-system repo ensure is downgraded to a single warning instead of repeated errors during parity runs.
 - **Stage B Steady-State Mesh Refresh** — `TectonicSimulationController.cpp`
   - Added an in-place mesh update path that writes positions, tangents, and colors directly to existing realtime-mesh streams when topology is unchanged, reusing the shared post-update flow.
@@ -101,9 +102,9 @@ This document tracks milestone intent, delivery status, notable deviations from 
 - **Process Fixes** — `Docs/gpu_readback_fix_plan.md` outlines commandlet-safe fence submission to unblock async readbacks in automation; implementation queued.
 
 ### Active Work
-- Continental Stage B path: exemplar amplification, parity automation, and Level 7 profiling instrumentation (`Task 2.1/2.2/2.3.1`).
+- Continental Stage B polish: GPU mesh streaming/material pass plus Table 2 parity capture (`Task 2.1/2.3`).
 - Async readback submission + fence handling for commandlet automation (`ProcessPendingOceanicGPUReadbacks`).
-- Boundary overlay simplification pass (Task 2.4) to replace starburst traces with single-strand seams.
+- Monitor Stage B LOD swaps for visible hitches; follow up with incremental GPU stream uploads if needed.
 - ✅ Multi-threading with `ParallelFor` (sediment/dampening/mesh: 6.32ms total at L3, 17× under budget)
 - ⏸️ SIMD vectorization deferred - `ParallelFor` achieved targets without intrinsics complexity
 - Note: `Docs/simd_gpu_implementation_review.md` documents exploration/planning, not implemented features

@@ -864,6 +864,8 @@ void SPTectonicToolPanel::InitializeVisualizationOptions()
     VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::Elevation));
     VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::Velocity));
     VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::Stress));
+    VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::Amplified));
+    VisualizationOptions.Add(MakeShared<ETectonicVisualizationMode>(ETectonicVisualizationMode::AmplificationBlend));
 }
 
 void SPTectonicToolPanel::RefreshSelectedVisualizationOption()
@@ -938,6 +940,10 @@ FText SPTectonicToolPanel::GetVisualizationModeLabel(TSharedPtr<ETectonicVisuali
         return NSLOCTEXT("PlanetaryCreation", "VisualizationVelocity", "Velocity Field");
     case ETectonicVisualizationMode::Stress:
         return NSLOCTEXT("PlanetaryCreation", "VisualizationStress", "Stress Gradient");
+    case ETectonicVisualizationMode::Amplified:
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationAmplified", "Amplified Stage B");
+    case ETectonicVisualizationMode::AmplificationBlend:
+        return NSLOCTEXT("PlanetaryCreation", "VisualizationAmplificationBlend", "Amplification Blend");
     default:
         return NSLOCTEXT("PlanetaryCreation", "VisualizationDefault", "Plate Colors");
     }

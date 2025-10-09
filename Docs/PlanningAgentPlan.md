@@ -139,6 +139,7 @@
 - Track migration plan for the `StructUtils` plugin dependency (RealtimeMeshComponent) now flagged for removal in UE 5.5+, and secure replacement before engine upgrade.
 - Document deviations from the paper in `ProceduralTectonicPlanetsPaper/README_addendum` (create if needed).
 - Ensure plugin updates mirror source control and CI builds the editor target.
+- Monitor Stage B LOD swaps post-cascade; if hitches surface, schedule incremental GPU stream uploads before Milestone 6 locks.
 
 ## Validation Summary
 - **Profiling:** Use `stat unit`, `stat RHI`, and Unreal Insights at each milestone.

@@ -129,9 +129,9 @@ User clicks "Step"
 
 **M6 Features:**
 - Terrane mechanics: ~2ms (amortized)
-- Stage B Oceanic GPU: ~14.5ms
-- Stage B Continental GPU: ~8.8ms
-- **Current total:** ~40ms at L3 (56% headroom remaining)
+- Stage B Oceanic GPU: ~10.9ms (compute shader pass)
+- Stage B Continental (GPU snapshot + CPU fallback): ~19.6ms
+- **Current total:** ~38.8ms at L3 (57% headroom remaining)
 
 ---
 
@@ -149,8 +149,8 @@ User clicks "Step"
 
 ### ✅ GPU Compute Shaders (Stage B)
 **What:** Offload Stage B amplification to GPU compute shaders
-**Why:** Stage B is 48% of M6 budget (~23ms), high ROI
-**Result:** Oceanic 14.5ms + Continental 8.8ms with <0.1m CPU parity
+**Why:** Stage B dominates the M6 budget (~31 ms combined), high ROI
+**Result:** Oceanic ~10.9 ms (GPU pass) + Continental ~19.6 ms (GPU snapshot + CPU fallback) with <0.1 m parity
 
 **Shaders:**
 - `OceanicAmplification.usf` - Perlin noise, transform faults
@@ -163,7 +163,7 @@ User clicks "Step"
 
 ### ⏸️ NOT Implemented: GPU Thermal/Velocity Fields
 **Why deferred:** Only 0.6ms CPU cost, not worth GPU transfer overhead
-**Note:** Stage B was higher priority (23ms → GPU, 0.6ms → stay CPU)
+**Note:** Stage B was higher priority (~31 ms → GPU), whereas thermal/velocity together cost only 0.6 ms on CPU
 
 ---
 
@@ -179,11 +179,7 @@ r.PlanetaryCreation.UseGPUAmplification 1
 // Visualization modes (0=PlateColors, 1=Elevation, 2=Velocity, 3=Stress)
 r.PlanetaryCreation.VisualizationMode 0
 
-// GPU preview mode
-r.PlanetaryCreation.GPUPreviewMode 0
-
-// Skip CPU amplification when GPU preview active
-r.PlanetaryCreation.bSkipCPUAmplification 1
+// GPU preview mode is toggled from the Tectonic Tool panel checkbox (no console command)
 ```
 
 **In-Editor:**

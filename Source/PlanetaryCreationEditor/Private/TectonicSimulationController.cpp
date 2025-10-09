@@ -42,6 +42,106 @@ namespace PlanetaryCreation
         static const FName HeightTextureParamName(TEXT("HeightTexture"));
         static const FName ElevationScaleParamName(TEXT("ElevationScale"));
     }
+
+    namespace MeshStreams
+    {
+        static const FRealtimeMeshStreamKey StageBHeight(
+            ERealtimeMeshStreamType::Vertex, FName(TEXT("StageBHeight")));
+    }
+}
+
+namespace
+{
+    static FLinearColor SampleAmplificationGradient(double Normalized)
+    {
+        static const FLinearColor GradientStops[] = {
+            FLinearColor(0.070f, 0.278f, 0.651f),   // Deep ocean (negative delta)
+            FLinearColor(0.925f, 0.925f, 0.925f),   // Neutral baseline
+            FLinearColor(0.929f, 0.471f, 0.118f)    // Warm peaks (positive delta)
+        };
+
+        const int32 StopCount = UE_ARRAY_COUNT(GradientStops);
+        const double Clamped = FMath::Clamp(Normalized, 0.0, 1.0);
+        const double Scaled = Clamped * (StopCount - 1);
+        const int32 IndexLow = FMath::Clamp(static_cast<int32>(Scaled), 0, StopCount - 1);
+        const int32 IndexHigh = FMath::Clamp(IndexLow + 1, 0, StopCount - 1);
+        const float Alpha = static_cast<float>(Scaled - IndexLow);
+        return FLinearColor::LerpUsingHSV(GradientStops[IndexLow], GradientStops[IndexHigh], Alpha);
+    }
+
+    struct FAmplificationVisualizationContext
+    {
+        bool bValid = false;
+        double MaxAbsDelta = 1.0;
+        const TArray<double>* Amplified = nullptr;
+        const TArray<double>* Baseline = nullptr;
+
+        void Initialize(const TArray<double>& InAmplified, const TArray<double>& InBaseline)
+        {
+            const int32 Count = InAmplified.Num();
+            if (Count <= 0 || InBaseline.Num() != Count)
+            {
+                Reset();
+                return;
+            }
+
+            Amplified = &InAmplified;
+            Baseline = &InBaseline;
+
+            double MaxAbs = 0.0;
+            for (int32 Index = 0; Index < Count; ++Index)
+            {
+                const double Delta = InAmplified[Index] - InBaseline[Index];
+                if (!FMath::IsFinite(Delta))
+                {
+                    continue;
+                }
+                MaxAbs = FMath::Max(MaxAbs, FMath::Abs(Delta));
+            }
+
+            MaxAbsDelta = (MaxAbs > KINDA_SMALL_NUMBER) ? MaxAbs : 1.0;
+            bValid = true;
+        }
+
+        void Reset()
+        {
+            bValid = false;
+            MaxAbsDelta = 1.0;
+            Amplified = nullptr;
+            Baseline = nullptr;
+        }
+
+        bool HasData() const
+        {
+            return bValid && Amplified && Baseline;
+        }
+
+        double ComputeDelta(int32 Index) const
+        {
+            if (!HasData() || !Amplified->IsValidIndex(Index) || !Baseline->IsValidIndex(Index))
+            {
+                return 0.0;
+            }
+            return (*Amplified)[Index] - (*Baseline)[Index];
+        }
+
+        double ComputeNormalized(int32 Index) const
+        {
+            const double Delta = FMath::Clamp(ComputeDelta(Index), -MaxAbsDelta, MaxAbsDelta);
+            return (Delta / MaxAbsDelta + 1.0) * 0.5;
+        }
+
+        double ComputeWeight(int32 Index) const
+        {
+            const double Delta = FMath::Clamp(ComputeDelta(Index), -MaxAbsDelta, MaxAbsDelta);
+            return FMath::Clamp(FMath::Abs(Delta) / MaxAbsDelta, 0.0, 1.0);
+        }
+
+        FLinearColor ComputeColor(int32 Index) const
+        {
+            return SampleAmplificationGradient(ComputeNormalized(Index));
+        }
+    };
 }
 
 #if UE_BUILD_DEVELOPMENT
@@ -176,13 +276,14 @@ bool FTectonicSimulationController::RefreshPreviewColors()
     TArray<float> TangentX, TangentY, TangentZ;
     TArray<FColor> Colors;
     TArray<FVector2f> UVs;
+    TArray<float> AmplifiedHeights;
     TArray<uint32> Indices;
     TArray<int32> SourceIndices;
     BuildMeshFromSnapshot(RenderLevel, CurrentTopologyVersion, Snapshot, StreamSet, VertexCount, TriangleCount,
         PositionX, PositionY, PositionZ,
         NormalX, NormalY, NormalZ,
         TangentX, TangentY, TangentZ,
-        Colors, UVs, Indices, SourceIndices);
+        Colors, UVs, AmplifiedHeights, Indices, SourceIndices);
 
     UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
 
@@ -191,7 +292,7 @@ bool FTectonicSimulationController::RefreshPreviewColors()
         MoveTemp(PositionX), MoveTemp(PositionY), MoveTemp(PositionZ),
         MoveTemp(NormalX), MoveTemp(NormalY), MoveTemp(NormalZ),
         MoveTemp(TangentX), MoveTemp(TangentY), MoveTemp(TangentZ),
-        MoveTemp(Colors), MoveTemp(UVs), MoveTemp(Indices), MoveTemp(SourceIndices));
+        MoveTemp(Colors), MoveTemp(UVs), MoveTemp(AmplifiedHeights), MoveTemp(Indices), MoveTemp(SourceIndices));
 
     return true;
 }
@@ -348,6 +449,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
         TArray<float> TangentX, TangentY, TangentZ;
         TArray<FColor> Colors;
         TArray<FVector2f> UVs;
+        TArray<float> AmplifiedHeights;
         TArray<uint32> Indices;
         TArray<int32> SourceVertexIndices;
 
@@ -355,7 +457,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
             PositionX, PositionY, PositionZ,
             NormalX, NormalY, NormalZ,
             TangentX, TangentY, TangentZ,
-            Colors, UVs, Indices, SourceVertexIndices);
+            Colors, UVs, AmplifiedHeights, Indices, SourceVertexIndices);
 
         const double EndTime = FPlatformTime::Seconds();
         LastMeshBuildTimeMs = (EndTime - StartTime) * 1000.0;
@@ -368,7 +470,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
             MoveTemp(PositionX), MoveTemp(PositionY), MoveTemp(PositionZ),
             MoveTemp(NormalX), MoveTemp(NormalY), MoveTemp(NormalZ),
             MoveTemp(TangentX), MoveTemp(TangentY), MoveTemp(TangentZ),
-            MoveTemp(Colors), MoveTemp(UVs), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
+            MoveTemp(Colors), MoveTemp(UVs), MoveTemp(AmplifiedHeights), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
 
         UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
 
@@ -414,17 +516,18 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
 
             TArray<float> PositionX, PositionY, PositionZ;
             TArray<float> NormalX, NormalY, NormalZ;
-            TArray<float> TangentX, TangentY, TangentZ;
-            TArray<FColor> Colors;
-            TArray<FVector2f> UVs;
-            TArray<uint32> Indices;
-            TArray<int32> SourceVertexIndices;
+        TArray<float> TangentX, TangentY, TangentZ;
+        TArray<FColor> Colors;
+        TArray<FVector2f> UVs;
+        TArray<float> AmplifiedHeights;
+        TArray<uint32> Indices;
+        TArray<int32> SourceVertexIndices;
 
-            BuildMeshFromSnapshot(RenderLevel, CurrentTopologyVersion, Snapshot, StreamSet, VertexCount, TriangleCount,
-                PositionX, PositionY, PositionZ,
-                NormalX, NormalY, NormalZ,
-                TangentX, TangentY, TangentZ,
-                Colors, UVs, Indices, SourceVertexIndices);
+        BuildMeshFromSnapshot(RenderLevel, CurrentTopologyVersion, Snapshot, StreamSet, VertexCount, TriangleCount,
+            PositionX, PositionY, PositionZ,
+            NormalX, NormalY, NormalZ,
+            TangentX, TangentY, TangentZ,
+            Colors, UVs, AmplifiedHeights, Indices, SourceVertexIndices);
 
             const double EndTime = FPlatformTime::Seconds();
             const double BuildTimeMs = (EndTime - StartTime) * 1000.0;
@@ -435,7 +538,8 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
                 PositionX = MoveTemp(PositionX), PositionY = MoveTemp(PositionY), PositionZ = MoveTemp(PositionZ),
                 NormalX = MoveTemp(NormalX), NormalY = MoveTemp(NormalY), NormalZ = MoveTemp(NormalZ),
                 TangentX = MoveTemp(TangentX), TangentY = MoveTemp(TangentY), TangentZ = MoveTemp(TangentZ),
-                Colors = MoveTemp(Colors), UVs = MoveTemp(UVs), Indices = MoveTemp(Indices), SourceVertexIndices = MoveTemp(SourceVertexIndices),
+                Colors = MoveTemp(Colors), UVs = MoveTemp(UVs), AmplifiedHeights = MoveTemp(AmplifiedHeights),
+                Indices = MoveTemp(Indices), SourceVertexIndices = MoveTemp(SourceVertexIndices),
                 VertexCount, TriangleCount, BuildTimeMs, BackgroundThreadID, Snapshot, CurrentTopologyVersion, CurrentSurfaceVersion, RenderLevel]() mutable
             {
                 const uint32 GameThreadID = FPlatformTLS::GetCurrentThreadId();
@@ -464,7 +568,7 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
                     MoveTemp(PositionX), MoveTemp(PositionY), MoveTemp(PositionZ),
                     MoveTemp(NormalX), MoveTemp(NormalY), MoveTemp(NormalZ),
                     MoveTemp(TangentX), MoveTemp(TangentY), MoveTemp(TangentZ),
-                    MoveTemp(Colors), MoveTemp(UVs), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
+                    MoveTemp(Colors), MoveTemp(UVs), MoveTemp(AmplifiedHeights), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
 
                 UpdatePreviewMesh(MoveTemp(StreamSet), VertexCount, TriangleCount);
                 bAsyncMeshBuildInProgress.store(false);
@@ -1076,7 +1180,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     TArray<float>& OutPositionX, TArray<float>& OutPositionY, TArray<float>& OutPositionZ,
     TArray<float>& OutNormalX, TArray<float>& OutNormalY, TArray<float>& OutNormalZ,
     TArray<float>& OutTangentX, TArray<float>& OutTangentY, TArray<float>& OutTangentZ,
-    TArray<FColor>& OutColors, TArray<FVector2f>& OutUVs, TArray<uint32>& OutIndices,
+    TArray<FColor>& OutColors, TArray<FVector2f>& OutUVs, TArray<float>& OutAmplifiedHeights, TArray<uint32>& OutIndices,
     TArray<int32>& OutSourceIndices)
 {
     using namespace RealtimeMesh;
@@ -1095,6 +1199,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     OutTangentZ.Reset();
     OutColors.Reset();
     OutUVs.Reset();
+    OutAmplifiedHeights.Reset();
     OutIndices.Reset();
     OutSourceIndices.Reset();
 
@@ -1156,6 +1261,9 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
         EffectiveElevations = &Snapshot.VertexElevationValues;
     }
 
+    FAmplificationVisualizationContext AmplificationContext;
+    AmplificationContext.Initialize(Snapshot.VertexAmplifiedElevation, Snapshot.VertexElevationValues);
+
     double MinElevationMeters = TNumericLimits<double>::Max();
     double MaxElevationMeters = TNumericLimits<double>::Lowest();
     if (EffectiveElevations)
@@ -1212,6 +1320,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
         FVector3f TangentX = FVector3f::XAxisVector;
         FColor Color = FColor::Black;
         FVector2f UV = FVector2f::ZeroVector;
+        float ElevationMeters = 0.0f;
         int32 PrimaryIndex = INDEX_NONE;
         int32 SeamWrappedIndex = INDEX_NONE;
         int32 SourceIndex = INDEX_NONE;
@@ -1224,6 +1333,8 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     const bool bShowVelocity = VisualizationMode == ETectonicVisualizationMode::Velocity;
     const bool bStressColor = VisualizationMode == ETectonicVisualizationMode::Stress;
     const bool bElevColor = (VisualizationMode == ETectonicVisualizationMode::Elevation) && EffectiveElevations != nullptr;
+    const bool bAmplifiedColor = (VisualizationMode == ETectonicVisualizationMode::Amplified) && AmplificationContext.HasData();
+    const bool bAmplificationBlend = (VisualizationMode == ETectonicVisualizationMode::AmplificationBlend) && AmplificationContext.HasData();
     const bool bHighlightSeaLevel = Snapshot.bHighlightSeaLevel;
     const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
 
@@ -1315,10 +1426,23 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
 
         FColor VertexColor = FColor::Black;
         const int32 PlateID = VertexPlateAssignments[Index];
+        const FColor PlateColor = GetPlateColor(PlateID);
 
         if (bShowVelocity && VertexVelocities.IsValidIndex(Index))
         {
             VertexColor = GetVelocityColor(VertexVelocities[Index]);
+        }
+        else if (bAmplifiedColor)
+        {
+            VertexColor = AmplificationContext.ComputeColor(Index).ToFColor(false);
+        }
+        else if (bAmplificationBlend)
+        {
+            const FLinearColor PlateLinear = FLinearColor::FromSRGBColor(PlateColor);
+            const FLinearColor AmplifiedLinear = AmplificationContext.ComputeColor(Index);
+            const float BlendWeight = static_cast<float>(FMath::Clamp(AmplificationContext.ComputeWeight(Index) * 0.75, 0.0, 1.0));
+            const FLinearColor Mixed = FMath::Lerp(PlateLinear, AmplifiedLinear, BlendWeight);
+            VertexColor = Mixed.ToFColor(false);
         }
         else if (bElevColor)
         {
@@ -1334,7 +1458,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
         }
         else
         {
-            VertexColor = GetPlateColor(PlateID);
+            VertexColor = PlateColor;
         }
 
         VertexOut.Position = Position;
@@ -1342,6 +1466,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
         VertexOut.TangentX = Tangent;
         VertexOut.Color = VertexColor;
         VertexOut.UV = UV;
+        VertexOut.ElevationMeters = static_cast<float>(ElevationMeters);
         VertexOut.SourceIndex = Index;
     });
 
@@ -1357,6 +1482,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     OutTangentZ.Reserve(EstimatedVertexCapacity);
     OutColors.Reserve(EstimatedVertexCapacity);
     OutUVs.Reserve(EstimatedVertexCapacity);
+    OutAmplifiedHeights.Reserve(EstimatedVertexCapacity);
     OutIndices.Reserve(RenderTriangles.Num());
 
     auto EmitVertex = [&](FPreviewMeshVertex& VertexData) -> int32
@@ -1380,6 +1506,7 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
 
         OutColors.Add(VertexData.Color);
         OutUVs.Add(VertexData.UV);
+        OutAmplifiedHeights.Add(VertexData.ElevationMeters);
         OutSourceIndices.Add(VertexData.SourceIndex);
 
         OutVertexCount++;
@@ -1441,6 +1568,19 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
         OutIndices.Add(static_cast<uint32>(V2));
         OutIndices.Add(static_cast<uint32>(V1));
         OutTriangleCount++;
+    }
+
+    if (OutVertexCount > 0)
+    {
+        FRealtimeMeshStream& StageBStream = OutStreamSet.AddStream(
+            PlanetaryCreation::MeshStreams::StageBHeight, GetRealtimeMeshBufferLayout<float>());
+        TRealtimeMeshStreamBuilder<float> StageBBuilder(StageBStream);
+        StageBBuilder.SetNumUninitialized(OutVertexCount);
+        for (int32 Index = 0; Index < OutVertexCount; ++Index)
+        {
+            const float HeightValue = OutAmplifiedHeights.IsValidIndex(Index) ? OutAmplifiedHeights[Index] : 0.0f;
+            StageBBuilder[Index] = HeightValue;
+        }
     }
 }
 
@@ -1587,7 +1727,8 @@ void FTectonicSimulationController::CacheLODMesh(int32 LODLevel, int32 TopologyV
     TArray<float>&& PositionX, TArray<float>&& PositionY, TArray<float>&& PositionZ,
     TArray<float>&& NormalX, TArray<float>&& NormalY, TArray<float>&& NormalZ,
     TArray<float>&& TangentX, TArray<float>&& TangentY, TArray<float>&& TangentZ,
-    TArray<FColor>&& VertexColors, TArray<FVector2f>&& UVs, TArray<uint32>&& Indices,
+    TArray<FColor>&& VertexColors, TArray<FVector2f>&& UVs, TArray<float>&& AmplifiedHeights,
+    TArray<uint32>&& Indices,
     TArray<int32>&& SourceVertexIndices)
 {
     if (bShutdownRequested.load())
@@ -1618,6 +1759,7 @@ void FTectonicSimulationController::CacheLODMesh(int32 LODLevel, int32 TopologyV
 
     NewCache->VertexColors = MoveTemp(VertexColors);
     NewCache->UVs = MoveTemp(UVs);
+    NewCache->AmplifiedHeights = MoveTemp(AmplifiedHeights);
     NewCache->Indices = MoveTemp(Indices);
     NewCache->SourceVertexIndices = MoveTemp(SourceVertexIndices);
 
@@ -1633,6 +1775,7 @@ void FTectonicSimulationController::CacheLODMesh(int32 LODLevel, int32 TopologyV
         NewCache->TangentZ.Num() == VertexCount &&
         NewCache->VertexColors.Num() == VertexCount &&
         NewCache->UVs.Num() == VertexCount &&
+        NewCache->AmplifiedHeights.Num() == VertexCount &&
         NewCache->Indices.Num() == TriangleCount * 3 &&
         NewCache->SourceVertexIndices.Num() == VertexCount;
 
@@ -1675,6 +1818,7 @@ void FTectonicSimulationController::BuildMeshFromCache(const FCachedLODMesh& Cac
         CachedMesh.TangentZ.Num() == VertexCount &&
         CachedMesh.VertexColors.Num() == VertexCount &&
         CachedMesh.UVs.Num() == VertexCount &&
+        CachedMesh.AmplifiedHeights.Num() == VertexCount &&
         CachedMesh.SourceVertexIndices.Num() == VertexCount;
 
     if (!bValidStreams)
@@ -1685,6 +1829,7 @@ void FTectonicSimulationController::BuildMeshFromCache(const FCachedLODMesh& Cac
         TArray<float> TangentX, TangentY, TangentZ;
         TArray<FColor> Colors;
         TArray<FVector2f> UVs;
+        TArray<float> AmplifiedHeights;
         TArray<uint32> Indices;
         TArray<int32> SourceVertexIndices;
         const int32 LODLevel = CachedMesh.Snapshot.Parameters.RenderSubdivisionLevel;
@@ -1693,14 +1838,14 @@ void FTectonicSimulationController::BuildMeshFromCache(const FCachedLODMesh& Cac
             PositionX, PositionY, PositionZ,
             NormalX, NormalY, NormalZ,
             TangentX, TangentY, TangentZ,
-            Colors, UVs, Indices, SourceVertexIndices);
+            Colors, UVs, AmplifiedHeights, Indices, SourceVertexIndices);
 
         CacheLODMesh(LODLevel, CachedMesh.TopologyVersion, CachedMesh.SurfaceDataVersion, CachedMesh.Snapshot,
             OutVertexCount, OutTriangleCount,
             MoveTemp(PositionX), MoveTemp(PositionY), MoveTemp(PositionZ),
             MoveTemp(NormalX), MoveTemp(NormalY), MoveTemp(NormalZ),
             MoveTemp(TangentX), MoveTemp(TangentY), MoveTemp(TangentZ),
-            MoveTemp(Colors), MoveTemp(UVs), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
+            MoveTemp(Colors), MoveTemp(UVs), MoveTemp(AmplifiedHeights), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
         return;
     }
 
@@ -1747,6 +1892,18 @@ void FTectonicSimulationController::BuildMeshFromCache(const FCachedLODMesh& Cac
         Builder.AddTriangle(static_cast<int32>(I0), static_cast<int32>(I1), static_cast<int32>(I2));
         OutTriangleCount++;
     }
+
+    if (OutVertexCount > 0 && CachedMesh.AmplifiedHeights.Num() == OutVertexCount)
+    {
+        FRealtimeMeshStream& StageBStream = OutStreamSet.AddStream(
+            PlanetaryCreation::MeshStreams::StageBHeight, GetRealtimeMeshBufferLayout<float>());
+        TRealtimeMeshStreamBuilder<float> StageBBuilder(StageBStream);
+        StageBBuilder.SetNumUninitialized(OutVertexCount);
+        for (int32 Index = 0; Index < OutVertexCount; ++Index)
+        {
+            StageBBuilder[Index] = CachedMesh.AmplifiedHeights[Index];
+        }
+    }
 }
 
 void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCachedLODMesh& CachedMesh,
@@ -1770,10 +1927,53 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
 
     const TArray<int32>& PlateAssignments = FreshSnapshot.VertexPlateAssignments;
     const TArray<double>& ElevationValues = FreshSnapshot.VertexElevationValues;
+    const TArray<double>& AmplifiedElevation = FreshSnapshot.VertexAmplifiedElevation;
+    const TArray<double>& VertexStressValues = FreshSnapshot.VertexStressValues;
+    const TArray<FVector3d>& VertexVelocities = FreshSnapshot.VertexVelocities;
     const ETectonicVisualizationMode VisMode = FreshSnapshot.VisualizationMode;
+    const double SeaLevelMeters = FreshSnapshot.Parameters.SeaLevel;
+    const bool bHighlightSeaLevel = FreshSnapshot.bHighlightSeaLevel;
 
-    UTectonicSimulationService* Service = GetService();
-    const TArray<FTectonicPlate>* PlatesPtr = Service ? &Service->GetPlates() : nullptr;
+    const TArray<double>* EffectiveElevations = nullptr;
+    if (FreshSnapshot.bUseAmplifiedElevation && AmplifiedElevation.Num() == VertexCount)
+    {
+        EffectiveElevations = &AmplifiedElevation;
+    }
+    else if (ElevationValues.Num() == VertexCount)
+    {
+        EffectiveElevations = &ElevationValues;
+    }
+
+    double MinElevationMeters = TNumericLimits<double>::Max();
+    double MaxElevationMeters = TNumericLimits<double>::Lowest();
+    if (EffectiveElevations)
+    {
+        for (double Elevation : *EffectiveElevations)
+        {
+            if (!FMath::IsFinite(Elevation))
+            {
+                continue;
+            }
+
+            MinElevationMeters = FMath::Min(MinElevationMeters, Elevation);
+            MaxElevationMeters = FMath::Max(MaxElevationMeters, Elevation);
+        }
+    }
+
+    if (MinElevationMeters > MaxElevationMeters)
+    {
+        MinElevationMeters = PaperElevationConstants::AbyssalPlainDepth_m;
+        MaxElevationMeters = 2000.0;
+    }
+
+    double ElevationRangeMeters = MaxElevationMeters - MinElevationMeters;
+    if (ElevationRangeMeters < KINDA_SMALL_NUMBER)
+    {
+        ElevationRangeMeters = 1.0;
+    }
+
+    FAmplificationVisualizationContext AmplificationContext;
+    AmplificationContext.Initialize(AmplifiedElevation, ElevationValues);
 
     auto GetPlateColor = [](int32 PlateID) -> FColor
     {
@@ -1783,21 +1983,90 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
         return HSV.HSVToLinearRGB().ToFColor(false);
     };
 
+    auto GetVelocityColor = [](const FVector3d& Velocity) -> FColor
+    {
+        const double Magnitude = Velocity.Length();
+        const double Normalized = FMath::Clamp((Magnitude - 0.01) / (0.1 - 0.01), 0.0, 1.0);
+        const float Hue = FMath::Lerp(240.0f, 0.0f, static_cast<float>(Normalized));
+        FLinearColor HSV(Hue, 0.8f, 0.9f);
+        return HSV.HSVToLinearRGB().ToFColor(false);
+    };
+
+    auto GetStressColor = [](double StressMPa) -> FColor
+    {
+        const double Normalized = FMath::Clamp(StressMPa / 100.0, 0.0, 1.0);
+        const float Hue = FMath::Lerp(120.0f, 0.0f, static_cast<float>(Normalized));
+        FLinearColor HSV(Hue, 0.8f, 0.9f);
+        return HSV.HSVToLinearRGB().ToFColor(false);
+    };
+
+    static const FLinearColor HeightGradientStops[] = {
+        FLinearColor(0.015f, 0.118f, 0.341f),
+        FLinearColor(0.000f, 0.392f, 0.729f),
+        FLinearColor(0.137f, 0.702f, 0.467f),
+        FLinearColor(0.933f, 0.894f, 0.298f),
+        FLinearColor(0.957f, 0.643f, 0.376f)
+    };
+
+    auto GetElevationColor = [&](double ElevationMeters) -> FColor
+    {
+        const double Normalized = FMath::Clamp((ElevationMeters - MinElevationMeters) / ElevationRangeMeters, 0.0, 1.0);
+        const int32 StopCount = UE_ARRAY_COUNT(HeightGradientStops);
+        const double Scaled = Normalized * (StopCount - 1);
+        const int32 IndexLow = FMath::Clamp(static_cast<int32>(Scaled), 0, StopCount - 1);
+        const int32 IndexHigh = FMath::Clamp(IndexLow + 1, 0, StopCount - 1);
+        const float Alpha = static_cast<float>(Scaled - IndexLow);
+        return FLinearColor::LerpUsingHSV(HeightGradientStops[IndexLow], HeightGradientStops[IndexHigh], Alpha).ToFColor(false);
+    };
+
+    const bool bShowVelocity = VisMode == ETectonicVisualizationMode::Velocity;
+    const bool bStressColor = VisMode == ETectonicVisualizationMode::Stress;
+    const bool bElevColor = (VisMode == ETectonicVisualizationMode::Elevation) && EffectiveElevations != nullptr;
+    const bool bAmplifiedColor = (VisMode == ETectonicVisualizationMode::Amplified) && AmplificationContext.HasData();
+    const bool bAmplificationBlend = (VisMode == ETectonicVisualizationMode::AmplificationBlend) && AmplificationContext.HasData();
+
     for (int32 Index = 0; Index < VertexCount; ++Index)
     {
         const int32 PlateID = PlateAssignments.IsValidIndex(Index) ? PlateAssignments[Index] : INDEX_NONE;
-
-        FColor VertexColor;
-        if (VisMode == ETectonicVisualizationMode::Elevation && ElevationValues.IsValidIndex(Index))
+        const FColor PlateColor = GetPlateColor(PlateID);
+        double ElevationMeters = 0.0;
+        if (EffectiveElevations && EffectiveElevations->IsValidIndex(Index))
         {
-            const double Elevation = ElevationValues[Index];
-            const double NormValue = FMath::Clamp((Elevation + 6000.0) / 12000.0, 0.0, 1.0);
-            const FLinearColor HSV(240.0 * (1.0 - NormValue), 0.7, 0.9);
-            VertexColor = HSV.HSVToLinearRGB().ToFColor(false);
+            ElevationMeters = (*EffectiveElevations)[Index];
+        }
+
+        FColor VertexColor = FColor::Black;
+        if (bShowVelocity && VertexVelocities.IsValidIndex(Index))
+        {
+            VertexColor = GetVelocityColor(VertexVelocities[Index]);
+        }
+        else if (bAmplifiedColor)
+        {
+            VertexColor = AmplificationContext.ComputeColor(Index).ToFColor(false);
+        }
+        else if (bAmplificationBlend)
+        {
+            const FLinearColor PlateLinear = FLinearColor::FromSRGBColor(PlateColor);
+            const FLinearColor AmplifiedLinear = AmplificationContext.ComputeColor(Index);
+            const float BlendWeight = static_cast<float>(FMath::Clamp(AmplificationContext.ComputeWeight(Index) * 0.75, 0.0, 1.0));
+            const FLinearColor Mixed = FMath::Lerp(PlateLinear, AmplifiedLinear, BlendWeight);
+            VertexColor = Mixed.ToFColor(false);
+        }
+        else if (bElevColor)
+        {
+            VertexColor = GetElevationColor(ElevationMeters);
+            if (bHighlightSeaLevel && FMath::Abs(ElevationMeters - SeaLevelMeters) <= 50.0)
+            {
+                VertexColor = FColor::White;
+            }
+        }
+        else if (bStressColor && VertexStressValues.IsValidIndex(Index))
+        {
+            VertexColor = GetStressColor(VertexStressValues[Index]);
         }
         else
         {
-            VertexColor = GetPlateColor(PlateID);
+            VertexColor = PlateColor;
         }
 
         FreshColors[Index] = VertexColor;
@@ -1849,6 +2118,18 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
         const uint32 I2 = CachedMesh.Indices[Index + 2];
         Builder.AddTriangle(static_cast<int32>(I0), static_cast<int32>(I1), static_cast<int32>(I2));
         OutTriangleCount++;
+    }
+
+    if (OutVertexCount > 0 && CachedMesh.AmplifiedHeights.Num() == OutVertexCount)
+    {
+        FRealtimeMeshStream& StageBStream = OutStreamSet.AddStream(
+            PlanetaryCreation::MeshStreams::StageBHeight, GetRealtimeMeshBufferLayout<float>());
+        TRealtimeMeshStreamBuilder<float> StageBBuilder(StageBStream);
+        StageBBuilder.SetNumUninitialized(OutVertexCount);
+        for (int32 Index = 0; Index < OutVertexCount; ++Index)
+        {
+            StageBBuilder[Index] = CachedMesh.AmplifiedHeights[Index];
+        }
     }
 }
 
@@ -1916,6 +2197,9 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
 
     const double RadiusUE = MetersToUE(Snapshot.PlanetRadius);
 
+    FAmplificationVisualizationContext AmplificationContext;
+    AmplificationContext.Initialize(Snapshot.VertexAmplifiedElevation, Snapshot.VertexElevationValues);
+
     const TArray<float>* SoANormalX = nullptr;
     const TArray<float>* SoANormalY = nullptr;
     const TArray<float>* SoANormalZ = nullptr;
@@ -1943,6 +2227,8 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
     const bool bShowVelocity = VisualizationMode == ETectonicVisualizationMode::Velocity;
     const bool bStressColor = VisualizationMode == ETectonicVisualizationMode::Stress;
     const bool bElevColor = (VisualizationMode == ETectonicVisualizationMode::Elevation) && EffectiveElevations != nullptr;
+    const bool bAmplifiedColor = (VisualizationMode == ETectonicVisualizationMode::Amplified) && AmplificationContext.HasData();
+    const bool bAmplificationBlend = (VisualizationMode == ETectonicVisualizationMode::AmplificationBlend) && AmplificationContext.HasData();
     const bool bHighlightSeaLevel = Snapshot.bHighlightSeaLevel;
     const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
 
@@ -2046,10 +2332,23 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
 
         FColor VertexColor = FColor::Black;
         const int32 PlateID = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
+        const FColor PlateColor = GetPlateColor(PlateID);
 
         if (bShowVelocity && VertexVelocities.IsValidIndex(Index))
         {
             VertexColor = GetVelocityColor(VertexVelocities[Index]);
+        }
+        else if (bAmplifiedColor)
+        {
+            VertexColor = AmplificationContext.ComputeColor(Index).ToFColor(false);
+        }
+        else if (bAmplificationBlend)
+        {
+            const FLinearColor PlateLinear = FLinearColor::FromSRGBColor(PlateColor);
+            const FLinearColor AmplifiedLinear = AmplificationContext.ComputeColor(Index);
+            const float BlendWeight = static_cast<float>(FMath::Clamp(AmplificationContext.ComputeWeight(Index) * 0.75, 0.0, 1.0));
+            const FLinearColor Mixed = FMath::Lerp(PlateLinear, AmplifiedLinear, BlendWeight);
+            VertexColor = Mixed.ToFColor(false);
         }
         else if (bElevColor)
         {
@@ -2065,7 +2364,7 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
         }
         else
         {
-            VertexColor = GetPlateColor(PlateID);
+            VertexColor = PlateColor;
         }
 
         SourcePositions[Index] = Position;
@@ -2075,6 +2374,7 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
     });
 
     const int32 FinalVertexCount = CachedMesh.VertexCount;
+    CachedMesh.AmplifiedHeights.SetNum(FinalVertexCount);
     for (int32 Index = 0; Index < FinalVertexCount; ++Index)
     {
         const int32 SourceIndex = CachedMesh.SourceVertexIndices[Index];
@@ -2101,6 +2401,13 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
         CachedMesh.TangentZ[Index] = Tangent.Z;
 
         CachedMesh.VertexColors[Index] = Color;
+
+        float StageBValue = 0.0f;
+        if (EffectiveElevations && EffectiveElevations->IsValidIndex(SourceIndex))
+        {
+            StageBValue = static_cast<float>((*EffectiveElevations)[SourceIndex]);
+        }
+        CachedMesh.AmplifiedHeights[Index] = StageBValue;
     }
 
     CachedMesh.SurfaceDataVersion = NewSurfaceDataVersion;
@@ -2196,7 +2503,8 @@ bool FTectonicSimulationController::TryUpdatePreviewMeshInPlace(const FCachedLOD
         CachedMesh.TangentX.Num() == VertexCount &&
         CachedMesh.TangentY.Num() == VertexCount &&
         CachedMesh.TangentZ.Num() == VertexCount &&
-        CachedMesh.VertexColors.Num() == VertexCount;
+        CachedMesh.VertexColors.Num() == VertexCount &&
+        CachedMesh.AmplifiedHeights.Num() == VertexCount;
 
     if (!bStreamsValid)
     {
@@ -2219,8 +2527,9 @@ bool FTectonicSimulationController::TryUpdatePreviewMeshInPlace(const FCachedLOD
         FRealtimeMeshStream* const PositionStream = StreamSet.Find(FRealtimeMeshStreams::Position);
         FRealtimeMeshStream* const TangentStream = StreamSet.Find(FRealtimeMeshStreams::Tangents);
         FRealtimeMeshStream* const ColorStream = StreamSet.Find(FRealtimeMeshStreams::Color);
+        FRealtimeMeshStream* const StageBStream = StreamSet.Find(PlanetaryCreation::MeshStreams::StageBHeight);
 
-        if (!PositionStream || !TangentStream || !ColorStream)
+        if (!PositionStream || !TangentStream || !ColorStream || !StageBStream)
         {
             bUpdateSucceeded = false;
             return TSet<FRealtimeMeshStreamKey>();
@@ -2269,6 +2578,17 @@ bool FTectonicSimulationController::TryUpdatePreviewMeshInPlace(const FCachedLOD
             Colors[Index] = CachedMesh.VertexColors[Index];
         }
         DirtyStreams.Add(FRealtimeMeshStreams::Color);
+
+        TRealtimeMeshStreamBuilder<float> StageB(*StageBStream);
+        if (StageB.Num() != VertexCount)
+        {
+            StageB.SetNumUninitialized(VertexCount);
+        }
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            StageB[Index] = CachedMesh.AmplifiedHeights[Index];
+        }
+        DirtyStreams.Add(PlanetaryCreation::MeshStreams::StageBHeight);
 
         return DirtyStreams;
     });
@@ -2343,7 +2663,8 @@ void FTectonicSimulationController::FinalizePreviewMeshUpdate(int32 VertexCount,
                             if (MID)
                             {
                                 MID->SetTextureParameterValue(PlanetaryCreation::Preview::HeightTextureParamName, GPUHeightTextureAsset.Get());
-                                MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, 100.0f);
+                                const float ElevationScaleUE = MetersToUE(Service->GetParameters().ElevationScale);
+                                MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, ElevationScaleUE);
                                 MID->SetScalarParameterValue(TEXT("DebugOverlayOpacity"), 0.5f);
 
                                 UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("[GPUPreview] Height texture bound to material (%dx%d)"),
@@ -2455,6 +2776,7 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
             TArray<float> TangentX, TangentY, TangentZ;
             TArray<FColor> Colors;
             TArray<FVector2f> UVs;
+            TArray<float> AmplifiedHeights;
             TArray<uint32> Indices;
             TArray<int32> SourceVertexIndices;
 
@@ -2462,14 +2784,14 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
                 PositionX, PositionY, PositionZ,
                 NormalX, NormalY, NormalZ,
                 TangentX, TangentY, TangentZ,
-                Colors, UVs, Indices, SourceVertexIndices);
+                Colors, UVs, AmplifiedHeights, Indices, SourceVertexIndices);
 
             // Return to game thread to cache result
             AsyncTask(ENamedThreads::GameThread, [this, Snapshot, VertexCount, TriangleCount, LODLevel, CurrentTopologyVersion, CurrentSurfaceVersion,
                 PositionX = MoveTemp(PositionX), PositionY = MoveTemp(PositionY), PositionZ = MoveTemp(PositionZ),
                 NormalX = MoveTemp(NormalX), NormalY = MoveTemp(NormalY), NormalZ = MoveTemp(NormalZ),
                 TangentX = MoveTemp(TangentX), TangentY = MoveTemp(TangentY), TangentZ = MoveTemp(TangentZ),
-                Colors = MoveTemp(Colors), UVs = MoveTemp(UVs), Indices = MoveTemp(Indices),
+                Colors = MoveTemp(Colors), UVs = MoveTemp(UVs), AmplifiedHeights = MoveTemp(AmplifiedHeights), Indices = MoveTemp(Indices),
                 SourceVertexIndices = MoveTemp(SourceVertexIndices)]() mutable
             {
                 if (bShutdownRequested.load(std::memory_order_relaxed))
@@ -2485,7 +2807,7 @@ void FTectonicSimulationController::PreWarmNeighboringLODs()
                         MoveTemp(PositionX), MoveTemp(PositionY), MoveTemp(PositionZ),
                         MoveTemp(NormalX), MoveTemp(NormalY), MoveTemp(NormalZ),
                         MoveTemp(TangentX), MoveTemp(TangentY), MoveTemp(TangentZ),
-                        MoveTemp(Colors), MoveTemp(UVs), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
+                        MoveTemp(Colors), MoveTemp(UVs), MoveTemp(AmplifiedHeights), MoveTemp(Indices), MoveTemp(SourceVertexIndices));
                 }
 
                 bAsyncMeshBuildInProgress.store(false);
@@ -2520,6 +2842,7 @@ void FTectonicSimulationController::GetCacheStats(int32& OutCachedLODs, int32& O
             AccumulatedBytes += CachedMesh.TangentZ.GetAllocatedSize();
             AccumulatedBytes += CachedMesh.VertexColors.GetAllocatedSize();
             AccumulatedBytes += CachedMesh.UVs.GetAllocatedSize();
+            AccumulatedBytes += CachedMesh.AmplifiedHeights.GetAllocatedSize();
             AccumulatedBytes += CachedMesh.Indices.GetAllocatedSize();
             OutTotalCacheSize += static_cast<int32>(AccumulatedBytes);
         }

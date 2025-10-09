@@ -386,11 +386,19 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
 
         const float HalfWidthUE = SimplifiedHalfWidthUE;
 
-        // Build continuous strip with shared vertices between segments
-        TArray<int32> LeftEdgeVertices;
-        TArray<int32> RightEdgeVertices;
-        LeftEdgeVertices.Reserve(PolylineVertices.Num());
-        RightEdgeVertices.Reserve(PolylineVertices.Num());
+        struct FRibbonVertexData
+        {
+            FVector3f Position;
+            FVector3f Normal;
+            FVector3f Tangent;
+            FColor Color;
+            FVector2f UV;
+        };
+
+        TArray<FRibbonVertexData> LeftVertexData;
+        TArray<FRibbonVertexData> RightVertexData;
+        LeftVertexData.Reserve(PolylineVertices.Num());
+        RightVertexData.Reserve(PolylineVertices.Num());
 
         bool bStripValid = true;
 
@@ -497,27 +505,40 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
             const FVector3f Tangent = FVector3f(EdgeTangent);
             const float UCoord = (PolylineVertices.Num() > 1) ? static_cast<float>(i) / static_cast<float>(PolylineVertices.Num() - 1) : 0.0f;
 
-            const int32 LeftIndex = Builder.AddVertex(FVector3f(LeftPos))
-                .SetNormalAndTangent(Normal, Tangent)
-                .SetColor(OverlayColor)
-                .SetTexCoord(FVector2f(UCoord, 0.0f));
+            LeftVertexData.Add({FVector3f(LeftPos), Normal, Tangent, OverlayColor, FVector2f(UCoord, 0.0f)});
+            RightVertexData.Add({FVector3f(RightPos), Normal, Tangent, OverlayColor, FVector2f(UCoord, 1.0f)});
+        }
 
-            const int32 RightIndex = Builder.AddVertex(FVector3f(RightPos))
-                .SetNormalAndTangent(Normal, Tangent)
-                .SetColor(OverlayColor)
-                .SetTexCoord(FVector2f(UCoord, 1.0f));
+        if (!bStripValid)
+        {
+            return;
+        }
+
+        // Build continuous strip with shared vertices between segments
+        TArray<int32> LeftEdgeVertices;
+        TArray<int32> RightEdgeVertices;
+        LeftEdgeVertices.Reserve(LeftVertexData.Num());
+        RightEdgeVertices.Reserve(RightVertexData.Num());
+
+        for (int32 i = 0; i < LeftVertexData.Num(); ++i)
+        {
+            const FRibbonVertexData& LeftData = LeftVertexData[i];
+            const FRibbonVertexData& RightData = RightVertexData[i];
+
+            const int32 LeftIndex = Builder.AddVertex(LeftData.Position)
+                .SetNormalAndTangent(LeftData.Normal, LeftData.Tangent)
+                .SetColor(LeftData.Color)
+                .SetTexCoord(LeftData.UV);
+
+            const int32 RightIndex = Builder.AddVertex(RightData.Position)
+                .SetNormalAndTangent(RightData.Normal, RightData.Tangent)
+                .SetColor(RightData.Color)
+                .SetTexCoord(RightData.UV);
 
             LeftEdgeVertices.Add(LeftIndex);
             RightEdgeVertices.Add(RightIndex);
 
             VertexCount += 2;
-        }
-
-        if (!bStripValid)
-        {
-            // Roll back the vertex count since we're not using these vertices
-            VertexCount -= LeftEdgeVertices.Num() * 2;
-            return;
         }
 
         // Build triangle strip connecting left and right edges

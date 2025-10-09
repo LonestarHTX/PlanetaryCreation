@@ -54,7 +54,7 @@ static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationVisualizationMode(
     TEXT("r.PlanetaryCreation.VisualizationMode"),
     static_cast<int32>(ETectonicVisualizationMode::PlateColors),
-    TEXT("Set visualization overlay: 0=Plate Colors, 1=Elevation Heatmap, 2=Velocity Field, 3=Stress Gradient."),
+    TEXT("Set visualization overlay: 0=Plate Colors, 1=Elevation Heatmap, 2=Velocity Field, 3=Stress Gradient, 4=Amplified Stage B, 5=Amplification Blend."),
     ECVF_Default);
 
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationStageBProfiling(
@@ -133,7 +133,8 @@ static void HandleVisualizationModeConsoleChange(IConsoleVariable* Variable)
     }
 
     const int32 ModeValue = Variable->GetInt();
-    const ETectonicVisualizationMode Mode = static_cast<ETectonicVisualizationMode>(FMath::Clamp(ModeValue, 0, 3));
+    const int32 MaxModeIndex = static_cast<int32>(ETectonicVisualizationMode::AmplificationBlend);
+    const ETectonicVisualizationMode Mode = static_cast<ETectonicVisualizationMode>(FMath::Clamp(ModeValue, 0, MaxModeIndex));
 
     if (!GEditor)
     {
@@ -1416,7 +1417,14 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
     }
 
     Parameters = NewParams;
-    Parameters.bEnableHeightmapVisualization = (Parameters.VisualizationMode == ETectonicVisualizationMode::Elevation);
+    const auto IsHeightmapMode = [](ETectonicVisualizationMode Mode)
+    {
+        return Mode == ETectonicVisualizationMode::Elevation
+            || Mode == ETectonicVisualizationMode::Amplified
+            || Mode == ETectonicVisualizationMode::AmplificationBlend;
+    };
+
+    Parameters.bEnableHeightmapVisualization = IsHeightmapMode(Parameters.VisualizationMode);
 
     // M5 Phase 3: Validate and clamp PlanetRadius to prevent invalid simulations
     const double MinRadius = 10000.0;   // 10 km (minimum for asteroid-like bodies)
@@ -1468,7 +1476,10 @@ void UTectonicSimulationService::SetVisualizationMode(ETectonicVisualizationMode
     }
 
     Parameters.VisualizationMode = Mode;
-    Parameters.bEnableHeightmapVisualization = (Mode == ETectonicVisualizationMode::Elevation);
+    Parameters.bEnableHeightmapVisualization =
+        (Mode == ETectonicVisualizationMode::Elevation)
+        || (Mode == ETectonicVisualizationMode::Amplified)
+        || (Mode == ETectonicVisualizationMode::AmplificationBlend);
 
     // Increment surface data version so cached LODs rebuild with updated vertex colors.
     SurfaceDataVersion++;
@@ -6522,7 +6533,11 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
 {
     TRACE_CPUPROFILER_EVENT_SCOPE(RebuildStageBForCurrentLOD);
 
-    if (RenderVertices.Num() == 0)
+    const int32 ExpectedVertexCount = RenderVertices.Num();
+
+    DiscardOutdatedStageBGPUJobs(ExpectedVertexCount);
+
+    if (ExpectedVertexCount == 0)
     {
         InitializeAmplifiedElevationBaseline();
         return;
@@ -6576,6 +6591,102 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
 #endif
         }
     }
+}
+
+void UTectonicSimulationService::DiscardOutdatedStageBGPUJobs(int32 ExpectedVertexCount)
+{
+#if WITH_EDITOR
+    for (int32 JobIdx = PendingOceanicGPUJobs.Num() - 1; JobIdx >= 0; --JobIdx)
+    {
+        FOceanicGPUAsyncJob& Job = PendingOceanicGPUJobs[JobIdx];
+        const int32 SnapshotVertexCount = Job.Snapshot.VertexCount;
+        const int32 SnapshotRenderCount = Job.Snapshot.RenderPositions.Num();
+        const bool bMismatch =
+            Job.VertexCount != ExpectedVertexCount ||
+            SnapshotVertexCount != ExpectedVertexCount ||
+            SnapshotRenderCount != ExpectedVertexCount;
+
+        if (bMismatch)
+        {
+            // CRITICAL FIX: Wait for GPU to finish with readback buffer before recycling
+            // The readback object may still be referenced by in-flight GPU command lists.
+            // Returning it to the pool immediately can cause the next job to reuse the
+            // buffer while the GPU is still writing, leading to data corruption or crashes.
+            if (Job.Readback.IsValid() && !Job.Readback->IsReady())
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][GPU] Waiting for in-flight GPU job to complete before discard (JobId=%llu, VertexCount=%d, Expected=%d). Consider deferring LOD changes until GPU jobs settle."),
+                    Job.JobId,
+                    Job.VertexCount,
+                    ExpectedVertexCount);
+
+                // Block until GPU finishes writing to this buffer
+                // This is safe because:
+                // 1. We're on the game thread (not render thread)
+                // 2. LOD changes are infrequent user-driven events
+                // 3. Prevents buffer reuse race condition
+                while (Job.Readback.IsValid() && !Job.Readback->IsReady())
+                {
+                    FPlatformProcess::Sleep(0.001f); // 1ms polling
+                }
+            }
+
+            // Now safe to release - GPU has finished with this buffer
+            Job.Readback.Reset();
+            PendingOceanicGPUJobs.RemoveAt(JobIdx);
+
+            UE_LOG(LogPlanetaryCreation, Verbose,
+                TEXT("[StageB][GPU] Discarded pending oceanic GPU job (JobId=%llu, VertexCount=%d, SnapshotVerts=%d, Expected=%d) due to LOD change"),
+                Job.JobId,
+                Job.VertexCount,
+                SnapshotVertexCount,
+                ExpectedVertexCount);
+        }
+    }
+
+    for (int32 JobIdx = PendingContinentalGPUJobs.Num() - 1; JobIdx >= 0; --JobIdx)
+    {
+        FContinentalGPUAsyncJob& Job = PendingContinentalGPUJobs[JobIdx];
+        const int32 SnapshotVertexCount = Job.Snapshot.VertexCount;
+        const int32 SnapshotRenderCount = Job.Snapshot.RenderPositions.Num();
+        const bool bMismatch =
+            Job.VertexCount != ExpectedVertexCount ||
+            SnapshotVertexCount != ExpectedVertexCount ||
+            SnapshotRenderCount != ExpectedVertexCount;
+
+        if (bMismatch)
+        {
+            // CRITICAL FIX: Wait for GPU before recycling (same issue as oceanic path)
+            if (Job.Readback.IsValid() && !Job.Readback->IsReady())
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][GPU] Waiting for in-flight continental GPU job to complete before discard (JobId=%llu, VertexCount=%d, Expected=%d). Consider deferring LOD changes until GPU jobs settle."),
+                    Job.JobId,
+                    Job.VertexCount,
+                    ExpectedVertexCount);
+
+                // Block until GPU finishes (same rationale as oceanic path)
+                while (Job.Readback.IsValid() && !Job.Readback->IsReady())
+                {
+                    FPlatformProcess::Sleep(0.001f); // 1ms polling
+                }
+            }
+
+            // Now safe to release - GPU has finished with this buffer
+            Job.Readback.Reset();
+            PendingContinentalGPUJobs.RemoveAt(JobIdx);
+
+            UE_LOG(LogPlanetaryCreation, Verbose,
+                TEXT("[StageB][GPU] Discarded pending continental GPU job (JobId=%llu, VertexCount=%d, SnapshotVerts=%d, Expected=%d) due to LOD change"),
+                Job.JobId,
+                Job.VertexCount,
+                SnapshotVertexCount,
+                ExpectedVertexCount);
+        }
+    }
+#else
+    (void)ExpectedVertexCount;
+#endif
 }
 
 void UTectonicSimulationService::ApplyOceanicAmplification()

@@ -18,7 +18,9 @@ enum class ETectonicVisualizationMode : uint8
     PlateColors UMETA(DisplayName = "Plate Colors"),
     Elevation UMETA(DisplayName = "Elevation Heatmap"),
     Velocity UMETA(DisplayName = "Velocity Field"),
-    Stress UMETA(DisplayName = "Stress Gradient")
+    Stress UMETA(DisplayName = "Stress Gradient"),
+    Amplified UMETA(DisplayName = "Amplified Stage B"),
+    AmplificationBlend UMETA(DisplayName = "Amplification Blend")
 };
 
 struct FStageBProfile
@@ -1521,6 +1523,9 @@ private:
 
     /** Rebuilds Stage B amplification for the current render LOD without advancing simulation time. */
     void RebuildStageBForCurrentLOD();
+
+    /** Drops any pending Stage B GPU readbacks that no longer match the active render mesh. */
+    void DiscardOutdatedStageBGPUJobs(int32 ExpectedVertexCount);
 
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking

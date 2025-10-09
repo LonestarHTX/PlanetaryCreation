@@ -75,6 +75,9 @@ struct FCachedLODMesh
 
     /** Mapping from final vertex buffer index back to source render vertex index (handles seam duplicates). */
     TArray<int32> SourceVertexIndices;
+
+    /** Per-vertex amplified elevation (meters) replicated for seam duplicates. */
+    TArray<float> AmplifiedHeights;
 };
 
 /** Encapsulates higher-level control over the tectonic simulation and mesh conversion. */
@@ -167,7 +170,8 @@ private:
         TArray<float>& OutPositionX, TArray<float>& OutPositionY, TArray<float>& OutPositionZ,
         TArray<float>& OutNormalX, TArray<float>& OutNormalY, TArray<float>& OutNormalZ,
         TArray<float>& OutTangentX, TArray<float>& OutTangentY, TArray<float>& OutTangentZ,
-        TArray<FColor>& OutColors, TArray<FVector2f>& OutUVs, TArray<uint32>& OutIndices,
+        TArray<FColor>& OutColors, TArray<FVector2f>& OutUVs, TArray<float>& OutAmplifiedHeights,
+        TArray<uint32>& OutIndices,
         TArray<int32>& OutSourceIndices);
 
     /** Milestone 4 Phase 4.2: Check if LOD mesh is cached and valid. */
@@ -183,7 +187,8 @@ private:
         TArray<float>&& PositionX, TArray<float>&& PositionY, TArray<float>&& PositionZ,
         TArray<float>&& NormalX, TArray<float>&& NormalY, TArray<float>&& NormalZ,
         TArray<float>&& TangentX, TArray<float>&& TangentY, TArray<float>&& TangentZ,
-        TArray<FColor>&& VertexColors, TArray<FVector2f>&& UVs, TArray<uint32>&& Indices,
+        TArray<FColor>&& VertexColors, TArray<FVector2f>&& UVs, TArray<float>&& AmplifiedHeights,
+        TArray<uint32>&& Indices,
         TArray<int32>&& SourceVertexIndices);
 
     /** Milestone 4 Phase 4.2: Invalidate cache on topology change. */

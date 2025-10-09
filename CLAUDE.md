@@ -193,7 +193,7 @@ Mesh->UpdateSectionGroup(GroupKey, MoveTemp(StreamSet)); // Subsequent updates
 **Performance Profiling:**
 - Enable via CVar: `r.PlanetaryCreation.StageBProfiling 1`
 - Logs `[StageB][Profile]` and `[StageB][CacheProfile]` per step
-- Current baseline (LOD 7): ~14.5ms oceanic GPU, ~19.6ms continental with cache rebuild
+- Current baseline (LOD 7): ~10.9 ms oceanic GPU pass, ~19.6 ms continental snapshot + CPU fallback
 - Full metrics in `Docs/Performance_M6.md`
 
 **Visualization Modes:**
@@ -396,11 +396,7 @@ r.PlanetaryCreation.UseGPUAmplification 1
 # Set visualization mode (0=PlateColors, 1=Elevation, 2=Velocity, 3=Stress)
 r.PlanetaryCreation.VisualizationMode 0
 
-# GPU preview mode control
-r.PlanetaryCreation.GPUPreviewMode [0-2]
-
-# Skip CPU amplification when GPU preview active (performance optimization)
-r.PlanetaryCreation.bSkipCPUAmplification [0/1]
+# GPU preview mode can be toggled from the Tectonic Tool panel (no dedicated CVar)
 ```
 
 ### Development Tools
