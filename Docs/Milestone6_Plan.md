@@ -515,7 +515,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - Fold direction alignment creates coherent mountain range orientations
 - Performance budget: <20ms of 50ms allocated to Stage B
 
-**Status (2025-10-08):** 🟡 CPU exemplar blending is live via `ComputeContinentalAmplificationFromCache()` and the per-vertex cache/builders in `TectonicSimulationService.cpp:7030-7160`. Snapshot hashing backs the parity path (`GetContinentalAmplificationGPUInputs` + `ProcessPendingContinentalGPUReadbacks`), and `PlanetaryCreation.Milestone6.ContinentalAmplification` remains green. Remaining polish: fold-direction rotation for exemplars and broader visual tuning once the hydraulic pass lands.
+**Status (2025-10-10):** ✅ Fold-aligned exemplar blending ships via `ComputeContinentalAmplificationFromCache()` (`TectonicSimulationService.cpp:7030-7160`), snapshot hashing backs the GPU parity path, and `PlanetaryCreation.Milestone6.ContinentalAmplification` exercises the cache. Further tuning (hydraulic-aware weighting, visual polish) is deferred to Phase 3.
 
 ---
 
@@ -603,14 +603,14 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 - Toggle CVar restores legacy behaviour for debugging.
 - Simplification adds <1 ms at L6.
 
-**Status (2025-10-08):** 🔴 Not started.
+**Status (2025-10-10):** ✅ Simplified polylines render through `DrawHighResolutionBoundaryOverlay` (see `HighResBoundaryOverlay.cpp:120`), the mode selector lives in `SPTectonicToolPanel`, and `HighResBoundaryOverlayTest` asserts segment reduction. Legacy output remains available via the overlay mode toggle.
 
 ---
 
 ### Near-Term Follow-ups
 
 - Optimise the Level 7 mesh update path (incremental stream edits / async uploads) and log the impact with the Stage B profiling harness after each change.
-- Ship the boundary overlay simplifier (Task 2.4) and refresh the UI toggle once the simplified path is default.
+- Monitor the simplified boundary overlay (Task 2.4) for perf regressions as LOD work lands; adjust thickness offsets if hydraulic erosion changes coastline elevation.
 - Implement hydraulic routing / erosion coupling (Phase 3) to finish the mountains-and-valleys work planned for M6.
 - Complete the Phase 4 optimisation sweep (SIMD, GPU field compute) and capture the Level 6/7/8 performance baselines for the parity report.
 
@@ -975,120 +975,35 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 **Owner:** QA Engineer
 **Effort:** 2 days
 **Deliverables:**
-- 8 new tests covering M6 features
-- Regression suite: Verify M4/M5 tests still pass
-- Stress testing: 1000-step simulations with amplification enabled
-- Cross-platform validation: Windows/Linux determinism
+- Lock in test coverage for terrane lifecycle, GPU Stage B parity, preview seams, and LOD amplification.
+- Keep the Milestone 5 regression suite green.
+- Run long-haul stress and cross-platform determinism passes as part of release prep.
+- Track future tests (hydraulic routing, SIMD perf) once the underlying features land.
 
-**New Tests:**
-1. `TerraneExtractionTest` - Rift-triggered terrane creation
-2. `TerraneTransportTest` - Migration with carrier plate
-3. `TerraneReattachmentTest` - Collision and suturing
-4. `TerraneEdgeCasesTest` - Tiny terranes, carrier subduction
-5. `OceanicAmplificationTest` - Gabor noise, transform faults
-6. `ContinentalAmplificationTest` - Exemplar blending, fold alignment
-7. `HydraulicRoutingTest` - Flow accumulation, drainage basins
-8. `AmplificationLODTest` - Amplification only at L5+
-9. `TerranePersistenceTest` - Save/load terrane state
-10. **`PerformanceRegressionTest_M6`** - Validate M6 overhead <50ms vs M5 baseline
-11. **`AmplificationDeterminismTest`** - Same seed + LOD = identical amplified mesh (cross-platform)
+**Current Test Additions:**
+1. `TerraneExtractionTest`, `TerraneTransportTest`, `TerraneReattachmentTest`, `TerraneEdgeCasesTest`, `TerranePersistenceTest`, `TerraneMeshSurgeryTest` – cover extraction/transport/suturing edge cases.
+2. `GPUOceanicAmplificationTest`, `GPUContinentalAmplificationTest`, `GPUAmplificationIntegrationTest` – validate Stage B parity and snapshot fallbacks.
+3. `GPUPreviewVertexParityTest`, `GPUPreviewSeamMirroringTest` – ensure preview texture coverage and duplicated seams.
+4. `AmplificationLODTest`, `OceanicAmplificationTest`, `ContinentalAmplificationTest` – regression guardrails for Stage B outputs.
+5. `PerformanceRegressionTest` (M5) continues to gate baseline overhead; Stage B profiling lives in `Docs/Performance_M6.md`.
 
-**Performance Regression Test Details:**
-```cpp
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPerformanceRegressionTest_M6,
-    "PlanetaryCreation.Milestone6.PerformanceRegression",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FPerformanceRegressionTest_M6::RunTest(const FString& Parameters)
-{
-    // M5 Baseline: 6.32ms @ L3 (measured in Performance_M5.md)
-    const double M5_Baseline_L3_ms = 6.32;
-    const double M6_Target_L3_ms = 90.0;
-    const double M6_Overhead_Budget_ms = 50.0; // Max acceptable M6 overhead
-
-    // Run 100-step simulation with M6 features enabled
-    UTectonicSimulationService* Service = GetTectonicSimulationService();
-    FTectonicSimulationParameters Params = GetDefaultM6Params(); // Amplification, terranes, hydraulic erosion
-    Service->SetParameters(Params);
-
-    double TotalStepTime_ms = 0.0;
-    for (int32 Step = 0; Step < 100; ++Step)
-    {
-        double StepStartTime = FPlatformTime::Seconds();
-        Service->AdvanceSteps(1);
-        double StepEndTime = FPlatformTime::Seconds();
-        TotalStepTime_ms += (StepEndTime - StepStartTime) * 1000.0;
-    }
-
-    double AvgStepTime_ms = TotalStepTime_ms / 100.0;
-    double M6_Overhead_ms = AvgStepTime_ms - M5_Baseline_L3_ms;
-
-    UE_LOG(LogTemp, Log, TEXT("M6 Performance: Avg step time = %.2f ms (M5 baseline: %.2f ms, Overhead: %.2f ms)"),
-        AvgStepTime_ms, M5_Baseline_L3_ms, M6_Overhead_ms);
-
-    // Validate targets
-    TestTrue(TEXT("L3 step time <90ms"), AvgStepTime_ms < M6_Target_L3_ms);
-    TestTrue(TEXT("M6 overhead <50ms"), M6_Overhead_ms < M6_Overhead_Budget_ms);
-
-    return true;
-}
-```
-
-**Amplification Determinism Test Details:**
-```cpp
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAmplificationDeterminismTest,
-    "PlanetaryCreation.Milestone6.AmplificationDeterminism",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FAmplificationDeterminismTest::RunTest(const FString& Parameters)
-{
-    UTectonicSimulationService* Service = GetTectonicSimulationService();
-
-    // Run 1: Seed 42, L5 amplification, 50 steps
-    FTectonicSimulationParameters Params;
-    Params.Seed = 42;
-    Params.RenderSubdivisionLevel = 5; // 10,242 vertices with amplification
-    Params.bEnableAmplification = true;
-    Service->SetParameters(Params);
-    Service->AdvanceSteps(50);
-    TArray<FVector3d> AmplifiedMesh_Run1 = Service->GetAmplifiedRenderVertices();
-
-    // Run 2: Same seed, same LOD, same steps
-    Service->ResetSimulation();
-    Service->SetParameters(Params); // Same seed 42
-    Service->AdvanceSteps(50);
-    TArray<FVector3d> AmplifiedMesh_Run2 = Service->GetAmplifiedRenderVertices();
-
-    // Validate bit-identical results (same seed = same Gabor/exemplar noise)
-    TestEqual(TEXT("Vertex count matches"), AmplifiedMesh_Run1.Num(), AmplifiedMesh_Run2.Num());
-
-    for (int32 i = 0; i < AmplifiedMesh_Run1.Num(); ++i)
-    {
-        const FVector3d& V1 = AmplifiedMesh_Run1[i];
-        const FVector3d& V2 = AmplifiedMesh_Run2[i];
-
-        // Floating-point tolerance: ±0.01m (1cm) for amplified elevation
-        TestTrue(FString::Printf(TEXT("Vertex %d position matches"), i),
-            V1.Equals(V2, 0.01));
-    }
-
-    return true;
-}
-```
+**Planned/Pending Tests:**
+- Hydraulic routing / erosion coupling suite (post-Task 3.1).
+- SIMD-specific perf regression once vectorised loops exist.
+- Cross-platform amplification determinism once hydraulic adjustments stabilize.
 
 **Validation:**
-- ✅ All 38 tests pass (27 from M5 + 11 new)
-- ✅ 1000-step stress test with amplification (no crashes, no leaks)
-- ✅ Cross-platform determinism: Identical results Windows/Linux (within floating-point tolerance)
-- ✅ Performance regression: M6 overhead <50ms vs M5 (enforced by automated test)
-- ✅ Amplification determinism: Same seed produces identical amplified mesh across runs
+- ✅ Terrane + Stage B suites run clean in current automation passes (`PlanetaryCreation.*` milestones 5/6).
+- ✅ GPU preview parity confirms seam duplication and CPU/GPU elevation deltas stay under tolerance once preview mode is enabled.
+- ✅ Long-step stress runs (1000 steps) complete without memory growth as tracked in `Docs/Performance_M6.md`.
+- 🔄 Cross-platform determinism and hydraulic/erosion-specific tests will ride alongside Phase 3 delivery.
 
 **Acceptance:**
-- Test suite covers all M6 features
+- Test suite covers shipped M6 features (terrane mechanics, Stage B, preview seams)
 - Long-duration stability with amplification enabled
-- Determinism maintained across platforms
+- Determinism maintained across platforms once remaining erosion/hydraulic work lands
 
-**Status (2025-10-08):** 🟡 Terrane, Stage B, and GPU preview tests are live; additional hydraulic/SIMD coverage awaits the corresponding features.
+**Status (2025-10-10):** 🟡 Core M6 suites are in CI; hydraulic routing, SIMD perf checks, and platform determinism remain dependent on their respective feature work.
 
 ---
 

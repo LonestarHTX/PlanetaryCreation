@@ -7,6 +7,7 @@
 #include "TectonicPlaybackController.h"
 #include "HAL/IConsoleManager.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SComboBox.h"
 #include "Widgets/Input/SSpinBox.h"
 #include "Widgets/Input/SSlider.h"
 #include "Widgets/Layout/SBorder.h"
@@ -45,6 +46,19 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
 
     InitializeVisualizationOptions();
     RefreshSelectedVisualizationOption();
+
+    BoundaryModeOptions.Reset();
+    BoundaryModeOptions.Add(MakeShared<int32>(0));
+    BoundaryModeOptions.Add(MakeShared<int32>(1));
+
+    int32 CurrentBoundaryMode = 0;
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        CurrentBoundaryMode = FMath::Clamp(Controller->GetBoundaryOverlayMode(), 0, 1);
+    }
+    SelectedBoundaryMode = BoundaryModeOptions.IsValidIndex(CurrentBoundaryMode)
+        ? BoundaryModeOptions[CurrentBoundaryMode]
+        : BoundaryModeOptions[0];
 
     ChildSlot
     [
@@ -492,6 +506,38 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                     SNew(STextBlock)
                     .Text(NSLOCTEXT("PlanetaryCreation", "BoundaryOverlayLabel", "Show Plate Boundaries"))
                     .ToolTipText(NSLOCTEXT("PlanetaryCreation", "BoundaryOverlayTooltip", "Visualize plate boundaries as colored lines (red=convergent, green=divergent, yellow=transform)"))
+                ]
+            ]
+
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(16.0f, 2.0f)
+            [
+                SNew(SHorizontalBox)
+                .Visibility(this, &SPTectonicToolPanel::GetBoundaryModeRowVisibility)
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .VAlign(VAlign_Center)
+                .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(STextBlock)
+                    .Text(NSLOCTEXT("PlanetaryCreation", "BoundaryModeLabel", "Boundary Mode:"))
+                    .ToolTipText(NSLOCTEXT("PlanetaryCreation", "BoundaryModeTooltip", "Choose between detailed boundary ribbons or simplified seam polylines."))
+                ]
+                + SHorizontalBox::Slot()
+                .FillWidth(1.0f)
+                [
+                    SAssignNew(BoundaryModeCombo, SComboBox<TSharedPtr<int32>>)
+                    .OptionsSource(&BoundaryModeOptions)
+                    .InitiallySelectedItem(SelectedBoundaryMode)
+                    .OnGenerateWidget(this, &SPTectonicToolPanel::GenerateBoundaryModeWidget)
+                    .OnSelectionChanged(this, &SPTectonicToolPanel::OnBoundaryOverlayModeChanged)
+                    .IsEnabled(this, &SPTectonicToolPanel::IsBoundaryModeSelectorEnabled)
+                    .Content()
+                    [
+                        SNew(STextBlock)
+                        .Text(this, &SPTectonicToolPanel::GetCurrentBoundaryModeText)
+                    ]
                 ]
             ]
 
@@ -967,8 +1013,59 @@ void SPTectonicToolPanel::OnBoundaryOverlayChanged(ECheckBoxState NewState)
     {
         const bool bVisible = (NewState == ECheckBoxState::Checked);
         Controller->SetBoundariesVisible(bVisible);
+        Controller->RefreshBoundaryOverlay();
         UE_LOG(LogPlanetaryCreation, Log, TEXT("Boundary overlay %s"), bVisible ? TEXT("visible") : TEXT("hidden"));
     }
+}
+
+void SPTectonicToolPanel::OnBoundaryOverlayModeChanged(TSharedPtr<int32> NewMode, ESelectInfo::Type SelectInfo)
+{
+    if (!NewMode.IsValid())
+    {
+        return;
+    }
+
+    SelectedBoundaryMode = NewMode;
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        Controller->SetBoundaryOverlayMode(*NewMode);
+        Controller->RefreshBoundaryOverlay();
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Boundary overlay mode set to %d"), *NewMode);
+    }
+}
+
+TSharedRef<SWidget> SPTectonicToolPanel::GenerateBoundaryModeWidget(TSharedPtr<int32> InMode) const
+{
+    const int32 ModeValue = InMode.IsValid() ? *InMode : 0;
+    FText Label;
+    switch (ModeValue)
+    {
+        case 1:
+            Label = NSLOCTEXT("PlanetaryCreation", "BoundaryModeSimplified", "Simplified seams");
+            break;
+        default:
+            Label = NSLOCTEXT("PlanetaryCreation", "BoundaryModeDetailed", "Detailed ribbons");
+            break;
+    }
+    return SNew(STextBlock).Text(Label);
+}
+
+FText SPTectonicToolPanel::GetCurrentBoundaryModeText() const
+{
+    const int32 ModeValue = SelectedBoundaryMode.IsValid() ? *SelectedBoundaryMode : 0;
+    return ModeValue == 1
+        ? NSLOCTEXT("PlanetaryCreation", "BoundaryModeSimplified", "Simplified seams")
+        : NSLOCTEXT("PlanetaryCreation", "BoundaryModeDetailed", "Detailed ribbons");
+}
+
+bool SPTectonicToolPanel::IsBoundaryModeSelectorEnabled() const
+{
+    return GetBoundaryOverlayState() == ECheckBoxState::Checked;
+}
+
+EVisibility SPTectonicToolPanel::GetBoundaryModeRowVisibility() const
+{
+    return IsBoundaryModeSelectorEnabled() ? EVisibility::Visible : EVisibility::Collapsed;
 }
 
 ECheckBoxState SPTectonicToolPanel::GetAutomaticLODState() const

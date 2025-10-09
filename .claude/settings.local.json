@@ -49,7 +49,8 @@
       "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.OceanicAmplification; Quit\" -unattended -nop4 -nosplash -log)",
       "Bash(if [ -f /tmp/oceanic_amplification_validation.log ])",
       "Bash(then tail -200 /tmp/oceanic_amplification_validation.log)",
-      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.Debug.PlateMovementDiagnostic; Quit\" -unattended -nop4 -nosplash -log)"
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.Debug.PlateMovementDiagnostic; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

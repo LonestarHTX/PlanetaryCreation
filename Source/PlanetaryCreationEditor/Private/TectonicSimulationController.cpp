@@ -751,6 +751,20 @@ void FTectonicSimulationController::SetBoundariesVisible(bool bVisible)
     }
 }
 
+void FTectonicSimulationController::SetBoundaryOverlayMode(int32 InMode)
+{
+    if (BoundaryOverlayMode != InMode)
+    {
+        BoundaryOverlayMode = InMode;
+        RefreshBoundaryOverlay();
+    }
+}
+
+void FTectonicSimulationController::RefreshBoundaryOverlay()
+{
+    DrawHighResolutionBoundaryOverlay();
+}
+
 UTectonicSimulationService* FTectonicSimulationController::GetService() const
 {
     if (CachedService.IsValid())

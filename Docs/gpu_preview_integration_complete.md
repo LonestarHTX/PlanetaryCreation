@@ -83,7 +83,8 @@ Controller->SetGPUPreviewMode(true);
 
 ### Enable GPU Preview Mode (Console):
 ```
-// Not yet wired to console commands - requires UI toggle
+// Toggle via cvar if automation needs it:
+SetCVar r.PlanetaryCreation.UseGPUAmplification 1
 ```
 
 ## Testing
@@ -99,48 +100,37 @@ Controller->SetGPUPreviewMode(true);
 ### Manual Test:
 1. Launch editor
 2. Open Tectonic Tool Panel
-3. Toggle GPU preview mode (UI pending - can call via C++ for now)
+3. Toggle GPU preview mode via the checkbox
 4. Step simulation at high LOD (L5-L7)
 5. Verify displacement matches CPU path visually
 6. Check `stat unit` for performance improvement
 
 ### Automation Test (Recommended):
-```cpp
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGPUPreviewParityTest,
-    "PlanetaryCreation.Milestone6.GPU.PreviewParity",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FGPUPreviewParityTest::RunTest(const FString& Parameters)
-{
-    // 1. Run CPU path, capture vertex elevations
-    // 2. Run GPU preview path, sample texture at vertex UVs
-    // 3. Compare: Mean delta < 0.1m, Max delta < 1.0m
-    return true;
-}
-```
+- `PlanetaryCreation.Milestone6.GPU.PreviewVertexParity` exercises seam duplication/coverage rules.
+- `PlanetaryCreation.Milestone6.GPU.OceanicParity` compares CPU vs GPU elevation output and logs Stage B timings.
+- Both suites skip automatically when a NullRHI is detected.
 
 ## Known Limitations
 
 ### Current Implementation:
-1. **UI Toggle Pending** - No editor UI button yet (can call `SetGPUPreviewMode()` programmatically)
-2. **Texture Binding** - Uses `UTexture2D` proxy for material parameter system
-3. **Preview Only** - Collision/picking remain CPU-side
-4. **Equirectangular Seams** - Texture filtering smooths discontinuities at ±180° longitude
+1. **Preview Only** - Collision/picking remain CPU-side
+2. **Equirectangular Seams** - Texture filtering smooths discontinuities at ±180° longitude
+3. **Oceanic Only** - Continental amplification still uses CPU fallbacks (tracking snapshot parity)
 
 ### Future Optimizations:
 1. Add seam-aware texture writes with atomic operations
 2. Implement spatial lookup for vertex→pixel mapping (currently per-vertex dispatch)
 3. Add continental amplification GPU preview path
-4. Expose GPU preview toggle in SPTectonicToolPanel UI
+4. Investigate leaving displacement entirely on the GPU for camera-driven LOD
 
 ## Next Steps
 
 1. ✅ **Shader + C++ Implementation** - Complete
 2. ✅ **Material Setup** - Complete
 3. ✅ **Controller Integration** - Complete
-4. 🔨 **UI Toggle** - Pending (needs SPTectonicToolPanel checkbox)
-5. 🔨 **Parity Testing** - Pending (automation test)
-6. 🔨 **Performance Profiling** - Pending (Unreal Insights analysis)
+4. ✅ **UI Toggle** - Available in `SPTectonicToolPanel`
+5. ✅ **Preview Parity Tests** - `PlanetaryCreation.Milestone6.GPU.*` suites cover seams and CPU/GPU deltas
+6. 🔨 **Performance Profiling** - Continue capturing Insights traces as Stage B evolves
 
 ## Files Modified
 

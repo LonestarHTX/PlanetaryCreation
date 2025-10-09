@@ -50,77 +50,14 @@ Implements **Option A** from `step_time_optimization_plan.md` - PF_R16F equirect
 - Binds GPU height texture to `HeightTexture` parameter
 - Sets `ElevationScale` to 100.0 (meters → centimeters)
 
-### 🔨 Pending Components
+### ✅ UI & Material Wiring
+- Slate toggle: `SPTectonicToolPanel` exposes a **GPU Preview Mode** checkbox that calls `FTectonicSimulationController::SetGPUPreviewMode` (`Source/PlanetaryCreationEditor/Private/SPTectonicToolPanel.cpp:560`).
+- Material binding: `FTectonicSimulationController::UpdatePreviewMesh` creates/updates a dynamic material instance, pushes the height texture, and sets the elevation scalar automatically (`Source/PlanetaryCreationEditor/Private/TectonicSimulationController.cpp:1504`).
+- Default asset `M_PlanetSurface_GPUDisplacement` lives in `/Game/PlanetaryCreation/Materials/` and is auto-loaded when the toggle is enabled.
 
-#### 4. WPO Material Setup (Manual - Unreal Editor)
-Create a new Material asset in Content Browser:
-
-**Material Graph:**
-```
-[Texture Object Parameter: "HeightTexture" (PF_R16F)]
-    ↓
-[TextureSample]
-    ↓ RGB
-[Multiply] ← [Scalar Parameter: "ElevationScale" = 100.0]  // meters → cm
-    ↓
-[Multiply] ← [VertexNormalWS]  // Displace along normal
-    ↓
-[World Position Offset]
-```
-
-**Optional: Normal Recomputation (for lighting accuracy)**
-```
-[HeightTexture] → [ComputeFilterWidth] → [DDX/DDY] → [Cross Product] → [Normal]
-```
-
-**Material Properties:**
-- Domain: Surface
-- Blend Mode: Opaque
-- Shading Model: Default Lit
-
-#### 5. Controller Integration
-Add preview mode toggle to `FTectonicSimulationController`:
-
-```cpp
-// In TectonicSimulationController.h
-private:
-    bool bUseGPUPreviewMode = false;
-    FTextureRHIRef GPUHeightTexture;
-    FIntPoint HeightTextureSize = FIntPoint(2048, 1024);
-
-public:
-    void SetGPUPreviewMode(bool bEnabled);
-    bool IsGPUPreviewModeEnabled() const { return bUseGPUPreviewMode; }
-```
-
-#### 6. Material Parameter Binding
-Update mesh build to bind height texture to material:
-
-```cpp
-// In BuildAndUpdateMesh() or UpdatePreviewMesh()
-if (bUseGPUPreviewMode)
-{
-    // Run GPU preview shader (no readback)
-    PlanetaryCreation::GPU::ApplyOceanicAmplificationGPUPreview(
-        *Service, GPUHeightTexture, HeightTextureSize);
-
-    // Bind texture to material dynamic instance
-    if (PreviewActor.IsValid())
-    {
-        URealtimeMeshComponent* MeshComp = PreviewActor->GetRealtimeMeshComponent();
-        if (UMaterialInstanceDynamic* MID = MeshComp->CreateDynamicMaterialInstance(0))
-        {
-            MID->SetTextureParameterValue(FName("HeightTexture"), GPUHeightTexture);
-            MID->SetScalarParameterValue(FName("ElevationScale"), 100.0f);
-        }
-    }
-}
-else
-{
-    // Legacy CPU readback path
-    Service->ApplyOceanicAmplificationGPU();
-}
-```
+### ✅ Runtime Texture Flow
+- Preview requests allocate from a small `FRHIGPUBufferReadback` pool; jobs finalize through `ProcessPendingOceanicGPUReadbacks`, preserving async behaviour.
+- `UTectonicSimulationService` keeps CPU snapshots in sync and flips `bSkipCPUAmplification` so the legacy amplification loops are bypassed while preview mode is active.
 
 ## Performance Benefits
 
@@ -146,24 +83,13 @@ GPU Compute → Texture (stays on GPU) → Material WPO → Render
 
 ## Testing Plan
 
-### Unit Test (Automation):
-```cpp
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGPUPreviewParityTest,
-    "PlanetaryCreation.Milestone6.GPU.PreviewParity",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FGPUPreviewParityTest::RunTest(const FString& Parameters)
-{
-    // 1. Run CPU readback path, capture elevation
-    // 2. Run GPU preview path, sample texture at vertex UVs
-    // 3. Compare: Mean delta < 0.1m, Max delta < 1.0m
-    return true;
-}
-```
+### Automation
+- `PlanetaryCreation.Milestone6.GPU.PreviewVertexParity` verifies vertex duplication and seam coverage for the preview texture write path.
+- `PlanetaryCreation.Milestone6.GPU.OceanicParity` continues to compare CPU/GPU elevation outputs; the preview toggle is exercised as part of that suite.
 
 ### Manual Testing:
-1. Enable GPU preview mode via UI toggle
-2. Step simulation 10 times at L7 (81,920 vertices)
+1. Enable GPU preview mode via the Tectonic Tool panel checkbox.
+2. Step simulation 10 times at L7 (81,920 vertices).
 3. Verify:
    - Height displacement matches CPU path visually
    - Frame time improves (measure with `stat unit`)
@@ -185,12 +111,9 @@ Equirectangular textures have a seam at U=0/U=1 (longitude ±180°). Current ver
 - GPU preview only affects rendered appearance
 
 ## Next Steps
-1. Create WPO material asset in Unreal Editor
-2. Add `bUseGPUPreviewMode` flag to controller
-3. Wire texture binding in `BuildAndUpdateMesh()`
-4. Add UI toggle in `SPTectonicToolPanel`
-5. Run parity test to validate displacement accuracy
-6. Profile step time improvements at high LOD
+1. Continue reducing seam artefacts (investigate duplicate-column writes or cube-face projection).
+2. Expand preview to continental amplification once exemplar sampling is GPU-backed.
+3. Investigate keeping the preview entirely GPU-resident (material-only displacement) for camera-driven LOD without readback.
 
 ## References
 - **Plan Document:** `Docs/step_time_optimization_plan.md` (Section 3, Option A)

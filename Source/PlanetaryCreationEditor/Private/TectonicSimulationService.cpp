@@ -69,15 +69,22 @@ static void ApplyStageBProfilingCommandLineOverride()
     const FString TargetCVarName = TEXT("r.PlanetaryCreation.StageBProfiling");
 
     const TCHAR* Search = CmdLine;
-    while ((Search = FCString::Strstr(Search, TEXT("SetCVar="))) != nullptr)
+    const TCHAR* const SetCVarLiteral = TEXT("SetCVar=");
+    const int32 SetCVarLiteralLen = FCString::Strlen(SetCVarLiteral);
+
+    while ((Search = FCString::Strstr(Search, SetCVarLiteral)) != nullptr)
     {
-        Search += FCString::Strlen(TEXT("SetCVar="));
+        const TCHAR* AfterLiteral = Search + SetCVarLiteralLen;
+        const TCHAR* ParseCursor = AfterLiteral;
 
         FString SetCVarToken;
-        if (!FParse::Token(Search, SetCVarToken, false))
+        if (!FParse::Token(ParseCursor, SetCVarToken, false))
         {
+            Search = AfterLiteral;
             continue;
         }
+
+        Search = ParseCursor;
 
         SetCVarToken.TrimStartAndEndInline();
         if (SetCVarToken.StartsWith(TEXT("\"")) && SetCVarToken.EndsWith(TEXT("\"")) && SetCVarToken.Len() >= 2)
@@ -5776,7 +5783,10 @@ const FExemplarMetadata* AccessExemplarMetadataConst(int32 Index);
 bool LoadExemplarHeightData(FExemplarMetadata& Exemplar, const FString& ProjectContentDir);
 double SampleExemplarHeight(const FExemplarMetadata& Exemplar, double U, double V);
 TArray<FExemplarMetadata*> GetExemplarsForTerrainType(EContinentalTerrainType TerrainType);
-double BlendContinentalExemplars(const FVector3d& Position, double BaseElevation_m, const TArray<FExemplarMetadata*>& MatchingExemplars, const FString& ProjectContentDir, int32 Seed);
+double BlendContinentalExemplars(const FVector3d& Position, int32 PlateID, double BaseElevation_m,
+    const TArray<FExemplarMetadata*>& MatchingExemplars, const TArray<FTectonicPlate>& Plates,
+    const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries, const FPlateBoundarySummary* BoundarySummary,
+    const FString& ProjectContentDir, int32 Seed);
 double ComputeContinentalAmplification(const FVector3d& Position, int32 PlateID, double BaseElevation_m,
     const TArray<FTectonicPlate>& Plates, const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
     const FPlateBoundarySummary* BoundarySummary, double OrogenyAge_My, EBoundaryType NearestBoundaryType,
@@ -5785,6 +5795,144 @@ FVector2d ComputeContinentalRandomOffset(const FVector3d& Position, int32 Seed);
 #if UE_BUILD_DEVELOPMENT
 FContinentalAmplificationDebugInfo* GetContinentalAmplificationDebugInfoPtr();
 #endif
+
+namespace
+{
+    constexpr double TwoPi = 2.0 * PI;
+
+    FVector2d RotateVector2D(const FVector2d& Value, double AngleRadians)
+    {
+        const double CosAngle = FMath::Cos(AngleRadians);
+        const double SinAngle = FMath::Sin(AngleRadians);
+        return FVector2d(
+            Value.X * CosAngle - Value.Y * SinAngle,
+            Value.X * SinAngle + Value.Y * CosAngle);
+    }
+
+    void BuildLocalEastNorth(const FVector3d& Normal, FVector3d& OutEast, FVector3d& OutNorth)
+    {
+        const double AbsZ = FMath::Abs(Normal.Z);
+        FVector3d Reference = (AbsZ < 0.99) ? FVector3d::ZAxisVector : FVector3d::XAxisVector;
+        FVector3d East = FVector3d::CrossProduct(Reference, Normal);
+        if (!East.Normalize())
+        {
+            Reference = FVector3d::YAxisVector;
+            East = FVector3d::CrossProduct(Reference, Normal).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::XAxisVector);
+        }
+
+        FVector3d North = FVector3d::CrossProduct(Normal, East).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        OutEast = East;
+        OutNorth = North;
+    }
+
+    bool TryComputeFoldDirection(
+        const FVector3d& Position,
+        int32 PlateID,
+        const TArray<FTectonicPlate>& Plates,
+        const TMap<TPair<int32, int32>, FPlateBoundary>& Boundaries,
+        const FPlateBoundarySummary* BoundarySummary,
+        FVector3d& OutFoldDirection,
+        double* OutBoundaryDistance = nullptr)
+    {
+        if (PlateID == INDEX_NONE || !Plates.IsValidIndex(PlateID))
+        {
+            return false;
+        }
+
+        const FVector3d Normal = Position.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        const FTectonicPlate& SourcePlate = Plates[PlateID];
+        const FVector3d SourceCentroid = SourcePlate.Centroid.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+
+        double BestDistance = TNumericLimits<double>::Max();
+        FVector3d BestFold = FVector3d::ZeroVector;
+
+        auto ConsiderRepresentative = [&](const FVector3d& RepresentativeUnit)
+        {
+            FVector3d BoundaryPoint = RepresentativeUnit.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+            if (BoundaryPoint.IsNearlyZero())
+            {
+                return;
+            }
+
+            const double Distance = FMath::Acos(FMath::Clamp(Normal | BoundaryPoint, -1.0, 1.0));
+            FVector3d ToBoundary = BoundaryPoint - (BoundaryPoint | Normal) * Normal;
+            if (!ToBoundary.Normalize())
+            {
+                return;
+            }
+
+            FVector3d CandidateFold = FVector3d::CrossProduct(Normal, ToBoundary).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+            if (CandidateFold.IsNearlyZero())
+            {
+                return;
+            }
+
+            if (Distance + KINDA_SMALL_NUMBER < BestDistance)
+            {
+                BestDistance = Distance;
+                BestFold = CandidateFold;
+            }
+        };
+
+        if (BoundarySummary)
+        {
+            for (const FPlateBoundarySummaryEntry& Entry : BoundarySummary->Boundaries)
+            {
+                if (Entry.BoundaryType != EBoundaryType::Convergent || !Entry.bHasRepresentative)
+                {
+                    continue;
+                }
+                ConsiderRepresentative(Entry.RepresentativeUnit);
+            }
+        }
+
+        if (BestFold.IsNearlyZero())
+        {
+            for (const TPair<TPair<int32, int32>, FPlateBoundary>& Pair : Boundaries)
+            {
+                const int32 PlateA = Pair.Key.Key;
+                const int32 PlateB = Pair.Key.Value;
+
+                if (Pair.Value.BoundaryType != EBoundaryType::Convergent)
+                {
+                    continue;
+                }
+
+                if (PlateA != PlateID && PlateB != PlateID)
+                {
+                    continue;
+                }
+
+                const int32 OtherPlateID = (PlateA == PlateID) ? PlateB : PlateA;
+                if (!Plates.IsValidIndex(OtherPlateID))
+                {
+                    continue;
+                }
+
+                const FVector3d OtherCentroid = Plates[OtherPlateID].Centroid.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+                FVector3d ApproxBoundary = (SourceCentroid + OtherCentroid).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+                if (ApproxBoundary.IsNearlyZero())
+                {
+                    ApproxBoundary = OtherCentroid;
+                }
+
+                ConsiderRepresentative(ApproxBoundary);
+            }
+        }
+
+        if (BestFold.IsNearlyZero())
+        {
+        return false;
+    }
+
+    OutFoldDirection = BestFold;
+    if (OutBoundaryDistance)
+    {
+        *OutBoundaryDistance = BestDistance;
+    }
+    return true;
+}
+}
 
 bool UTectonicSimulationService::RefreshRidgeDirectionsIfNeeded()
 {
@@ -7292,6 +7440,7 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
 
         if (bUseSnapshot && ActiveSnapshot)
         {
+            bAppliedAnyJob = true;
             LastContinentalCacheBuildSeconds = 0.0;
 #if UE_BUILD_DEVELOPMENT
             double AccumulatedDelta = 0.0;
@@ -7341,7 +7490,6 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                 MaxDelta,
                 SummaryLabel);
 #endif
-            bAppliedAnyJob = true;
         }
         else
         {
@@ -7820,13 +7968,17 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
     };
 
     auto DetermineTerrainType = [&](const FTectonicPlate& SourcePlate, const FVector3d& VertexPosition,
-        double BaseElevation, double OrogenyAge) -> EContinentalTerrainType
+        double BaseElevation, double OrogenyAge, const FPlateBoundarySummary* OptionalSummary) -> EContinentalTerrainType
     {
         EBoundaryType NearestBoundaryType = EBoundaryType::Transform;
         double MinDistanceToBoundary = TNumericLimits<double>::Max();
         bool bIsSubduction = false;
 
-        const FPlateBoundarySummary* BoundarySummary = GetSummaryForPlate(SourcePlate.PlateID);
+        const FPlateBoundarySummary* BoundarySummary = OptionalSummary;
+        if (!BoundarySummary)
+        {
+            BoundarySummary = GetSummaryForPlate(SourcePlate.PlateID);
+        }
         if (BoundarySummary)
         {
             for (const FPlateBoundarySummaryEntry& Entry : BoundarySummary->Boundaries)
@@ -7963,11 +8115,15 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         const double BaseElevation = VertexAmplifiedElevation[VertexIdx];
         const double OrogenyAge = VertexCrustAge.IsValidIndex(VertexIdx) ? VertexCrustAge[VertexIdx] : 0.0;
 
+        const FPlateBoundarySummary* BoundarySummary = bHasBoundaries
+            ? GetSummaryForPlate(PlatePtr->PlateID)
+            : nullptr;
+
         EContinentalTerrainType TerrainType = EContinentalTerrainType::Plain;
 
         if (bHasBoundaries)
         {
-            TerrainType = DetermineTerrainType(*PlatePtr, VertexPosition, BaseElevation, OrogenyAge);
+            TerrainType = DetermineTerrainType(*PlatePtr, VertexPosition, BaseElevation, OrogenyAge, BoundarySummary);
         }
 
         if (bCaptureMetrics)
@@ -8030,20 +8186,60 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         Cache.ExemplarWeights[VertexIdx] = PackedWeights;
         Cache.RandomUVOffsets[VertexIdx] = RandomOffset;
 
-        const FVector3d NormalizedPos = VertexPosition.GetSafeNormal();
-        double WrappedU = 0.5 + (FMath::Atan2(NormalizedPos.Y, NormalizedPos.X) / (2.0 * PI)) + RandomOffsetDouble.X;
-        double WrappedV = 0.5 - (FMath::Asin(NormalizedPos.Z) / PI) + RandomOffsetDouble.Y;
-        WrappedU = FMath::Frac(WrappedU);
-        WrappedV = FMath::Frac(WrappedV);
-        if (WrappedU < 0.0)
+        const FVector3d NormalizedPos = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        FVector2d BaseUV(
+            0.5 + (FMath::Atan2(NormalizedPos.Y, NormalizedPos.X) / TwoPi),
+            0.5 - (FMath::Asin(NormalizedPos.Z) / PI));
+
+        FVector2d LocalUV = BaseUV - FVector2d(0.5, 0.5);
+        LocalUV += FVector2d(RandomOffsetDouble.X, RandomOffsetDouble.Y);
+
+        FVector3d FoldDirection = FVector3d::ZeroVector;
+        double FoldDistance = TNumericLimits<double>::Max();
+        bool bHasFoldRotation = TryComputeFoldDirection(
+            VertexPosition,
+            PlatePtr->PlateID,
+            Plates,
+            Boundaries,
+            BoundarySummary,
+            FoldDirection,
+            &FoldDistance);
+        double FoldAngle = 0.0;
+
+        constexpr double FoldAlignmentMaxRadians = 0.35;
+        if (!FMath::IsFinite(FoldDistance) || FoldDistance > FoldAlignmentMaxRadians)
         {
-            WrappedU += 1.0;
+            bHasFoldRotation = false;
         }
-        if (WrappedV < 0.0)
+
+        if (bHasFoldRotation)
         {
-            WrappedV += 1.0;
+            FVector3d East, North;
+            BuildLocalEastNorth(NormalizedPos, East, North);
+
+            const double DotEast = FVector3d::DotProduct(FoldDirection, East);
+            const double DotNorth = FVector3d::DotProduct(FoldDirection, North);
+            FoldAngle = FMath::Atan2(DotNorth, DotEast);
+            if (!FMath::IsFinite(FoldAngle))
+            {
+                bHasFoldRotation = false;
+            }
         }
-        Cache.WrappedUVs[VertexIdx] = FVector2f(static_cast<float>(WrappedU), static_cast<float>(WrappedV));
+
+        FVector2d RotatedUV = bHasFoldRotation ? RotateVector2D(LocalUV, FoldAngle) : LocalUV;
+        FVector2d FinalUV = RotatedUV + FVector2d(0.5, 0.5);
+        FinalUV.X = FMath::Frac(FinalUV.X);
+        FinalUV.Y = FMath::Frac(FinalUV.Y);
+        if (FinalUV.X < 0.0)
+        {
+            FinalUV.X += 1.0;
+        }
+        if (FinalUV.Y < 0.0)
+        {
+            FinalUV.Y += 1.0;
+        }
+
+        Cache.WrappedUVs[VertexIdx] = FVector2f(static_cast<float>(FinalUV.X), static_cast<float>(FinalUV.Y));
 
 #if UE_BUILD_DEVELOPMENT
         static int32 DebugPackedLog = 0;

@@ -13,6 +13,35 @@
 
 using namespace RealtimeMesh;
 
+namespace PlanetaryCreation::OverlayDiagnostics
+{
+bool DetectNonManifoldAdjacency(const TMap<int32, TArray<int32>>& Adjacency, int32& OutVertex, int32& OutDegree)
+{
+    OutVertex = INDEX_NONE;
+    OutDegree = 0;
+
+    for (const TPair<int32, TArray<int32>>& Pair : Adjacency)
+    {
+        TSet<int32> UniqueNeighbors;
+        UniqueNeighbors.Append(Pair.Value);
+        UniqueNeighbors.Remove(Pair.Key);
+
+        const int32 Degree = UniqueNeighbors.Num();
+        if (Degree > 2)
+        {
+            OutVertex = Pair.Key;
+            OutDegree = Degree;
+            return true;
+        }
+    }
+
+    return false;
+}
+}
+
+static int32 GHighResBoundarySimplifierBranchWarnings = 0;
+static constexpr int32 GHighResBoundarySimplifierMaxWarnings = 5;
+
 void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
 {
 #if WITH_EDITOR
@@ -74,10 +103,24 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
     {
         int32 V0 = INDEX_NONE;
         int32 V1 = INDEX_NONE;
+        int32 PlateA = INDEX_NONE;
+        int32 PlateB = INDEX_NONE;
         EBoundaryType BoundaryType = EBoundaryType::Transform;
         EBoundaryState BoundaryState = EBoundaryState::Nascent;
         double Stress = 0.0;
         double RiftWidth = 0.0;
+    };
+
+    struct FBoundaryPolyline
+    {
+        TArray<int32> Vertices;
+        TArray<FBoundaryEdge> Segments;
+        FBoundaryEdge Representative;
+    };
+
+    auto SortedEdgeKey = [](int32 A, int32 B)
+    {
+        return FIntPoint(FMath::Min(A, B), FMath::Max(A, B));
     };
 
     TArray<FBoundaryEdge> BoundaryEdges;
@@ -85,6 +128,8 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
 
     TSet<TPair<int32, int32>> ProcessedEdges;
     ProcessedEdges.Reserve(RenderTriangles.Num());
+    TMap<FIntPoint, FBoundaryEdge> EdgeLookup;
+    TMap<TPair<int32, int32>, TArray<FBoundaryEdge>> BoundaryMap;
 
     for (int32 TriIdx = 0; TriIdx < RenderTriangles.Num(); TriIdx += 3)
     {
@@ -124,12 +169,16 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
             FBoundaryEdge Edge;
             Edge.V0 = VA;
             Edge.V1 = VB;
+            Edge.PlateA = BoundaryKey.Key;
+            Edge.PlateB = BoundaryKey.Value;
             Edge.BoundaryType = Boundary ? Boundary->BoundaryType : EBoundaryType::Transform;
             Edge.BoundaryState = Boundary ? Boundary->BoundaryState : EBoundaryState::Nascent;
             Edge.Stress = Boundary ? Boundary->AccumulatedStress : 0.0;
             Edge.RiftWidth = Boundary ? Boundary->RiftWidthMeters : 0.0;
 
             BoundaryEdges.Add(Edge);
+            EdgeLookup.Add(SortedEdgeKey(Edge.V0, Edge.V1), Edge);
+            BoundaryMap.FindOrAdd(BoundaryKey).Add(Edge);
         };
 
         TryAddEdge(V0, V1, Plate0, Plate1);
@@ -158,6 +207,9 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
 
     const float OverlayOffsetUE = MetersToUE(OverlayOffsetMeters);
     const float BaseHalfWidthUE = MetersToUE(BaseHalfWidthMeters);
+    const int32 OverlayMode = GetBoundaryOverlayMode();
+    const bool bSimplifiedMode = OverlayMode == 1;
+    const float SimplifiedHalfWidthUE = MetersToUE(400.0); // ~0.8 km total width for seam polylines
 
     auto GetBoundaryColor = [](EBoundaryType Type, EBoundaryState State, double Stress) -> FColor
     {
@@ -205,44 +257,66 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
 
     int32 VertexCount = 0;
     int32 TriangleCount = 0;
+    int32 SegmentCount = 0;
 
-    for (const FBoundaryEdge& Edge : BoundaryEdges)
+    auto AddRibbonSegment = [&](int32 VStart, int32 VEnd, const FBoundaryEdge& Edge)
     {
-        if (!RenderVertices.IsValidIndex(Edge.V0) || !RenderVertices.IsValidIndex(Edge.V1))
+        if (VStart == VEnd)
         {
-            continue;
+            return;
         }
 
-        const FVector3d& Pos0 = RenderVertices[Edge.V0];
-        const FVector3d& Pos1 = RenderVertices[Edge.V1];
+        if (!RenderVertices.IsValidIndex(VStart) || !RenderVertices.IsValidIndex(VEnd))
+        {
+            return;
+        }
+
+        const FVector3d& Pos0 = RenderVertices[VStart];
+        const FVector3d& Pos1 = RenderVertices[VEnd];
 
         if (Pos0.IsNearlyZero() || Pos1.IsNearlyZero())
         {
-            continue;
+            return;
         }
 
         const FVector3d EdgeDirection = (Pos1 - Pos0).GetSafeNormal();
         if (EdgeDirection.IsNearlyZero())
         {
-            continue;
+            return;
         }
 
         const FVector3d FaceNormal = ((Pos0 + Pos1) * 0.5).GetSafeNormal();
         if (FaceNormal.IsNearlyZero())
         {
-            continue;
+            return;
         }
 
         FVector3d RibbonRight = FVector3d::CrossProduct(FaceNormal, EdgeDirection).GetSafeNormal();
         if (RibbonRight.IsNearlyZero())
         {
-            continue;
+            return;
         }
-
-        const float HalfWidthUE = FMath::Max(ComputeHalfWidthUE(Edge.Stress, Edge.RiftWidth), BaseHalfWidthUE);
 
         const FVector3d Base0 = Pos0 * static_cast<double>(RadiusUE);
         const FVector3d Base1 = Pos1 * static_cast<double>(RadiusUE);
+        const double SegmentLengthUE = (Base1 - Base0).Length();
+
+        float HalfWidthUE = bSimplifiedMode
+            ? SimplifiedHalfWidthUE
+            : FMath::Max(ComputeHalfWidthUE(Edge.Stress, Edge.RiftWidth), BaseHalfWidthUE);
+
+        if (SegmentLengthUE > KINDA_SMALL_NUMBER)
+        {
+            const float MaxHalfWidthFromLength = static_cast<float>(SegmentLengthUE * 0.35);
+            HalfWidthUE = FMath::Min(HalfWidthUE, MaxHalfWidthFromLength);
+
+            const float MinHalfWidthUE = bSimplifiedMode
+                ? FMath::Min(SimplifiedHalfWidthUE, MaxHalfWidthFromLength)
+                : FMath::Min(BaseHalfWidthUE * 0.3f, MaxHalfWidthFromLength);
+
+            HalfWidthUE = FMath::Max(HalfWidthUE, MinHalfWidthUE);
+        }
+
         const FVector3d NormalOffset = FaceNormal * static_cast<double>(OverlayOffsetUE);
         const FVector3d WidthOffset = RibbonRight * static_cast<double>(HalfWidthUE);
 
@@ -280,6 +354,337 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
 
         VertexCount += 4;
         TriangleCount += 2;
+        ++SegmentCount;
+    };
+
+    // Continuous ribbon strip for simplified mode - renders entire polyline as connected strip
+    auto AddRibbonStrip = [&](const FBoundaryPolyline& Polyline)
+    {
+        const TArray<int32>& PolylineVertices = Polyline.Vertices;
+        const TArray<FBoundaryEdge>& SegmentEdges = Polyline.Segments;
+        const FBoundaryEdge& Representative = Polyline.Representative;
+
+        if (PolylineVertices.Num() < 2)
+        {
+            return;
+        }
+
+        // Quick validation - skip invalid polylines
+        for (int32 VertexIdx : PolylineVertices)
+        {
+            if (!RenderVertices.IsValidIndex(VertexIdx))
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[HighResBoundary] Invalid vertex index %d in polyline, skipping"), VertexIdx);
+                return;
+            }
+            if (RenderVertices[VertexIdx].IsNearlyZero())
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[HighResBoundary] Zero-length vertex %d in polyline, skipping"), VertexIdx);
+                return;
+            }
+        }
+
+        const float HalfWidthUE = SimplifiedHalfWidthUE;
+
+        // Build continuous strip with shared vertices between segments
+        TArray<int32> LeftEdgeVertices;
+        TArray<int32> RightEdgeVertices;
+        LeftEdgeVertices.Reserve(PolylineVertices.Num());
+        RightEdgeVertices.Reserve(PolylineVertices.Num());
+
+        bool bStripValid = true;
+
+        for (int32 i = 0; i < PolylineVertices.Num(); ++i)
+        {
+            const int32 CurrentVertex = PolylineVertices[i];
+            const FVector3d CurrentPos = RenderVertices[CurrentVertex];
+            const FVector3d CurrentBase = CurrentPos * static_cast<double>(RadiusUE);
+            const FVector3d FaceNormal = CurrentPos.GetSafeNormal();
+
+            if (FaceNormal.IsNearlyZero())
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[HighResBoundary] Invalid face normal at vertex %d, skipping polyline"), i);
+                bStripValid = false;
+                break;
+            }
+
+            // Compute smooth tangent at this point
+            FVector3d EdgeTangent = FVector3d::ZeroVector;
+
+            if (i == 0 && PolylineVertices.Num() > 1)
+            {
+                // First vertex: use outgoing edge direction
+                const FVector3d NextPos = RenderVertices[PolylineVertices[i + 1]];
+                EdgeTangent = (NextPos - CurrentPos).GetSafeNormal();
+            }
+            else if (i == PolylineVertices.Num() - 1 && i > 0)
+            {
+                // Last vertex: use incoming edge direction
+                const FVector3d PrevPos = RenderVertices[PolylineVertices[i - 1]];
+                EdgeTangent = (CurrentPos - PrevPos).GetSafeNormal();
+            }
+            else if (i > 0 && i < PolylineVertices.Num() - 1)
+            {
+                // Interior vertex: check angle to decide between smooth blend or sharp miter
+                const FVector3d PrevPos = RenderVertices[PolylineVertices[i - 1]];
+                const FVector3d NextPos = RenderVertices[PolylineVertices[i + 1]];
+                const FVector3d IncomingDir = (CurrentPos - PrevPos).GetSafeNormal();
+                const FVector3d OutgoingDir = (NextPos - CurrentPos).GetSafeNormal();
+
+                // If either direction is zero, fall back to the other
+                if (IncomingDir.IsNearlyZero() && !OutgoingDir.IsNearlyZero())
+                {
+                    EdgeTangent = OutgoingDir;
+                }
+                else if (!IncomingDir.IsNearlyZero() && OutgoingDir.IsNearlyZero())
+                {
+                    EdgeTangent = IncomingDir;
+                }
+                else if (!IncomingDir.IsNearlyZero() && !OutgoingDir.IsNearlyZero())
+                {
+                    // Check the angle between incoming and outgoing
+                    const double DotProduct = FVector3d::DotProduct(IncomingDir, OutgoingDir);
+                    const double AngleDegrees = FMath::Acos(FMath::Clamp(DotProduct, -1.0, 1.0)) * (180.0 / PI);
+
+                    // For sharp turns (>90 degrees), use the outgoing direction to avoid spikes
+                    // For gentle turns (<90 degrees), blend for smooth appearance
+                    if (AngleDegrees > 90.0)
+                    {
+                        // Sharp turn - just use outgoing direction to avoid weird miter geometry
+                        EdgeTangent = OutgoingDir;
+                    }
+                    else
+                    {
+                        // Gentle turn - average for smooth curve
+                        EdgeTangent = ((IncomingDir + OutgoingDir) * 0.5).GetSafeNormal();
+                    }
+                }
+            }
+
+            if (EdgeTangent.IsNearlyZero())
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[HighResBoundary] Invalid edge tangent at vertex %d, skipping polyline"), i);
+                bStripValid = false;
+                break;
+            }
+
+            // Compute ribbon perpendicular direction
+            FVector3d RibbonRight = FVector3d::CrossProduct(FaceNormal, EdgeTangent).GetSafeNormal();
+            if (RibbonRight.IsNearlyZero())
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[HighResBoundary] Invalid ribbon direction at vertex %d, skipping polyline"), i);
+                bStripValid = false;
+                break;
+            }
+
+            const int32 SegmentIndex = SegmentEdges.Num() > 0
+                ? FMath::Clamp(i, 0, SegmentEdges.Num() - 1)
+                : 0;
+
+            const FBoundaryEdge& SegmentEdge = SegmentEdges.IsValidIndex(SegmentIndex)
+                ? SegmentEdges[SegmentIndex]
+                : Representative;
+
+            const FColor OverlayColor = GetBoundaryColor(SegmentEdge.BoundaryType, SegmentEdge.BoundaryState, SegmentEdge.Stress);
+
+            const FVector3d NormalOffset = FaceNormal * static_cast<double>(OverlayOffsetUE);
+            const FVector3d WidthOffset = RibbonRight * static_cast<double>(HalfWidthUE);
+
+            const FVector3d LeftPos = CurrentBase + NormalOffset + WidthOffset;
+            const FVector3d RightPos = CurrentBase + NormalOffset - WidthOffset;
+
+            const FVector3f Normal = FVector3f(FaceNormal);
+            const FVector3f Tangent = FVector3f(EdgeTangent);
+            const float UCoord = (PolylineVertices.Num() > 1) ? static_cast<float>(i) / static_cast<float>(PolylineVertices.Num() - 1) : 0.0f;
+
+            const int32 LeftIndex = Builder.AddVertex(FVector3f(LeftPos))
+                .SetNormalAndTangent(Normal, Tangent)
+                .SetColor(OverlayColor)
+                .SetTexCoord(FVector2f(UCoord, 0.0f));
+
+            const int32 RightIndex = Builder.AddVertex(FVector3f(RightPos))
+                .SetNormalAndTangent(Normal, Tangent)
+                .SetColor(OverlayColor)
+                .SetTexCoord(FVector2f(UCoord, 1.0f));
+
+            LeftEdgeVertices.Add(LeftIndex);
+            RightEdgeVertices.Add(RightIndex);
+
+            VertexCount += 2;
+        }
+
+        if (!bStripValid)
+        {
+            // Roll back the vertex count since we're not using these vertices
+            VertexCount -= LeftEdgeVertices.Num() * 2;
+            return;
+        }
+
+        // Build triangle strip connecting left and right edges
+        for (int32 i = 0; i < PolylineVertices.Num() - 1; ++i)
+        {
+            const int32 L0 = LeftEdgeVertices[i];
+            const int32 R0 = RightEdgeVertices[i];
+            const int32 L1 = LeftEdgeVertices[i + 1];
+            const int32 R1 = RightEdgeVertices[i + 1];
+
+            // Two triangles per quad segment
+            Builder.AddTriangle(L0, L1, R0);
+            Builder.AddTriangle(L1, R1, R0);
+
+            TriangleCount += 2;
+        }
+
+        ++SegmentCount;
+    };
+
+    if (OverlayMode == 1)
+    {
+        TArray<FBoundaryPolyline> Polylines;
+
+        for (const TPair<TPair<int32, int32>, TArray<FBoundaryEdge>>& Entry : BoundaryMap)
+        {
+            const TArray<FBoundaryEdge>& EdgesForBoundary = Entry.Value;
+            if (EdgesForBoundary.Num() == 0)
+            {
+                continue;
+            }
+
+            TMap<int32, TArray<int32>> Adjacency;
+            TSet<FIntPoint> RemainingEdges;
+
+            for (const FBoundaryEdge& Edge : EdgesForBoundary)
+            {
+                Adjacency.FindOrAdd(Edge.V0).Add(Edge.V1);
+                Adjacency.FindOrAdd(Edge.V1).Add(Edge.V0);
+                RemainingEdges.Add(SortedEdgeKey(Edge.V0, Edge.V1));
+            }
+
+            int32 BranchVertex = INDEX_NONE;
+            int32 BranchDegree = 0;
+            if (PlanetaryCreation::OverlayDiagnostics::DetectNonManifoldAdjacency(Adjacency, BranchVertex, BranchDegree))
+            {
+                if (GHighResBoundarySimplifierBranchWarnings < GHighResBoundarySimplifierMaxWarnings)
+                {
+                    ++GHighResBoundarySimplifierBranchWarnings;
+                    UE_LOG(LogPlanetaryCreation, Warning,
+                        TEXT("[HighResBoundary] Simplified overlay fallback for boundary %d/%d due to branching vertex %d (degree %d). Using detailed ribbons."),
+                        Entry.Key.Key,
+                        Entry.Key.Value,
+                        BranchVertex,
+                        BranchDegree);
+                }
+
+                for (const FBoundaryEdge& Edge : EdgesForBoundary)
+                {
+                    AddRibbonSegment(Edge.V0, Edge.V1, Edge);
+                }
+                continue;
+            }
+
+            // Trace polylines from remaining edges
+            // Each iteration builds one polyline chain or loop
+            while (RemainingEdges.Num() > 0)
+            {
+                // Pick any remaining edge as starting point
+                const FIntPoint FirstEdge = *RemainingEdges.CreateConstIterator();
+                RemainingEdges.Remove(FirstEdge);
+
+                FBoundaryPolyline Polyline;
+                Polyline.Vertices.Add(FirstEdge.X);
+                Polyline.Vertices.Add(FirstEdge.Y);
+
+                if (const FBoundaryEdge* FirstEdgeData = EdgeLookup.Find(FirstEdge))
+                {
+                    Polyline.Representative = *FirstEdgeData;
+                    Polyline.Segments.Add(*FirstEdgeData);
+                }
+                else
+                {
+                    Polyline.Representative = EdgesForBoundary[0];
+                    Polyline.Segments.Add(Polyline.Representative);
+                }
+
+                // Try to extend the polyline in both directions
+                for (int32 Direction = 0; Direction < 2; ++Direction)
+                {
+                    bool bExtended = true;
+                    while (bExtended)
+                    {
+                        bExtended = false;
+
+                        // Get the endpoint we're trying to extend from
+                        const int32 EndpointIdx = (Direction == 0) ? 0 : Polyline.Vertices.Num() - 1;
+                        const int32 Endpoint = Polyline.Vertices[EndpointIdx];
+
+                        // Look for an edge connected to this endpoint
+                        const TArray<int32>* Neighbors = Adjacency.Find(Endpoint);
+                        if (!Neighbors)
+                        {
+                            continue;
+                        }
+
+                        for (int32 Neighbor : *Neighbors)
+                        {
+                            const FIntPoint EdgeKey = SortedEdgeKey(Endpoint, Neighbor);
+                            if (RemainingEdges.Contains(EdgeKey))
+                            {
+                                // Found an edge to extend with
+                                RemainingEdges.Remove(EdgeKey);
+
+                                if (Direction == 0)
+                                {
+                                    // Extending from the front
+                                    Polyline.Vertices.Insert(Neighbor, 0);
+                                    if (const FBoundaryEdge* EdgeData = EdgeLookup.Find(EdgeKey))
+                                    {
+                                        Polyline.Segments.Insert(*EdgeData, 0);
+                                    }
+                                    else
+                                    {
+                                        Polyline.Segments.Insert(Polyline.Representative, 0);
+                                    }
+                                }
+                                else
+                                {
+                                    // Extending from the back
+                                    Polyline.Vertices.Add(Neighbor);
+                                    if (const FBoundaryEdge* EdgeData = EdgeLookup.Find(EdgeKey))
+                                    {
+                                        Polyline.Segments.Add(*EdgeData);
+                                    }
+                                    else
+                                    {
+                                        Polyline.Segments.Add(Polyline.Representative);
+                                    }
+                                }
+
+                                bExtended = true;
+                                break; // Found one edge, continue extending
+                            }
+                        }
+                    }
+                }
+
+                if (Polyline.Vertices.Num() >= 2)
+                {
+                    Polylines.Add(MoveTemp(Polyline));
+                }
+            }
+        }
+
+            // Render each polyline as a continuous ribbon strip for smooth connected appearance
+            for (const FBoundaryPolyline& Polyline : Polylines)
+            {
+                AddRibbonStrip(Polyline);
+            }
+        }
+    else
+    {
+        for (const FBoundaryEdge& Edge : BoundaryEdges)
+        {
+            AddRibbonSegment(Edge.V0, Edge.V1, Edge);
+        }
     }
 
     if (VertexCount == 0 || TriangleCount == 0)
@@ -312,6 +717,13 @@ void FTectonicSimulationController::DrawHighResolutionBoundaryOverlay()
     Mesh->UpdateSectionRange(OverlaySectionKey, Range);
     Mesh->SetSectionVisibility(OverlaySectionKey, true);
 
-    UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Drew %d ribbons (%d verts, %d tris)"), BoundaryEdges.Num(), VertexCount, TriangleCount);
+    if (OverlayMode == 1)
+    {
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Drew %d simplified segments (%d verts, %d tris)"), SegmentCount, VertexCount, TriangleCount);
+    }
+    else
+    {
+        UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[HighResBoundary] Drew %d ribbons (%d verts, %d tris)"), BoundaryEdges.Num(), VertexCount, TriangleCount);
+    }
 #endif
 }

@@ -6,6 +6,11 @@
 #include "TectonicSimulationController.h"
 #include "Editor.h"
 
+namespace PlanetaryCreation::OverlayDiagnostics
+{
+bool DetectNonManifoldAdjacency(const TMap<int32, TArray<int32>>& Adjacency, int32& OutVertex, int32& OutDegree);
+}
+
 /**
  * Milestone 4 Task 3.1: High-Resolution Boundary Overlay Validation
  *
@@ -402,6 +407,64 @@ bool FHighResBoundaryOverlayTest::RunTest(const FString& Parameters)
     AddInfo(TEXT("✅ High-resolution boundary overlay test complete"));
     AddInfo(FString::Printf(TEXT("Level 2: %d edges | Level 3: %d edges | Valid: %.1f%% | Deviation: %.1f km avg"),
         BoundaryEdgeCount_L2, BoundaryEdgeCount_L3, ValidEdgeRatio * 100.0, AvgDeviationKm));
+
+return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHighResBoundarySimplifierDiagnosticTest,
+    "PlanetaryCreation.Milestone6.HighResBoundarySimplifier",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FHighResBoundarySimplifierDiagnosticTest::RunTest(const FString& Parameters)
+{
+    using namespace PlanetaryCreation::OverlayDiagnostics;
+
+    // Case 1: Closed loop (degree 2 everywhere) should not trigger fallback
+    {
+        TMap<int32, TArray<int32>> Adjacency;
+        Adjacency.Add(10, {11, 12});
+        Adjacency.Add(11, {10, 12});
+        Adjacency.Add(12, {10, 11});
+
+        int32 BranchVertex = INDEX_NONE;
+        int32 BranchDegree = 0;
+        const bool bBranchDetected = DetectNonManifoldAdjacency(Adjacency, BranchVertex, BranchDegree);
+
+        TestFalse(TEXT("Closed loop adjacency does not report branching"), bBranchDetected);
+        TestEqual(TEXT("Branch vertex remains unset"), BranchVertex, INDEX_NONE);
+        TestEqual(TEXT("Branch degree remains zero"), BranchDegree, 0);
+    }
+
+    // Case 2: Duplicate neighbors should be ignored
+    {
+        TMap<int32, TArray<int32>> Adjacency;
+        Adjacency.Add(20, {21, 21, 22, 22});
+        Adjacency.Add(21, {20, 22});
+        Adjacency.Add(22, {20, 21});
+
+        int32 BranchVertex = INDEX_NONE;
+        int32 BranchDegree = 0;
+        const bool bBranchDetected = DetectNonManifoldAdjacency(Adjacency, BranchVertex, BranchDegree);
+
+        TestFalse(TEXT("Duplicate neighbors do not create false branching"), bBranchDetected);
+    }
+
+    // Case 3: Branching vertex with three unique neighbors triggers fallback detection
+    {
+        TMap<int32, TArray<int32>> Adjacency;
+        Adjacency.Add(30, {31, 32, 33});
+        Adjacency.Add(31, {30});
+        Adjacency.Add(32, {30});
+        Adjacency.Add(33, {30});
+
+        int32 BranchVertex = INDEX_NONE;
+        int32 BranchDegree = 0;
+        const bool bBranchDetected = DetectNonManifoldAdjacency(Adjacency, BranchVertex, BranchDegree);
+
+        TestTrue(TEXT("Branching adjacency is detected"), bBranchDetected);
+        TestEqual(TEXT("Reported branch vertex"), BranchVertex, 30);
+        TestEqual(TEXT("Reported branch degree"), BranchDegree, 3);
+    }
 
     return true;
 }

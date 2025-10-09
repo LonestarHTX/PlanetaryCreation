@@ -67,6 +67,11 @@ private:
     // Boundary overlay toggle (Milestone 3 Task 3.2)
     ECheckBoxState GetBoundaryOverlayState() const;
     void OnBoundaryOverlayChanged(ECheckBoxState NewState);
+    void OnBoundaryOverlayModeChanged(TSharedPtr<int32> NewMode, ESelectInfo::Type SelectInfo);
+    TSharedRef<SWidget> GenerateBoundaryModeWidget(TSharedPtr<int32> InMode) const;
+    FText GetCurrentBoundaryModeText() const;
+    bool IsBoundaryModeSelectorEnabled() const;
+    EVisibility GetBoundaryModeRowVisibility() const;
 
     // Automatic LOD toggle (Milestone 4 Phase 4.1)
     ECheckBoxState GetAutomaticLODState() const;
@@ -136,4 +141,7 @@ private:
     TArray<TSharedPtr<ETectonicVisualizationMode>> VisualizationOptions;
     TSharedPtr<ETectonicVisualizationMode> SelectedVisualizationOption;
     TSharedPtr<SComboBox<TSharedPtr<ETectonicVisualizationMode>>> VisualizationCombo;
+    TArray<TSharedPtr<int32>> BoundaryModeOptions;
+    TSharedPtr<int32> SelectedBoundaryMode;
+    TSharedPtr<SComboBox<TSharedPtr<int32>>> BoundaryModeCombo;
 };

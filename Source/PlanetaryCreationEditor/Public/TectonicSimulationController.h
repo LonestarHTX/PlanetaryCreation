@@ -123,6 +123,10 @@ public:
 
     /** Get boundary overlay visibility. */
     bool AreBoundariesVisible() const { return bShowBoundaries; }
+    /** Refresh boundary overlay using current mode/state. */
+    void RefreshBoundaryOverlay();
+    void SetBoundaryOverlayMode(int32 InMode);
+    int32 GetBoundaryOverlayMode() const { return BoundaryOverlayMode; }
 
     /** Milestone 4 Phase 4.1: Update camera distance and recompute target LOD. */
     void UpdateLOD();
@@ -215,6 +219,8 @@ private:
 
     /** Milestone 3 Task 3.2: Boundary overlay visibility. */
     bool bShowBoundaries = false;
+    /** 0 = raw edges, 1 = simplified polylines */
+    int32 BoundaryOverlayMode = 0;
 
     /** Milestone 3 Task 4.3: Async mesh build state. */
     mutable std::atomic<bool> bAsyncMeshBuildInProgress{false};

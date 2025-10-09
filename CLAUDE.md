@@ -69,8 +69,31 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
     -unattended -nop4 -nosplash
   ```
 
+**Stage B profiling with GPU parity tests (run from Windows PowerShell, not WSL):**
+
+```powershell
+& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' `
+  'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' `
+  -SetCVar='r.PlanetaryCreation.StageBProfiling=1' `
+  -ExecCmds='Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity' `
+  -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log
+```
+
+**Important GPU test notes:**
+- Must run from native Windows shell (PowerShell/cmd.exe), not WSL (fails with `UtilBindVsockAnyPort`)
+- Do NOT append `Quit` in `-ExecCmds` when using `-TestExit="Automation Test Queue Empty"`
+- Profiling logs appear in `Saved/Logs/PlanetaryCreation.log` as `[StageB][Profile]` and `[StageB][CacheProfile]`
+- Swap test name for `...ContinentalParity` to capture continental Stage B metrics
 
 Tests live in `Source/PlanetaryCreationEditor/Private/Tests/` and use Unreal's automation framework with `IMPLEMENT_SIMPLE_AUTOMATION_TEST`.
+
+**GPU Parity Test Suite:**
+- `PlanetaryCreation.Milestone6.GPU.OceanicParity` - Oceanic amplification CPU vs GPU (<0.1m tolerance)
+- `PlanetaryCreation.Milestone6.GPU.ContinentalParity` - Continental snapshot + fallback validation
+- `PlanetaryCreation.Milestone6.GPU.IntegrationSmoke` - Multi-step finite value checks
+- `PlanetaryCreation.Milestone6.GPU.PreviewSeamMirroring` - Equirect seam balance validation
+- `PlanetaryCreation.Milestone6.ContinentalBlendCache` - Blend cache serial sync
+- See `Docs/GPU_Test_Suite.md` for full test documentation
 
 ## Architecture Overview
 
@@ -80,16 +103,21 @@ Tests live in `Source/PlanetaryCreationEditor/Private/Tests/` and use Unreal's a
    - Holds canonical simulation state with double-precision math to avoid drift
    - Lives in editor memory; survives across editor sessions until reset
    - Each step advances 2 million years (2 My) per paper specification
+   - Manages Stage B amplification (M6) with GPU compute shaders and CPU fallback
+   - Maintains ridge direction cache, Voronoi assignment cache, and exemplar blend cache
    - Located: `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h`
 
 2. **FTectonicSimulationController**
    - Non-UObject controller bridging UI ↔ Service ↔ Mesh
    - Spawns transient `ARealtimeMeshActor` in editor world for visualization
    - Converts double-precision simulation data to float for RealtimeMesh
+   - Manages GPU preview pipeline and texture streaming
    - Located: `Source/PlanetaryCreationEditor/Public/TectonicSimulationController.h`
 
 3. **SPTectonicToolPanel** (Slate UI)
    - Editor toolbar panel with "Step" button and time display
+   - Visualization mode controls (Plate Colors, Elevation, Velocity, Stress)
+   - Terrane export and playback controls
    - Triggered via editor toolbar commands (no PIE required)
    - Located: `Source/PlanetaryCreationEditor/Private/SPTectonicToolPanel.cpp`
 
@@ -122,6 +150,57 @@ Mesh->UpdateSectionGroup(GroupKey, MoveTemp(StreamSet)); // Subsequent updates
 - **Simulation**: Uses `double` for long-term accumulation (millions of years)
 - **Mesh Rendering**: Converts to `float` (FVector3f) for GPU compatibility
 - **Conversion Point**: Inside `FTectonicSimulationController::StepSimulation()`
+- **GPU Compute**: Transfers float data to GPU shaders; results validated against CPU baseline within ±0.1m tolerance
+
+### Milestone 6 Stage B Amplification (Current)
+
+**Overview:**
+- Stage B adds ~100m resolution detail via GPU compute shaders with CPU fallback
+- Oceanic amplification: 3D Gabor noise for transform faults perpendicular to ridges
+- Continental amplification: Exemplar-based blending of SRTM 90m DEM patches
+- Ridge direction cache avoids per-step recomputation by tracking Voronoi/topology changes
+
+**Key Components:**
+
+1. **Ridge Direction Cache** (`TectonicSimulationService.cpp`)
+   - `RefreshRidgeDirectionsIfNeeded()` gates recomputes behind dirty/topology checks
+   - Sources render-tangent data from `RenderVertexBoundaryCache`
+   - Falls back to age gradient only when cached tangents are missing
+   - Logs ridge health: dirty counts, cache hits, fallback usage
+   - See `Source/PlanetaryCreationEditor/Private/Tests/RidgeDirectionCacheTest.cpp`
+
+2. **GPU Oceanic Amplification** (`OceanicAmplificationPreview.usf`)
+   - Compute shader writes PF_R16F equirect texture for WPO material
+   - Controller manages persistent GPU texture via `SetGPUPreviewMode`
+   - Parity automation validates GPU vs CPU delta <0.1m (mean <0.05m)
+   - Test: `PlanetaryCreation.Milestone6.GPU.OceanicParity`
+
+3. **Continental Exemplar System**
+   - 19 curated SRTM90 patches cataloged in `Docs/StageB_SRTM_Exemplar_Catalog.csv`
+   - Terrain classification: Plain, OldMountains, AndeanMountains, HimalayanMountains
+   - Blend cache stores sampled heights per Stage B serial for CPU fallback reuse
+   - GPU path uses snapshot-backed replay; fallback to CPU cache on drift
+   - Test: `PlanetaryCreation.Milestone6.GPU.ContinentalParity`
+
+4. **Terrane Mechanics**
+   - Extraction: Snapshots full vertex payloads during rifting events
+   - Transport: Terranes migrate with oceanic carrier plates
+   - Reattachment: Mesh surgery at convergent boundaries with topology validation
+   - Deterministic IDs: Seed + plate + extraction timestamp hashes
+   - CSV export: `Terranes_*.csv` in `Saved/TectonicMetrics/`
+   - Tests: `TerraneMeshSurgeryTest`, `TerranePersistenceTest`
+
+**Performance Profiling:**
+- Enable via CVar: `r.PlanetaryCreation.StageBProfiling 1`
+- Logs `[StageB][Profile]` and `[StageB][CacheProfile]` per step
+- Current baseline (LOD 7): ~14.5ms oceanic GPU, ~19.6ms continental with cache rebuild
+- Full metrics in `Docs/Performance_M6.md`
+
+**Visualization Modes:**
+- `ETectonicVisualizationMode` enum replaces legacy checkboxes
+- Modes: PlateColors, Elevation, Velocity, Stress
+- Console control: `r.PlanetaryCreation.VisualizationMode [0-3]`
+- Velocity arrows auto-clear when mode ≠ Velocity
 
 ## Key Implementation Notes
 
@@ -158,11 +237,198 @@ bool FMyFeatureTest::RunTest(const FString& Parameters)
 }
 ```
 
+### Adding a GPU Parity Test (Milestone 6)
+```cpp
+// Pattern from GPUOceanicAmplificationTest.cpp
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMyGPUParityTest,
+    "PlanetaryCreation.Milestone6.GPU.MyFeatureParity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMyGPUParityTest::RunTest(const FString& Parameters)
+{
+    // 1. Setup simulation at target LOD
+    UTectonicSimulationService* Service = GetTectonicSimulationService();
+    Service->ResetSimulation();
+    // ... configure parameters
+
+    // 2. Advance to stable state
+    Service->AdvanceSteps(5);
+
+    // 3. Run CPU baseline (GPU disabled)
+    IConsoleVariable* CVarGPU = IConsoleManager::Get().FindConsoleVariable(
+        TEXT("r.PlanetaryCreation.UseGPUAmplification"));
+    CVarGPU->Set(0, ECVF_SetByCode);
+    Service->AdvanceSteps(1);
+    TArray<double> CPUResults = CaptureResults();
+
+    // 4. Undo and run GPU path
+    Service->UndoSteps(1);
+    CVarGPU->Set(1, ECVF_SetByCode);
+    Service->AdvanceSteps(1);
+    TArray<double> GPUResults = CaptureResults();
+
+    // 5. Compare results
+    double MaxDelta = 0.0;
+    int32 WithinTolerance = 0;
+    for (int32 i = 0; i < CPUResults.Num(); ++i)
+    {
+        double Delta = FMath::Abs(CPUResults[i] - GPUResults[i]);
+        MaxDelta = FMath::Max(MaxDelta, Delta);
+        if (Delta <= 0.1) ++WithinTolerance;
+    }
+
+    TestTrue(TEXT("GPU parity >99%"),
+        (double)WithinTolerance / CPUResults.Num() > 0.99);
+    TestTrue(TEXT("Max delta <1.0m"), MaxDelta < 1.0);
+
+    return true;
+}
+```
+
 ### Extending Tectonic Service
 - Add properties to `UTectonicSimulationService` (double-precision)
 - Update `ResetSimulation()` to initialize new state
 - Modify `AdvanceSteps()` to evolve state per paper equations
 - Convert to float in `FTectonicSimulationController` before mesh update
+
+### Working with Stage B Caching (Milestone 6)
+```cpp
+// Pattern from TectonicSimulationService.cpp
+
+// 1. Check if cache needs rebuild
+void UTectonicSimulationService::RefreshStageB()
+{
+    // Only rebuild if Voronoi/topology changed
+    if (VoronoiStamp != CachedVoronoiStamp || TopologyVersion != CachedTopologyVersion)
+    {
+        RefreshRidgeDirectionsIfNeeded();  // Update ridge cache first
+        BuildContinentalAmplificationCache();  // Then rebuild amplification cache
+        CachedVoronoiStamp = VoronoiStamp;
+        CachedTopologyVersion = TopologyVersion;
+    }
+}
+
+// 2. Reuse cached data when possible
+double UTectonicSimulationService::GetAmplifiedElevation(int32 VertexIdx)
+{
+    const auto& Cache = ContinentalBlendCache[VertexIdx];
+
+    // Reuse if serial matches (no new GPU readback needed)
+    if (Cache.bHasReferenceMean && Cache.CachedSerial == OceanicAmplificationDataSerial)
+    {
+        return Cache.BlendedHeight;  // Fast path
+    }
+
+    // Rebuild cache entry
+    double NewHeight = ComputeContinentalAmplificationFromCache(VertexIdx);
+    ContinentalBlendCache[VertexIdx].BlendedHeight = NewHeight;
+    ContinentalBlendCache[VertexIdx].CachedSerial = OceanicAmplificationDataSerial;
+    return NewHeight;
+}
+
+// 3. Bump serial after mutations
+void UTectonicSimulationService::ApplyGPUAmplification()
+{
+    ApplyOceanicAmplificationGPU(*this);
+    ApplyContinentalAmplificationGPU(*this);
+
+    // Increment serial so next step knows cache is fresh
+    ++OceanicAmplificationDataSerial;
+}
+```
+
+### Terrane Mesh Surgery Pattern (Milestone 6)
+```cpp
+// Pattern from TectonicSimulationService.cpp
+
+// 1. Extract terrane with full vertex snapshot
+void UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArray<int32>& VertexIndices)
+{
+    FContinentalTerrane Terrane;
+    Terrane.TerraneID = GenerateTerraneID(SourcePlateID, CurrentSimTime_My, VertexIndices, TerraneIDSalt);
+
+    // Snapshot all vertex data before surgery
+    for (int32 VertexIdx : VertexIndices)
+    {
+        Terrane.SnapshotPositions.Add(RenderVertices[VertexIdx]);
+        Terrane.SnapshotVelocities.Add(VertexVelocities[VertexIdx]);
+        Terrane.SnapshotStress.Add(VertexStress[VertexIdx]);
+        // ... snapshot other fields
+    }
+
+    // Remove from source plate topology
+    RemoveVerticesFromPlate(SourcePlateID, VertexIndices);
+
+    // Validate mesh integrity
+    ValidateTopology();  // V - E + F = 2, no INDEX_NONE
+}
+
+// 2. Reattach with topology restoration
+void UTectonicSimulationService::ReattachTerrane(const FContinentalTerrane& Terrane, int32 TargetPlateID)
+{
+    // Remove patch triangles from carrier plate
+    RemovePatchTriangles(Terrane.CarrierPlateID, Terrane.VertexIndices);
+
+    // Restore vertex data from snapshot
+    for (int32 i = 0; i < Terrane.VertexIndices.Num(); ++i)
+    {
+        int32 VertexIdx = Terrane.VertexIndices[i];
+        RenderVertices[VertexIdx] = Terrane.SnapshotPositions[i];
+        VertexPlateAssignments[VertexIdx] = TargetPlateID;
+    }
+
+    // Rebuild adjacency and validate
+    BuildRenderVertexAdjacency();
+    ValidateTopology();
+}
+```
+
+## Console Commands & CVars
+
+### Stage B Performance and Debugging (Milestone 6)
+```
+# Enable detailed Stage B profiling logs
+r.PlanetaryCreation.StageBProfiling 1
+
+# Toggle GPU amplification (0=CPU only, 1=GPU with CPU fallback)
+r.PlanetaryCreation.UseGPUAmplification 1
+
+# Set visualization mode (0=PlateColors, 1=Elevation, 2=Velocity, 3=Stress)
+r.PlanetaryCreation.VisualizationMode 0
+
+# GPU preview mode control
+r.PlanetaryCreation.GPUPreviewMode [0-2]
+
+# Skip CPU amplification when GPU preview active (performance optimization)
+r.PlanetaryCreation.bSkipCPUAmplification [0/1]
+```
+
+### Development Tools
+```
+# Run terrane mesh surgery spike (Development builds only)
+planetary.TerraneMeshSurgery
+
+# List all available automation tests
+Automation List
+
+# Run specific test category
+Automation RunTests PlanetaryCreation.Milestone6.GPU
+
+# Export simulation metrics
+# (Use "Export Terranes CSV" button in tool panel)
+```
+
+### Profiling Commands
+```
+# Frame timing breakdown
+stat unit
+
+# GPU metrics
+stat RHI
+
+# Enable Unreal Insights capture
+-trace=cpu,frame,counters,stats -statnamedevents
+```
 
 ## Paper Alignment
 
@@ -171,8 +437,19 @@ Reference `ProceduralTectonicPlanetsPaper/` for algorithm details. Key terminolo
 - **Ridges**: Divergent boundaries
 - **Hotspots**: Volcanic activity sources
 - **Timestep**: 2 My per iteration (from paper)
+- **Stage A**: Coarse tectonic simulation (Milestones 1-5)
+- **Stage B**: Detail amplification at ~100m scale (Milestone 6)
 
 Document any deviations from paper in code comments. See `Docs/PlanningAgentPlan.md` for milestone breakdown.
+
+**Current Paper Parity Status (Milestone 6):**
+- ✅ Section 3: Plate mechanics, velocity fields, thermal coupling
+- ✅ Section 4: Continental erosion, oceanic dampening, sediment transport
+- ✅ Section 5: Stage B amplification (oceanic Gabor noise + continental exemplars)
+- 🟡 Section 4.2: Terrane extraction/reattachment (implemented, paper validation pending)
+- ⏸️ Section 6: User study and geophysics validation (future work)
+
+See `ProceduralTectonicPlanetsPaper/PTP_ImplementationAlignment.md` for detailed alignment notes.
 
 ## Troubleshooting
 
@@ -226,3 +503,58 @@ Document any deviations from paper in code comments. See `Docs/PlanningAgentPlan
 - **SharedVertices vs RenderVertices confusion**: Validation MUST check `RenderVertices` (the high-density render mesh), NOT `SharedVertices` (low-density simulation mesh)
 - Symptom: Euler characteristic fails with wrong vertex count (e.g., "V=12 E=480 F=320" instead of "V=162 E=480 F=320")
 - Fix: Always use `RenderVertices`, `RenderTriangles`, `VertexPlateAssignments` in validation code
+
+**Stage B GPU parity failures (Milestone 6):**
+- **Symptom**: GPU vs CPU delta >0.1m tolerance failures
+- **Common causes**:
+  - Ridge direction cache not updated before amplification (`RefreshRidgeDirectionsIfNeeded()` must run)
+  - Voronoi assignment mismatch between CPU and GPU paths (check `CachedVoronoiAssignments` serial)
+  - Continental blend cache stale (verify `CachedSerial` matches `OceanicAmplificationDataSerial`)
+  - GPU preview texture not cleared between steps
+- **Diagnostic CVars**:
+  - `r.PlanetaryCreation.StageBProfiling 1` - Enable detailed logging
+  - `r.PlanetaryCreation.UseGPUAmplification 0` - Force CPU fallback for comparison
+- **Logs to check**:
+  - `[StageB][Profile]` - Per-pass timings and counts
+  - `[StageB][CacheProfile]` - Cache rebuild metrics
+  - `[RidgeDir]` - Ridge cache hits/misses and fallback usage
+  - `[ContinentalGPUReadback]` - Snapshot vs fallback source
+
+**Ridge direction cache issues:**
+- **Symptom**: High ridge gradient fallback counts (>50% of oceanic vertices)
+- **Root cause**: `RenderVertexBoundaryCache` not built or out of sync with Voronoi
+- **Fix order**:
+  1. `BuildVoronoiMapping()` - Update plate assignments
+  2. `BuildRenderVertexAdjacency()` - Refresh adjacency graph
+  3. `BuildRenderVertexBoundaryCache()` - **Must run before ridge computation**
+  4. `ComputeRidgeDirections()` - Now reads valid cached tangents
+- **Expected metrics** (from logs):
+  - Ridge alignment ≥80% near divergent boundaries
+  - Young crust amplification ≥60%
+  - Missing tangents ≈0 in ridge zones
+- **Test**: `RidgeDirectionCacheTest` validates cache integration
+
+**Terrane mesh surgery failures:**
+- **Symptom**: Euler characteristic violation, non-manifold edges, INDEX_NONE assignments
+- **Common causes**:
+  - Extraction during retessellation (must snapshot before topology changes)
+  - Duplicate vertex map not restored after reattachment
+  - Boundary cap triangles not removed properly
+- **Validation checklist**:
+  - V - E + F = 2 (Euler characteristic)
+  - Each edge touches exactly 2 triangles (manifold)
+  - No orphaned vertices (all referenced by ≥1 triangle)
+  - No INDEX_NONE in `VertexPlateAssignments`
+- **Tests**: `TerraneMeshSurgeryTest`, `TerraneEdgeCasesTest`
+
+**Continental blend cache not reusing:**
+- **Symptom**: Continental Stage B rebuilds cache every step despite no topology changes
+- **Check**: `CachedSerial` in `FContinentalBlendCache` should match current Stage B serial after first pass
+- **Fix**: Ensure serial is bumped in `ProcessPendingContinentalGPUReadbacks()` immediately after mutation
+- **Diagnostic**: Look for repeated `[ContinentalGPUReadback] Overrides=...` in logs (should appear once per topology change)
+- **Test**: `ContinentalBlendCacheTest`
+
+**Navigation system ensure spam in automation:**
+- **Symptom**: Repeated `NavigationSystem.cpp:3808` warnings during GPU parity tests
+- **Solution**: Scoped ensure handler installed in module startup downgrades to single warning
+- **Verify**: Logs should show only one navigation warning per commandlet run
