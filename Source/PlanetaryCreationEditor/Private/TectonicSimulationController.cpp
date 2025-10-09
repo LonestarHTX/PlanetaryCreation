@@ -284,6 +284,14 @@ void FTectonicSimulationController::BuildAndUpdateMesh()
 
     if (bTopologyMatches)
     {
+        if (TryFastSurfaceRefresh(*MutableCachedMesh, *Service, CurrentSurfaceVersion))
+        {
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD Cache] Fast surface refresh applied to L%d (Surface %d)"),
+                RenderLevel, CurrentSurfaceVersion);
+            PreWarmNeighboringLODs();
+            return;
+        }
+
         FMeshBuildSnapshot Snapshot = CreateMeshBuildSnapshot();
         if (UpdateCachedMeshFromSnapshot(*MutableCachedMesh, Snapshot, CurrentSurfaceVersion))
         {
@@ -2084,6 +2092,57 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
     CachedMesh.SurfaceDataVersion = NewSurfaceDataVersion;
     CachedMesh.Snapshot = Snapshot;
     CachedMesh.CacheTimestamp = FPlatformTime::Seconds();
+
+    return true;
+}
+
+bool FTectonicSimulationController::TryFastSurfaceRefresh(FCachedLODMesh& CachedMesh, const UTectonicSimulationService& Service, int32 NewSurfaceDataVersion)
+{
+    const int32 ExpectedSourceVertexCount = CachedMesh.Snapshot.RenderVertices.Num();
+    if (ExpectedSourceVertexCount <= 0)
+    {
+        return false;
+    }
+
+    const TArray<FVector3d>& CurrentRenderVertices = Service.GetRenderVertices();
+    if (CurrentRenderVertices.Num() != ExpectedSourceVertexCount)
+    {
+        return false;
+    }
+
+    const TArray<int32>& CurrentRenderTriangles = Service.GetRenderTriangles();
+    if (CurrentRenderTriangles.Num() != CachedMesh.Snapshot.RenderTriangles.Num())
+    {
+        return false;
+    }
+
+    CachedMesh.Snapshot.VertexPlateAssignments = Service.GetVertexPlateAssignments();
+    CachedMesh.Snapshot.VertexVelocities = Service.GetVertexVelocities();
+    CachedMesh.Snapshot.VertexStressValues = Service.GetVertexStressValues();
+    CachedMesh.Snapshot.VertexElevationValues = Service.GetVertexElevationValues();
+    CachedMesh.Snapshot.VertexAmplifiedElevation = Service.GetVertexAmplifiedElevation();
+    CachedMesh.Snapshot.Parameters = Service.GetParameters();
+    CachedMesh.Snapshot.VisualizationMode = CachedMesh.Snapshot.Parameters.VisualizationMode;
+    CachedMesh.Snapshot.bHighlightSeaLevel = Service.IsHighlightSeaLevelEnabled();
+    CachedMesh.Snapshot.StageBProfile = Service.GetLatestStageBProfile();
+
+    CachedMesh.Snapshot.bUseAmplifiedElevation =
+        (CachedMesh.Snapshot.Parameters.bEnableOceanicAmplification || CachedMesh.Snapshot.Parameters.bEnableContinentalAmplification) &&
+        CachedMesh.Snapshot.Parameters.RenderSubdivisionLevel >= CachedMesh.Snapshot.Parameters.MinAmplificationLOD;
+    CachedMesh.Snapshot.PlanetRadius = CachedMesh.Snapshot.Parameters.PlanetRadius;
+    CachedMesh.Snapshot.ElevationMode = CurrentElevationMode;
+
+    if (!UpdateCachedMeshFromSnapshot(CachedMesh, CachedMesh.Snapshot, NewSurfaceDataVersion))
+    {
+        return false;
+    }
+
+    CachedMesh.CacheTimestamp = FPlatformTime::Seconds();
+
+    if (!TryUpdatePreviewMeshInPlace(CachedMesh))
+    {
+        ApplyCachedMeshToPreview(CachedMesh);
+    }
 
     return true;
 }

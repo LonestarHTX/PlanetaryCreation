@@ -196,6 +196,7 @@ private:
         RealtimeMesh::FRealtimeMeshStreamSet& OutStreamSet, int32& OutVertexCount, int32& OutTriangleCount);
 
     bool UpdateCachedMeshFromSnapshot(FCachedLODMesh& CachedMesh, const FMeshBuildSnapshot& Snapshot, int32 NewSurfaceDataVersion);
+    bool TryFastSurfaceRefresh(FCachedLODMesh& CachedMesh, const UTectonicSimulationService& Service, int32 NewSurfaceDataVersion);
     bool TryUpdatePreviewMeshInPlace(const FCachedLODMesh& CachedMesh);
     void ApplyCachedMeshToPreview(const FCachedLODMesh& CachedMesh);
     void FinalizePreviewMeshUpdate(int32 VertexCount, int32 TriangleCount);
