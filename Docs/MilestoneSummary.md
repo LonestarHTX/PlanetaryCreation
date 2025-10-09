@@ -104,7 +104,9 @@ This document tracks milestone intent, delivery status, notable deviations from 
 - Continental Stage B path: exemplar amplification, parity automation, and Level 7 profiling instrumentation (`Task 2.1/2.2/2.3.1`).
 - Async readback submission + fence handling for commandlet automation (`ProcessPendingOceanicGPUReadbacks`).
 - Boundary overlay simplification pass (Task 2.4) to replace starburst traces with single-strand seams.
-- SIMD refactors (SoA cache, ParallelFor) per `Docs/simd_gpu_implementation_review.md` and `Docs/planetary_creation_simd_gpu_implementation_review_oct_6_2025.md`.
+- ✅ Multi-threading with `ParallelFor` (sediment/dampening/mesh: 6.32ms total at L3, 17× under budget)
+- ⏸️ SIMD vectorization deferred - `ParallelFor` achieved targets without intrinsics complexity
+- Note: `Docs/simd_gpu_implementation_review.md` documents exploration/planning, not implemented features
 
 Looking ahead to **Milestone 7**, add “Plate naming polish” to the presentation/UX backlog so generated plates get friendly labels alongside the existing IDs—purely cosmetic, but it’ll make review sessions more fun.
 Additional M7 polish targets queued: plate label overlay toggle, boundary legend in the tool panel, timeline markers for splits/merges/terranes, camera distance presets, snapshot thumbnails in history, visualization mode hotkeys (1–4), and log panel filters for Stage B/Terrane chatter.

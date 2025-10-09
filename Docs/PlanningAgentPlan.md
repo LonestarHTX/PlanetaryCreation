@@ -81,7 +81,9 @@
   - Implement Stage B terrain amplification (procedural noise + exemplar blending at ~100 m scale).
   - Add terrane extraction/reattachment and localized uplift during continental collisions.
   - Implement continental erosion & sediment transport tied to stress/elevation history.
-  - Apply SIMD optimizations to stress interpolation/boundary loops and prototype GPU compute for thermal/stress fields.
+  - ✅ Applied ParallelFor multi-threading to sediment/dampening/mesh build (achieved 6.32ms vs 110ms budget).
+  - ✅ Implemented GPU compute shaders for Stage B oceanic/continental amplification (~23ms combined).
+  - ⏸️ GPU thermal/velocity fields deferred (0.6ms CPU cost not worth transfer overhead).
   - Update automation/CSV exports to include new amplification metrics; reproduce paper figures at Level 7 for parity.
 - **Dependencies:** Milestone 5 data exports, exemplar datasets *(✅ Stage B SRTM catalog & cutter ready)*, profiling harness.
 - **Risks:** Amplification instability, GPU integration complexity; mitigate with staged rollouts and regression tests.

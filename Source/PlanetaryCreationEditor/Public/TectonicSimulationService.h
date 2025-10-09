@@ -1519,6 +1519,9 @@ private:
     /** Ensures VertexAmplifiedElevation starts from the latest base elevation before Stage B passes. */
     void InitializeAmplifiedElevationBaseline();
 
+    /** Rebuilds Stage B amplification for the current render LOD without advancing simulation time. */
+    void RebuildStageBForCurrentLOD();
+
     double CurrentTimeMy = 0.0;
     double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
     FStageBProfile LatestStageBProfile;

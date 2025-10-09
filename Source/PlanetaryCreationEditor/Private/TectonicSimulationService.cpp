@@ -1529,6 +1529,9 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
     // Milestone 4 Task 2.3: Recompute thermal field for new render vertices
     ComputeThermalField();
 
+    // Rebuild Stage B amplification for the updated render mesh.
+    RebuildStageBForCurrentLOD();
+
     BumpOceanicAmplificationSerial();
 
     UE_LOG(LogPlanetaryCreation, Log, TEXT("[LOD] Render mesh regenerated at L%d: %d vertices, %d triangles"),
@@ -6513,6 +6516,66 @@ void UTectonicSimulationService::InitializeAmplifiedElevationBaseline()
     }
 
     BumpOceanicAmplificationSerial();
+}
+
+void UTectonicSimulationService::RebuildStageBForCurrentLOD()
+{
+    TRACE_CPUPROFILER_EVENT_SCOPE(RebuildStageBForCurrentLOD);
+
+    if (RenderVertices.Num() == 0)
+    {
+        InitializeAmplifiedElevationBaseline();
+        return;
+    }
+
+    InitializeAmplifiedElevationBaseline();
+
+    const bool bMeetsAmplificationLOD = Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
+    const bool bShouldRunOceanic = bMeetsAmplificationLOD && Parameters.bEnableOceanicAmplification;
+    const bool bShouldRunContinental = bMeetsAmplificationLOD && Parameters.bEnableContinentalAmplification;
+
+    const bool bUseGPU = ShouldUseGPUAmplification() && Parameters.bSkipCPUAmplification;
+
+    if (bShouldRunOceanic)
+    {
+        MarkAllRidgeDirectionsDirty();
+        RefreshRidgeDirectionsIfNeeded();
+
+        if (!Parameters.bSkipCPUAmplification)
+        {
+            ApplyOceanicAmplification();
+        }
+        else if (bUseGPU)
+        {
+#if WITH_EDITOR
+            InitializeGPUExemplarResources();
+            if (ApplyOceanicAmplificationGPU())
+            {
+                ProcessPendingOceanicGPUReadbacks(true, nullptr);
+            }
+#endif
+        }
+    }
+
+    if (bShouldRunContinental)
+    {
+        RefreshContinentalAmplificationCache();
+
+        if (!Parameters.bSkipCPUAmplification)
+        {
+            ApplyContinentalAmplification();
+        }
+        else if (bUseGPU)
+        {
+#if WITH_EDITOR
+            InitializeGPUExemplarResources();
+            if (ApplyContinentalAmplificationGPU())
+            {
+                ProcessPendingContinentalGPUReadbacks(true, nullptr);
+            }
+#endif
+        }
+    }
 }
 
 void UTectonicSimulationService::ApplyOceanicAmplification()
