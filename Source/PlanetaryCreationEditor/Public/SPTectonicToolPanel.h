@@ -27,6 +27,7 @@ private:
     FReply HandleStepClicked();
     FReply HandleRegenerateClicked();
     FReply HandleExportMetricsClicked();
+    FReply HandleExportTerranesClicked();
     FText GetCurrentTimeLabel() const;
     FText GetPlateCountLabel() const;
     FText GetPerformanceStatsLabel() const; // Milestone 3 Task 4.5

@@ -103,6 +103,23 @@ struct FContinentalAmplificationCacheEntry
     bool bHasCachedData = false;
 };
 
+struct FContinentalBlendCache
+{
+    float BlendedHeight = 0.0f;
+   float ReferenceMean = 0.0f;
+   uint64 CachedSerial = 0;
+   bool bHasReferenceMean = false;
+};
+
+struct FContinentalCacheProfileMetrics
+{
+    double TotalSeconds = 0.0;
+    double ClassificationSeconds = 0.0;
+    double ExemplarSelectionSeconds = 0.0;
+    int32 ContinentalVertexCount = 0;
+    int32 ExemplarAssignmentCount = 0;
+};
+
 struct FContinentalAmplificationDebugInfo
 {
     int32 VertexIndex = INDEX_NONE;
@@ -1074,6 +1091,9 @@ public:
     /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
     void ExportMetricsToCSV();
 
+    /** Milestone 6 Task 1.5: Export active terrane records to CSV for lifecycle analysis. */
+    void ExportTerranesToCSV();
+
     /** Milestone 4 Task 1.1: Re-tessellation public API. */
 
     /** Re-tessellation snapshot structure for rollback. */
@@ -1327,6 +1347,7 @@ public:
 
     const FContinentalAmplificationGPUInputs& GetContinentalAmplificationGPUInputs() const;
     const TArray<FContinentalAmplificationCacheEntry>& GetContinentalAmplificationCacheEntries() const;
+    const FContinentalCacheProfileMetrics& GetLastContinentalCacheProfileMetrics() const { return LastContinentalCacheProfileMetrics; }
 #if UE_BUILD_DEVELOPMENT
     void ForceContinentalSnapshotSerialDrift();
     void ResetAmplifiedElevationForTests();
@@ -1459,6 +1480,9 @@ private:
 
     /** Milestone 4 Task 2.1: Update hotspot positions in mantle frame (drift over time). */
     void UpdateHotspotDrift(double DeltaTimeMy);
+
+    /** Milestone 6 Task 1.5: Deterministically generate a terrane identifier. */
+    int32 GenerateDeterministicTerraneID(int32 SourcePlateID, double ExtractionTimeMy, const TArray<int32>& SortedVertexIndices, int32 Salt) const;
 
     /** Milestone 4 Task 2.1: Apply hotspot thermal contribution to plate stress/elevation. */
     void ApplyHotspotThermalContribution();
@@ -1599,6 +1623,7 @@ public:
 
     void ForceRidgeRecomputeForTest() { ComputeRidgeDirections(); }
     int32 GetPendingOceanicGPUJobCount() const;
+    const TArray<FContinentalBlendCache>& GetContinentalAmplificationBlendCacheForTests() const { return ContinentalAmplificationBlendCache; }
 
 private:
     bool bForceHeightmapModuleFailure = false;
@@ -1611,6 +1636,10 @@ private:
     mutable FOceanicAmplificationFloatInputs OceanicAmplificationFloatInputs;
     mutable FContinentalAmplificationGPUInputs ContinentalAmplificationGPUInputs;
     mutable TArray<FContinentalAmplificationCacheEntry> ContinentalAmplificationCacheEntries;
+    mutable TArray<FContinentalBlendCache> ContinentalAmplificationBlendCache;
+    mutable FContinentalCacheProfileMetrics LastContinentalCacheProfileMetrics;
+    mutable double LastContinentalCacheBuildSeconds = 0.0;
+    bool bContinentalGPUResultWasApplied = false;
     mutable FRidgeDirectionFloatSoA RidgeDirectionFloatSoA;
     mutable TMap<int32, FPlateBoundarySummary> PlateBoundarySummaries;
     mutable int32 PlateBoundarySummaryTopologyVersion = INDEX_NONE;

@@ -422,6 +422,17 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
                 .OnClicked(this, &SPTectonicToolPanel::HandleExportMetricsClicked)
             ]
 
+            // Export terrane lifecycle button
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 2.0f)
+            [
+                SNew(SButton)
+                .Text(NSLOCTEXT("PlanetaryCreation", "ExportTerranesLabel", "Export Terranes CSV"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ExportTerranesTooltip", "Export active terrane lifecycle data to Saved/TectonicMetrics/ for analysis"))
+                .OnClicked(this, &SPTectonicToolPanel::HandleExportTerranesClicked)
+            ]
+
             // Visualization mode selector (plate colors, elevation, velocity, stress)
             + SVerticalBox::Slot()
             .AutoHeight()
@@ -783,6 +794,18 @@ FReply SPTectonicToolPanel::HandleExportMetricsClicked()
         if (UTectonicSimulationService* Service = Controller->GetSimulationService())
         {
             Service->ExportMetricsToCSV();
+        }
+    }
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleExportTerranesClicked()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            Service->ExportTerranesToCSV();
         }
     }
     return FReply::Handled();

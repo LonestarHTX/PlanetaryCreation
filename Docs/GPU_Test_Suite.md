@@ -1,6 +1,6 @@
 # GPU Amplification Test Suite
 
-**Status:** ✅ Complete (3/3 tests scaffolded)
+**Status:** ✅ Complete (4/4 tests active)
 **Milestone:** M6 GPU Acceleration
 **Created:** 2025-10-05
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-Three automation tests validate GPU compute shader correctness, parity with CPU baseline, and stability across multi-step simulations. All tests use Unreal's automation framework and integrate with the existing M6 test suite.
+Four automation-facing tests validate GPU compute shader correctness, cache discipline, and parity with the CPU baseline. All tests use Unreal's automation framework and integrate with the existing M6 test suite.
 
 ---
 
@@ -48,26 +48,20 @@ Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity
 
 ---
 
-### 2. **GPUContinentalAmplificationTest.cpp** ⏸️ Scaffolded (Shader Pending)
+### 2. **GPUContinentalAmplificationTest.cpp** ✅ Ready to Run
 
 **Category:** `PlanetaryCreation.Milestone6.GPU.ContinentalParity`
 
-**Purpose:** Validates GPU continental amplification matches CPU baseline (same structure as oceanic test).
+**Purpose:** Validates GPU continental amplification matches the CPU snapshot baseline (same structure as the oceanic test, with an additional drift fallback pass).
 
-**Current State:**
-- ✅ Test structure complete
-- ⏸️ Uses `AddExpectedError` to suppress failures until shader ready
-- ⏸️ Logs results but doesn't enforce parity yet
+**Test Flow:**
+1. Warm the Stage B cache via a CPU baseline replay (Run 1).
+2. Undo and dispatch the GPU path (Run 2). Snapshot-backed vertices should report `[ContinentalGPUReadback] GPU applied … (snapshot)`.
+3. Undo again and trigger the drift fallback path to ensure snapshot mismatches gracefully fall back to the CPU cache (Run 3).
 
-**How to Enable:**
-1. Implement `ContinentalAmplificationGPU.cpp` shader dispatcher
-2. Remove `AddExpectedError(TEXT("Continental amplification GPU path not yet implemented"), ...)` (line 26)
-3. Uncomment parity assertion lines (lines 127-129)
-
-**Acceptance Criteria (Same as Oceanic):**
-- ✅ >99% of continental vertices within ±0.1 m tolerance
-- ✅ Max delta < 1.0 m
-- ✅ Mean absolute delta < 0.05 m
+**Acceptance Criteria:**
+- ✅ Snapshot-backed run reports 100% of sampled vertices within ±0.1 m (`MeanDelta < 0.05 m`, `MaxDelta < 1 m`).
+- ✅ Fallback run completes without error and logs `Source=snapshot fallback`.
 
 **Enable Command:**
 ```
@@ -114,16 +108,42 @@ Automation RunTests PlanetaryCreation.Milestone6.GPU.IntegrationSmoke
 
 ---
 
+### 4. **ContinentalBlendCacheTest.cpp** ✅ Ready to Run
+
+**Category:** `PlanetaryCreation.Milestone6.ContinentalBlendCache`
+
+**Purpose:** Ensures the continental exemplar blend cache stays aligned with the Stage B serial so CPU fallbacks reuse cached blends instead of re-sampling the atlas.
+
+**Test Flow:**
+1. Configure Stage B with continental amplification enabled (LOD 5).
+2. Advance a few steps to populate the amplification caches.
+3. Refresh the GPU inputs and inspect the blend cache.
+4. Assert the cache size matches the continental entries, at least one vertex has cached data, and its cached serial equals the current `OceanicAmplificationDataSerial`.
+
+**Acceptance Criteria:**
+- ✅ Blend cache array matches the snapshot cache array length.
+- ✅ At least one continental vertex reports cached blends.
+- ✅ Blend cache serial equals the Stage B serial (indicates reuse will hit immediately after the next bump).
+
+**Enable Command:**
+```
+Automation RunTests PlanetaryCreation.Milestone6.ContinentalBlendCache
+```
+
+---
+
 ## Running All GPU Tests
 
 ```bash
 # From Unreal Editor console
 Automation RunTests PlanetaryCreation.Milestone6.GPU
+Automation RunTests PlanetaryCreation.Milestone6.ContinentalBlendCache
 
 # From command line
-"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" \
+"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
   "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
-  -ExecCmds="Automation RunTests PlanetaryCreation.Milestone6.GPU; Quit" \
+  -SetCVar="r.PlanetaryCreation.StageBProfiling=1" \
+  -ExecCmds="r.PlanetaryCreation.StageBProfiling 1; Automation RunTests PlanetaryCreation.Milestone6.GPU; Automation RunTests PlanetaryCreation.Milestone6.ContinentalBlendCache; Quit" \
   -unattended -nop4 -nosplash
 ```
 
@@ -188,19 +208,23 @@ UE_LOG(LogPlanetaryCreation, Log, TEXT("Mean absolute delta: %.4f m"), MeanAbsol
 
 ## Integration with Existing Test Suite
 
-### Current M6 Test Count
+### Current M6 Test Coverage
 
-- **Existing Stage B Tests:** 2 (OceanicAmplificationTest, ContinentalAmplificationTest)
-- **New GPU Tests:** 3 (GPUOceanicParity, GPUContinentalParity, GPUIntegrationSmoke)
-- **Total M6 Tests:** 5
+- **CPU amplification:** `OceanicAmplificationTest`, `ContinentalAmplificationTest`
+- **GPU parity & cache:** `GPUOceanicParity`, `GPUContinentalParity`, `GPUAmplificationIntegrationTest`, `ContinentalBlendCacheTest`
+- **Preview diagnostics:** `GPUPreviewDiagnosticTest`, `GPUPreviewVertexParityTest`, `GPUPreviewSeamMirroringTest`
+- **Integration smoke:** `GPUAmplificationIntegrationTest`
+
+> CI executes the entire block above for the Milestone 6 suite; seam mirroring is now a gating test for the preview shader path.
 
 ### Test Dependencies
 
 | Test | Depends On | Status |
 |------|-----------|--------|
-| GPUOceanicAmplificationTest | `OceanicAmplificationGPU.cpp` working | ✅ Ready (oceanic GPU shader exists) |
-| GPUContinentalAmplificationTest | `ContinentalAmplificationGPU.cpp` implemented | ⏸️ Scaffolded (shader pending) |
-| GPUAmplificationIntegrationTest | Both GPU paths working | ✅ Ready (oceanic only, continental skipped) |
+| GPUOceanicAmplificationTest | `OceanicAmplificationGPU.cpp` working | ✅ Ready |
+| GPUContinentalAmplificationTest | `ContinentalAmplificationGPU.cpp` implemented | ✅ Ready (snapshot + fallback paths covered) |
+| GPUAmplificationIntegrationTest | Both GPU paths working | ✅ Ready |
+| GPUPreviewSeamMirroringTest | `ApplyOceanicAmplificationGPUPreview` seam metrics enabled | ✅ Ready (fails if mirrored seam differs by >512 texels) |
 
 ---
 

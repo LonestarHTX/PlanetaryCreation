@@ -69,13 +69,16 @@ This document tracks milestone intent, delivery status, notable deviations from 
   - Introduced `ETectonicVisualizationMode` enum, console hook (`r.PlanetaryCreation.VisualizationMode`), and combo UI replacing heightmap/velocity checkboxes.
   - Controller/velocity overlay now clear arrows when mode ≠ Velocity; GPU preview diagnostics updated to assert enum flow (`PlanetaryCreation.Milestone6.GPU.PreviewDiagnostic`).
 - **Terrane Mesh Surgery Refactor** — `UTectonicSimulationService::ExtractTerrane`, `UTectonicSimulationService::ReattachTerrane`, and `FContinentalTerrane`
-- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and pools readback buffers, keeping Stage B at ~19.6 ms with ≈0 ms readback cost during the L7 GPU pass
+- **Terrane Lifecycle Persistence** — `TectonicSimulationService.cpp`, `SPTectonicToolPanel.cpp`
+  - Deterministic terrane IDs now derive from seed + plate + extraction timestamp hashes; undo/redo snapshots persist the salt for cross-platform parity.
+  - `Export Terranes CSV` button writes `Terranes_*.csv` (Saved/TectonicMetrics) with centroid lat/lon, lifecycle state, area, and timestamps; `TerranePersistenceTest` exercises the pipeline.
+- **Stage B Snapshot & Async Readbacks** — GPU parity now replays captured snapshots and pools readback buffers, keeping Stage B at ~14.5 ms with ≈0 ms readback cost during the L7 GPU pass
   - Extraction snapshots full vertex payloads (position, velocity, stress, sediment, amplified elevation, duplicate mapping) and compacts render SoA arrays without orphaned vertices.
   - Reattachment removes patch triangles via sorted-key sets, restores duplicates, rebuilds adjacency, and keeps the mesh manifold; `TerraneMeshSurgeryTest` expanded to confirm no `INDEX_NONE` assignments remain.
   - Build + automation coverage: Win64 Development UBT (≈3 s incremental) and `Automation RunTests PlanetaryCreation.Milestone6.Terrane.MeshSurgery` now succeed.
   - Async replay snapshots now bump the serial and recompute the hash immediately after mutation, preventing `ProcessPendingOceanicGPUReadbacks()` from dropping into the fallback path each frame.
--  - Stage B profiling output now reports ridge-cache health and Voronoi-change metrics (dirty counts, updates, cache hits, fallback counters, reassigned vertex totals) using the new cached Voronoi assignment snapshots; undo/redo restores cached ridge data so temporal jumps only touch the affected vertices (steady-state Voronoi reassignments ≈93 k without the blanket pass, post-reset dirty counts ≈72). Oceanic GPU parity steadies at ~19.6 ms, while continental GPU parity now measures ~8.8 ms with readback removed.
--  - Voronoi refresh now trims reassignment lists, scales ring depth adaptively (default depth dropped from 2 → 1), and skips the redundant first-step rebuild via `bSkipNextVoronoiRefresh`, keeping ridge recomputes near 0 ms even with Stage B updates; `PlanetaryCreation.Milestone6.GPU.PreviewSeamMirroring` automation verifies the equirect seam stays balanced after the GPU preview shader changes.
+  - Stage B profiling output now reports ridge-cache health and Voronoi-change metrics (dirty counts, updates, cache hits, fallback counters, reassigned vertex totals) using the new cached Voronoi assignment snapshots; undo/redo restores cached ridge data so temporal jumps only touch the affected vertices (post-reset dirty counts ≈72, steady-state reassignment totals ≈93 k). Oceanic GPU parity steadies at ~14.5 ms, while continental GPU parity logs ~8.8 ms with readback removed.
+  - Voronoi refresh now trims reassignment lists, scales ring depth adaptively (default depth dropped from 2 → 1), and skips the redundant first-step rebuild via `bSkipNextVoronoiRefresh`, keeping ridge recomputes near 0 ms even with Stage B updates; `PlanetaryCreation.Milestone6.GPU.PreviewSeamMirroring` automation verifies the equirect seam stays balanced after the GPU preview shader changes.
 - **Sediment & Dampening Optimizations** — `SedimentTransport.cpp`, `OceanicDampening.cpp`, `TectonicSimulationService.cpp`
   - Diffusion loop now runs 6 passes normally / 4 passes under GPU preview (`Parameters.bSkipCPUAmplification`), trimming ~40 % inner-loop work.
   - Per-vertex adjacency weight totals cached once during `BuildRenderVertexAdjacency`, consumed directly by oceanic dampening (no per-step recompute).
@@ -93,14 +96,13 @@ This document tracks milestone intent, delivery status, notable deviations from 
   - Added an in-place mesh update path that writes positions, tangents, and colors directly to existing realtime-mesh streams when topology is unchanged, reusing the shared post-update flow.
   - Stage B steady-state frames now skip the costly rebuild call while keeping cached amplification data in sync with the viewport.
 - **Automation** — `Docs/GPU_Test_Suite.md`
-  - `PlanetaryCreation.Milestone6.GPU.OceanicParity` and `.GPU.IntegrationSmoke` green; continental parity scaffolded pending shader.
-  - Full M6 suite stands at 15 tests / 12 passing with GPU preview enabled.
+  - `PlanetaryCreation.Milestone6.GPU.OceanicParity`, `.GPU.ContinentalParity`, and `.GPU.IntegrationSmoke` are green; continental parity now runs both the snapshot-backed GPU replay and the drift fallback check without suppressed errors.
+  - `PlanetaryCreation.Milestone6.TerranePersistence` covers CSV export + deterministic IDs; Full M6 suite stands at 16 tests / 13 passing with GPU preview enabled.
 - **Process Fixes** — `Docs/gpu_readback_fix_plan.md` outlines commandlet-safe fence submission to unblock async readbacks in automation; implementation queued.
 
 ### Active Work
 - Continental Stage B path: exemplar amplification, parity automation, and Level 7 profiling instrumentation (`Task 2.1/2.2/2.3.1`).
 - Async readback submission + fence handling for commandlet automation (`ProcessPendingOceanicGPUReadbacks`).
-- Terrane extraction/reattachment systems per Milestone plan, leveraging mesh surgery spike.
 - Boundary overlay simplification pass (Task 2.4) to replace starburst traces with single-strand seams.
 - SIMD refactors (SoA cache, ParallelFor) per `Docs/simd_gpu_implementation_review.md` and `Docs/planetary_creation_simd_gpu_implementation_review_oct_6_2025.md`.
 
@@ -108,7 +110,7 @@ Looking ahead to **Milestone 7**, add “Plate naming polish” to the present
 Additional M7 polish targets queued: plate label overlay toggle, boundary legend in the tool panel, timeline markers for splits/merges/terranes, camera distance presets, snapshot thumbnails in history, visualization mode hotkeys (1–4), and log panel filters for Stage B/Terrane chatter.
 
 ### Known Gaps / Next Targets
-- Oceanic preview currently visualization-only; continental GPU path, normals pass, and cube-face preview remain.
+- Oceanic preview remains visualization-only; continental GPU preview still relies on the snapshot fallback after undo/redo, and the normals pass + cube-face preview are open.
 - Sediment/dampening dominate frame costs (~24 ms) — next optimisation candidates.
 - Table 2 parity metrics for Level 7/8 still pending; instrumentation to split subduction/collision/elevation timers scheduled post-SIMD.
 

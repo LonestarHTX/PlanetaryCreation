@@ -40,6 +40,10 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "Editor.h"
 #endif
 
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/DefaultValueHelper.h"
+
 #if WITH_EDITOR
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
     TEXT("r.PlanetaryCreation.UseGPUAmplification"),
@@ -58,6 +62,61 @@ static TAutoConsoleVariable<int32> CVarPlanetaryCreationStageBProfiling(
     0,
     TEXT("Enable detailed Stage B profiling logs. 0=Off, 1=Per-step log."),
     ECVF_Default);
+
+static void ApplyStageBProfilingCommandLineOverride()
+{
+    const TCHAR* CmdLine = FCommandLine::Get();
+    const FString TargetCVarName = TEXT("r.PlanetaryCreation.StageBProfiling");
+
+    const TCHAR* Search = CmdLine;
+    while ((Search = FCString::Strstr(Search, TEXT("SetCVar="))) != nullptr)
+    {
+        Search += FCString::Strlen(TEXT("SetCVar="));
+
+        FString SetCVarToken;
+        if (!FParse::Token(Search, SetCVarToken, false))
+        {
+            continue;
+        }
+
+        SetCVarToken.TrimStartAndEndInline();
+        if (SetCVarToken.StartsWith(TEXT("\"")) && SetCVarToken.EndsWith(TEXT("\"")) && SetCVarToken.Len() >= 2)
+        {
+            SetCVarToken.RightChopInline(1);
+            SetCVarToken.LeftChopInline(1);
+        }
+
+        FString Name;
+        FString ValueString;
+        if (!SetCVarToken.Split(TEXT("="), &Name, &ValueString))
+        {
+            continue;
+        }
+
+        Name.TrimStartAndEndInline();
+        ValueString.TrimStartAndEndInline();
+
+        if (!Name.Equals(TargetCVarName, ESearchCase::IgnoreCase))
+        {
+            continue;
+        }
+
+        int32 ParsedValue = CVarPlanetaryCreationStageBProfiling.GetValueOnAnyThread();
+        FDefaultValueHelper::ParseInt(ValueString, ParsedValue);
+        CVarPlanetaryCreationStageBProfiling->Set(ParsedValue, ECVF_SetByCommandline);
+        return;
+    }
+}
+
+struct FStageBProfilingCommandLineInitializer
+{
+    FStageBProfilingCommandLineInitializer()
+    {
+        ApplyStageBProfilingCommandLineOverride();
+    }
+};
+
+static FStageBProfilingCommandLineInitializer GStageBProfilingCommandLineInitializer;
 
 static void HandleVisualizationModeConsoleChange(IConsoleVariable* Variable)
 {
@@ -815,7 +874,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     constexpr double StageBBudgetSeconds = 2.0; // Soft budget for Stage B passes at high LOD
 
     ProcessPendingOceanicGPUReadbacks(false);
-    ProcessPendingContinentalGPUReadbacks(false);
+        ProcessPendingContinentalGPUReadbacks(false);
 
     for (int32 Step = 0; Step < StepCount; ++Step)
     {
@@ -835,6 +894,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         double GpuReadbackSeconds = 0.0;
         double CacheInvalidationSeconds = 0.0;
         bool bSurfaceDataChanged = false;
+        bContinentalGPUResultWasApplied = false;
         bool bPendingOceanicGPUReadback = false;
 
 #if WITH_EDITOR
@@ -1093,12 +1153,14 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 }
             }
 #endif
-            if (!bUsedGPU)
+            if (!bUsedGPU || !bContinentalGPUResultWasApplied)
             {
                 TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
                 const double BlockStart = FPlatformTime::Seconds();
                 ApplyContinentalAmplification();
-                ContinentalCpuTime += FPlatformTime::Seconds() - BlockStart;
+                const double BlockDuration = FPlatformTime::Seconds() - BlockStart;
+                ContinentalCpuTime += BlockDuration;
+                CacheInvalidationSeconds += LastContinentalCacheBuildSeconds;
                 bSurfaceDataChanged = true;
             }
         }
@@ -1263,7 +1325,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         Profile.bVoronoiForcedFullRidge = bLastVoronoiForcedFullRidgeUpdate;
         LatestStageBProfile = Profile;
 
-        const int32 StageBLogMode = CVarPlanetaryCreationStageBProfiling.GetValueOnGameThread();
+        const int32 StageBLogMode = CVarPlanetaryCreationStageBProfiling.GetValueOnAnyThread();
         if (StageBLogMode > 0)
         {
             UE_LOG(LogPlanetaryCreation, Log,
@@ -1287,6 +1349,22 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 Profile.GpuReadbackMs,
                 Profile.CacheInvalidationMs,
                 Profile.TotalMs());
+
+        }
+
+        if (StageBLogMode > 0)
+        {
+            const FContinentalCacheProfileMetrics& CacheMetrics = LastContinentalCacheProfileMetrics;
+            if (CacheMetrics.TotalSeconds > 0.0 || CacheMetrics.ContinentalVertexCount > 0)
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[StageB][CacheProfile] ContinentalCache Total %.2f ms | Classification %.2f ms | Exemplar %.2f ms | ContinentalVerts %d | ExemplarVerts %d"),
+                    CacheMetrics.TotalSeconds * 1000.0,
+                    CacheMetrics.ClassificationSeconds * 1000.0,
+                    CacheMetrics.ExemplarSelectionSeconds * 1000.0,
+                    CacheMetrics.ContinentalVertexCount,
+                    CacheMetrics.ExemplarAssignmentCount);
+            }
         }
     }
 
@@ -2213,6 +2291,92 @@ void UTectonicSimulationService::ExportMetricsToCSV()
     else
     {
         UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to export metrics to: %s"), *FilePath);
+    }
+}
+
+void UTectonicSimulationService::ExportTerranesToCSV()
+{
+    const FString OutputDir = FPaths::ProjectSavedDir() / TEXT("TectonicMetrics");
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (!PlatformFile.DirectoryExists(*OutputDir))
+    {
+        PlatformFile.CreateDirectory(*OutputDir);
+    }
+
+    const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
+    const FString Filename = FString::Printf(TEXT("Terranes_Seed%d_Step%d_%s.csv"),
+        Parameters.Seed,
+        static_cast<int32>(CurrentTimeMy / 2.0),
+        *Timestamp);
+    const FString FilePath = OutputDir / Filename;
+
+    auto TerraneStateToString = [](ETerraneState State) -> const TCHAR*
+    {
+        switch (State)
+        {
+            case ETerraneState::Attached:     return TEXT("Attached");
+            case ETerraneState::Extracted:    return TEXT("Extracted");
+            case ETerraneState::Transporting: return TEXT("Transporting");
+            case ETerraneState::Colliding:    return TEXT("Colliding");
+            default:                          return TEXT("Unknown");
+        }
+    };
+
+    auto ComputeLatLonDegrees = [](const FVector3d& Position, double& OutLatDeg, double& OutLonDeg)
+    {
+        const FVector3d Unit = Position.IsNearlyZero() ? FVector3d::UnitZ() : Position.GetSafeNormal();
+        OutLatDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Unit.Z, -1.0, 1.0)));
+        OutLonDeg = FMath::RadiansToDegrees(FMath::Atan2(Unit.Y, Unit.X));
+    };
+
+    TArray<FString> CSVLines;
+    CSVLines.Add(TEXT("# Planetary Creation Terrane Export v1.0"));
+    CSVLines.Add(TEXT("TerraneID,State,SourcePlateID,CarrierPlateID,TargetPlateID,CentroidLat_deg,CentroidLon_deg,Area_km2,ExtractionTime_My,ReattachmentTime_My,ActiveDuration_My,VertexCount"));
+
+    if (Terranes.Num() == 0)
+    {
+        CSVLines.Add(TEXT("# No terranes recorded for current simulation state"));
+    }
+    else
+    {
+        for (const FContinentalTerrane& Terrane : Terranes)
+        {
+            double LatDeg = 0.0;
+            double LonDeg = 0.0;
+            ComputeLatLonDegrees(Terrane.Centroid, LatDeg, LonDeg);
+
+            const double ExtractionTime = Terrane.ExtractionTimeMy;
+            const bool bHasReattached = Terrane.ReattachmentTimeMy > 0.0;
+            const double ActiveDuration = FMath::Max(0.0, (bHasReattached ? Terrane.ReattachmentTimeMy : CurrentTimeMy) - ExtractionTime);
+
+            const FString ReattachColumn = bHasReattached
+                ? FString::Printf(TEXT("%.2f"), Terrane.ReattachmentTimeMy)
+                : TEXT("");
+
+            CSVLines.Add(FString::Printf(TEXT("%d,%s,%d,%d,%d,%.6f,%.6f,%.2f,%.2f,%s,%.2f,%d"),
+                Terrane.TerraneID,
+                TerraneStateToString(Terrane.State),
+                Terrane.SourcePlateID,
+                Terrane.CarrierPlateID,
+                Terrane.TargetPlateID,
+                LatDeg,
+                LonDeg,
+                Terrane.AreaKm2,
+                ExtractionTime,
+                *ReattachColumn,
+                ActiveDuration,
+                Terrane.VertexPayload.Num()));
+        }
+    }
+
+    const FString CSVContent = FString::Join(CSVLines, TEXT("\n"));
+    if (FFileHelper::SaveStringToFile(CSVContent, *FilePath))
+    {
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Exported terrane data to: %s"), *FilePath);
+    }
+    else
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to export terrane data to: %s"), *FilePath);
     }
 }
 
@@ -3957,6 +4121,39 @@ bool UTectonicSimulationService::ValidateTopology(FString& OutErrorMessage) cons
     return true;
 }
 
+int32 UTectonicSimulationService::GenerateDeterministicTerraneID(int32 SourcePlateID, double ExtractionTimeMy, const TArray<int32>& SortedVertexIndices, int32 Salt) const
+{
+    uint32 Hash = 0;
+    Hash = FCrc::MemCrc32(&Parameters.Seed, sizeof(int32), Hash);
+    Hash = FCrc::MemCrc32(&SourcePlateID, sizeof(int32), Hash);
+
+    const int32 TimeScaled = FMath::RoundToInt(ExtractionTimeMy * 1000.0);
+    Hash = FCrc::MemCrc32(&TimeScaled, sizeof(int32), Hash);
+    Hash = FCrc::MemCrc32(&Salt, sizeof(int32), Hash);
+
+    if (SortedVertexIndices.Num() > 0)
+    {
+        Hash = FCrc::MemCrc32(SortedVertexIndices.GetData(), SortedVertexIndices.Num() * sizeof(int32), Hash);
+    }
+
+    if (Hash == 0)
+    {
+        Hash = 0xA62B9D1Du;
+    }
+
+    int32 Candidate = static_cast<int32>(Hash & 0x7fffffff);
+    if (Candidate == INDEX_NONE)
+    {
+        Candidate = static_cast<int32>((Hash >> 1) & 0x7fffffff);
+        if (Candidate == INDEX_NONE)
+        {
+            Candidate = 0;
+        }
+    }
+
+    return Candidate;
+}
+
 double UTectonicSimulationService::ComputeTerraneArea(const TArray<int32>& VertexIndices) const
 {
     if (VertexIndices.Num() < 3)
@@ -4471,7 +4668,25 @@ bool UTectonicSimulationService::ExtractTerrane(int32 SourcePlateID, const TArra
     }
 
     FContinentalTerrane NewTerrane;
-    NewTerrane.TerraneID = NextTerraneID++;
+    int32 AssignedTerraneID = INDEX_NONE;
+    const int32 SaltBase = SavedNextTerraneID;
+    for (int32 Attempt = 0; Attempt < 8; ++Attempt)
+    {
+        const int32 Candidate = GenerateDeterministicTerraneID(SourcePlateID, CurrentTimeMy, SortedVertexIndices, SaltBase + Attempt);
+        if (Candidate != INDEX_NONE && GetTerraneByID(Candidate) == nullptr)
+        {
+            AssignedTerraneID = Candidate;
+            break;
+        }
+    }
+
+    if (AssignedTerraneID == INDEX_NONE)
+    {
+        AssignedTerraneID = SaltBase;
+    }
+
+    NewTerrane.TerraneID = AssignedTerraneID;
+    NextTerraneID++;
     NewTerrane.State = ETerraneState::Extracted;
     NewTerrane.SourcePlateID = SourcePlateID;
     NewTerrane.CarrierPlateID = INDEX_NONE;
@@ -6254,6 +6469,9 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     checkf(VertexElevationValues.Num() == VertexCount, TEXT("VertexElevationValues not initialized (must run erosion first)"));
     checkf(VertexCrustAge.Num() == VertexCount, TEXT("VertexCrustAge not initialized"));
 
+    LastContinentalCacheBuildSeconds = 0.0;
+    LastContinentalCacheProfileMetrics = FContinentalCacheProfileMetrics();
+
     const FString ProjectContentDir = FPaths::ProjectContentDir();
     RefreshContinentalAmplificationCache();
     const FTectonicSimulationParameters SimParams = GetParameters();
@@ -6262,12 +6480,12 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
         const double BaseElevation_m = VertexAmplifiedElevation[VertexIdx]; // Use oceanic-amplified elevation as base
-        const FContinentalAmplificationCacheEntry CacheEntry =
+        const FContinentalAmplificationCacheEntry* CacheEntry =
             ContinentalAmplificationCacheEntries.IsValidIndex(VertexIdx)
-                ? ContinentalAmplificationCacheEntries[VertexIdx]
-                : FContinentalAmplificationCacheEntry();
+                ? &ContinentalAmplificationCacheEntries[VertexIdx]
+                : nullptr;
 
-        if (!CacheEntry.bHasCachedData)
+        if (!CacheEntry || !CacheEntry->bHasCachedData)
         {
             continue;
         }
@@ -6276,7 +6494,7 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
             VertexIdx,
             VertexPosition,
             BaseElevation_m,
-            CacheEntry,
+            *CacheEntry,
             ProjectContentDir,
             SimParams.Seed);
 
@@ -6935,6 +7153,7 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
 #if UE_BUILD_DEVELOPMENT
     static int32 DebugComparisonCount = 0;
 #endif
+    bool bAppliedAnyJob = false;
 
     for (int32 JobIndex = PendingContinentalGPUJobs.Num() - 1; JobIndex >= 0; --JobIndex)
     {
@@ -7055,8 +7274,6 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                 Snapshot.VertexCount);
         }
 
-        const FContinentalAmplificationGPUInputs& LiveInputs = GetContinentalAmplificationGPUInputs();
-        const TArray<FContinentalAmplificationCacheEntry>& LiveCache = GetContinentalAmplificationCacheEntries();
         const FContinentalAmplificationSnapshot* ActiveSnapshot = bSnapshotUsable ? &Snapshot : nullptr;
         const TCHAR* SummaryLabel = ActiveSnapshot ? (bUseSnapshot ? TEXT("snapshot") : TEXT("snapshot fallback")) : TEXT("live fallback");
 
@@ -7073,146 +7290,210 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
         TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
         Amplified.SetNum(NumFloats);
 
-        int32 ContinentalOverrideCount = 0;
+        if (bUseSnapshot && ActiveSnapshot)
+        {
+            LastContinentalCacheBuildSeconds = 0.0;
 #if UE_BUILD_DEVELOPMENT
-        double AccumulatedDelta = 0.0;
-        double MaxDelta = 0.0;
+            double AccumulatedDelta = 0.0;
+            double MaxDelta = 0.0;
+            int32 SampleCount = 0;
 #endif
 
-        const FString ProjectContentDir = FPaths::ProjectContentDir();
-
-        for (int32 Index = 0; Index < NumFloats; ++Index)
-        {
-            const bool bHasSnapshotEntry = ActiveSnapshot &&
-                ActiveSnapshot->BaselineElevation.IsValidIndex(Index) &&
-                ActiveSnapshot->CacheEntries.IsValidIndex(Index) &&
-                ActiveSnapshot->RenderPositions.IsValidIndex(Index) &&
-                ActiveSnapshot->AmplifiedElevation.IsValidIndex(Index);
-
-            const FContinentalAmplificationCacheEntry* SnapshotCacheEntry = bHasSnapshotEntry
-                ? &ActiveSnapshot->CacheEntries[Index]
-                : nullptr;
-
-            const FContinentalAmplificationCacheEntry* LiveCacheEntry = LiveCache.IsValidIndex(Index)
-                ? &LiveCache[Index]
-                : nullptr;
-
-            const FContinentalAmplificationCacheEntry* PreferredCache = nullptr;
-            bool bUsingSnapshotData = false;
-
-            if (bUseSnapshot && SnapshotCacheEntry && SnapshotCacheEntry->bHasCachedData && SnapshotCacheEntry->ExemplarCount > 0)
+            for (int32 Index = 0; Index < NumFloats; ++Index)
             {
-                PreferredCache = SnapshotCacheEntry;
-                bUsingSnapshotData = true;
-            }
-            else if (!ActiveSnapshot && LiveCacheEntry && LiveCacheEntry->bHasCachedData && LiveCacheEntry->ExemplarCount > 0)
-            {
-                PreferredCache = LiveCacheEntry;
-                bUsingSnapshotData = false;
-            }
-
-            const double Baseline = bUsingSnapshotData && bHasSnapshotEntry
-                ? static_cast<double>(ActiveSnapshot->BaselineElevation[Index])
-                : (LiveInputs.BaselineElevation.IsValidIndex(Index) ? static_cast<double>(LiveInputs.BaselineElevation[Index]) : 0.0);
-
-            double CpuValue = Baseline;
-            bool bHasOverride = false;
-
-            if (PreferredCache)
-            {
-                FVector3d Position = FVector3d::ZeroVector;
-                if (bUsingSnapshotData && bHasSnapshotEntry)
-                {
-                    const FVector3f& SnapshotPos = ActiveSnapshot->RenderPositions[Index];
-                    Position = FVector3d(SnapshotPos.X, SnapshotPos.Y, SnapshotPos.Z);
-                }
-                else if (LiveInputs.RenderPositions.IsValidIndex(Index))
-                {
-                    const FVector3f& LivePos = LiveInputs.RenderPositions[Index];
-                    Position = FVector3d(LivePos.X, LivePos.Y, LivePos.Z);
-                }
-                else if (RenderVertices.IsValidIndex(Index))
-                {
-                    Position = RenderVertices[Index];
-                }
-
-                const int32 Seed = bUsingSnapshotData && bHasSnapshotEntry
-                    ? ActiveSnapshot->Parameters.Seed
-                    : Parameters.Seed;
-
-                CpuValue = ComputeContinentalAmplificationFromCache(
-                    Index,
-                    Position,
-                    Baseline,
-                    *PreferredCache,
-                    ProjectContentDir,
-                    Seed);
-                bHasOverride = true;
-            }
-            else if (ActiveSnapshot && ActiveSnapshot->AmplifiedElevation.IsValidIndex(Index))
-            {
-                CpuValue = ActiveSnapshot->AmplifiedElevation[Index];
-            }
-
-            if (bHasOverride)
-            {
-                ++ContinentalOverrideCount;
-            }
-
-            Amplified[Index] = CpuValue;
+                const double GPUValue = static_cast<double>((*TempData)[Index]);
+                Amplified[Index] = GPUValue;
 
 #if UE_BUILD_DEVELOPMENT
-            const double GPUValue = static_cast<double>((*TempData)[Index]);
-            const double Delta = FMath::Abs(CpuValue - GPUValue);
-            AccumulatedDelta += Delta;
-            MaxDelta = FMath::Max(MaxDelta, Delta);
+                if (ActiveSnapshot->AmplifiedElevation.IsValidIndex(Index))
+                {
+                    const double CpuValue = ActiveSnapshot->AmplifiedElevation[Index];
+                    const double Delta = FMath::Abs(CpuValue - GPUValue);
+                    AccumulatedDelta += Delta;
+                    MaxDelta = FMath::Max(MaxDelta, Delta);
+                    ++SampleCount;
 
-            if ((DebugComparisonCount < 5) || Delta > 1.0)
-            {
-                const uint32 TerrainInfo = bHasSnapshotEntry
-                    ? (static_cast<uint32>(ActiveSnapshot->CacheEntries[Index].TerrainType) | (ActiveSnapshot->CacheEntries[Index].ExemplarCount << 8u))
-                    : (LiveInputs.PackedTerrainInfo.IsValidIndex(Index) ? LiveInputs.PackedTerrainInfo[Index] : 0u);
+                    if ((DebugComparisonCount < 5) || Delta > 1.0)
+                    {
+                        const FContinentalAmplificationCacheEntry& CacheEntry = ActiveSnapshot->CacheEntries[Index];
+                        const uint32 TerrainInfo = static_cast<uint32>(CacheEntry.TerrainType) | (CacheEntry.ExemplarCount << 8u);
 
-                const TCHAR* SourceLabel = bHasSnapshotEntry ? (bUseSnapshot ? TEXT("Snapshot") : TEXT("SnapshotFallback")) : TEXT("Live");
-
-                UE_LOG(LogPlanetaryCreation, Log,
-                    TEXT("[ContinentalGPUReadback][Compare] Vtx=%d Base=%.2f CPU=%.2f GPU=%.2f Delta=%.2f Terrain=%u Source=%s"),
-                    Index,
-                    Baseline,
-                    CpuValue,
-                    GPUValue,
-                    Delta,
-                    TerrainInfo & 0xFFu,
-                    SourceLabel);
-                ++DebugComparisonCount;
-            }
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[ContinentalGPUReadback][Compare] Vtx=%d Base=%.2f CPU=%.2f GPU=%.2f Delta=%.2f Terrain=%u Source=Snapshot"),
+                            Index,
+                            ActiveSnapshot->BaselineElevation.IsValidIndex(Index) ? ActiveSnapshot->BaselineElevation[Index] : 0.0f,
+                            CpuValue,
+                            GPUValue,
+                            Delta,
+                            TerrainInfo);
+                        ++DebugComparisonCount;
+                    }
+                }
 #endif
-        }
+            }
 
 #if UE_BUILD_DEVELOPMENT
-        if (ContinentalOverrideCount > 0)
-        {
-            const double MeanDelta = ContinentalOverrideCount > 0 ? AccumulatedDelta / ContinentalOverrideCount : 0.0;
+            const double MeanDelta = SampleCount > 0 ? AccumulatedDelta / static_cast<double>(SampleCount) : 0.0;
             UE_LOG(LogPlanetaryCreation, Log,
-                TEXT("[ContinentalGPUReadback] Overrides=%d/%d MeanDelta=%.3f MaxDelta=%.3f (%s)"),
-                ContinentalOverrideCount,
+                TEXT("[ContinentalGPUReadback] GPU applied %d verts | MeanDelta=%.3f MaxDelta=%.3f (%s)"),
                 NumFloats,
                 MeanDelta,
                 MaxDelta,
                 SummaryLabel);
+#endif
+            bAppliedAnyJob = true;
         }
         else
         {
-            UE_LOG(LogPlanetaryCreation, Log,
-                TEXT("[ContinentalGPUReadback] No continental overrides applied (VertexCount=%d, Source=%s)"),
-                NumFloats,
-                SummaryLabel);
-        }
+            const FContinentalAmplificationGPUInputs& LiveInputs = GetContinentalAmplificationGPUInputs();
+            const TArray<FContinentalAmplificationCacheEntry>& LiveCache = GetContinentalAmplificationCacheEntries();
+            const FString ProjectContentDir = FPaths::ProjectContentDir();
+
+            int32 ContinentalOverrideCount = 0;
+#if UE_BUILD_DEVELOPMENT
+            double AccumulatedDelta = 0.0;
+            double MaxDelta = 0.0;
 #endif
+
+            for (int32 Index = 0; Index < NumFloats; ++Index)
+            {
+                const bool bHasSnapshotEntry = ActiveSnapshot &&
+                    ActiveSnapshot->BaselineElevation.IsValidIndex(Index) &&
+                    ActiveSnapshot->CacheEntries.IsValidIndex(Index) &&
+                    ActiveSnapshot->RenderPositions.IsValidIndex(Index) &&
+                    ActiveSnapshot->AmplifiedElevation.IsValidIndex(Index);
+
+                const FContinentalAmplificationCacheEntry* SnapshotCacheEntry = bHasSnapshotEntry
+                    ? &ActiveSnapshot->CacheEntries[Index]
+                    : nullptr;
+
+                const FContinentalAmplificationCacheEntry* LiveCacheEntry = LiveCache.IsValidIndex(Index)
+                    ? &LiveCache[Index]
+                    : nullptr;
+
+                const FContinentalAmplificationCacheEntry* PreferredCache = nullptr;
+                bool bUsingSnapshotData = false;
+
+                if (bUseSnapshot && SnapshotCacheEntry && SnapshotCacheEntry->bHasCachedData && SnapshotCacheEntry->ExemplarCount > 0)
+                {
+                    PreferredCache = SnapshotCacheEntry;
+                    bUsingSnapshotData = true;
+                }
+                else if (!ActiveSnapshot && LiveCacheEntry && LiveCacheEntry->bHasCachedData && LiveCacheEntry->ExemplarCount > 0)
+                {
+                    PreferredCache = LiveCacheEntry;
+                    bUsingSnapshotData = false;
+                }
+
+                const double Baseline = bUsingSnapshotData && bHasSnapshotEntry
+                    ? static_cast<double>(ActiveSnapshot->BaselineElevation[Index])
+                    : (LiveInputs.BaselineElevation.IsValidIndex(Index) ? static_cast<double>(LiveInputs.BaselineElevation[Index]) : 0.0);
+
+                double CpuValue = Baseline;
+                bool bHasOverride = false;
+
+                if (PreferredCache)
+                {
+                    FVector3d Position = FVector3d::ZeroVector;
+                    if (bUsingSnapshotData && bHasSnapshotEntry)
+                    {
+                        const FVector3f& SnapshotPos = ActiveSnapshot->RenderPositions[Index];
+                        Position = FVector3d(SnapshotPos.X, SnapshotPos.Y, SnapshotPos.Z);
+                    }
+                    else if (LiveInputs.RenderPositions.IsValidIndex(Index))
+                    {
+                        const FVector3f& LivePos = LiveInputs.RenderPositions[Index];
+                        Position = FVector3d(LivePos.X, LivePos.Y, LivePos.Z);
+                    }
+                    else if (RenderVertices.IsValidIndex(Index))
+                    {
+                        Position = RenderVertices[Index];
+                    }
+
+                    const int32 Seed = bUsingSnapshotData && bHasSnapshotEntry
+                        ? ActiveSnapshot->Parameters.Seed
+                        : Parameters.Seed;
+
+                    CpuValue = ComputeContinentalAmplificationFromCache(
+                        Index,
+                        Position,
+                        Baseline,
+                        *PreferredCache,
+                        ProjectContentDir,
+                        Seed);
+                    bHasOverride = true;
+                }
+                else if (ActiveSnapshot && ActiveSnapshot->AmplifiedElevation.IsValidIndex(Index))
+                {
+                    CpuValue = ActiveSnapshot->AmplifiedElevation[Index];
+                }
+
+                if (bHasOverride)
+                {
+                    ++ContinentalOverrideCount;
+                }
+
+                Amplified[Index] = CpuValue;
+
+#if UE_BUILD_DEVELOPMENT
+                const double GPUValue = static_cast<double>((*TempData)[Index]);
+                const double Delta = FMath::Abs(CpuValue - GPUValue);
+                AccumulatedDelta += Delta;
+                MaxDelta = FMath::Max(MaxDelta, Delta);
+
+                if ((DebugComparisonCount < 5) || Delta > 1.0)
+                {
+                    const uint32 TerrainInfo = bHasSnapshotEntry
+                        ? (static_cast<uint32>(ActiveSnapshot->CacheEntries[Index].TerrainType) | (ActiveSnapshot->CacheEntries[Index].ExemplarCount << 8u))
+                        : (LiveInputs.PackedTerrainInfo.IsValidIndex(Index) ? LiveInputs.PackedTerrainInfo[Index] : 0u);
+
+                    const TCHAR* SourceLabel = bHasSnapshotEntry ? (bUseSnapshot ? TEXT("Snapshot") : TEXT("SnapshotFallback")) : TEXT("Live");
+
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[ContinentalGPUReadback][Compare] Vtx=%d Base=%.2f CPU=%.2f GPU=%.2f Delta=%.2f Terrain=%u Source=%s"),
+                        Index,
+                        Baseline,
+                        CpuValue,
+                        GPUValue,
+                        Delta,
+                        TerrainInfo & 0xFFu,
+                        SourceLabel);
+                    ++DebugComparisonCount;
+                }
+#endif
+            }
+
+#if UE_BUILD_DEVELOPMENT
+            if (ContinentalOverrideCount > 0)
+            {
+                const double MeanDelta = ContinentalOverrideCount > 0 ? AccumulatedDelta / ContinentalOverrideCount : 0.0;
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[ContinentalGPUReadback] Overrides=%d/%d MeanDelta=%.3f MaxDelta=%.3f (%s)"),
+                    ContinentalOverrideCount,
+                    NumFloats,
+                    MeanDelta,
+                    MaxDelta,
+                    SummaryLabel);
+            }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[ContinentalGPUReadback] No continental overrides applied (VertexCount=%d, Source=%s)"),
+                    NumFloats,
+                    SummaryLabel);
+            }
+#endif
+            bAppliedAnyJob = true;
+        }
 
         SurfaceDataVersion++;
         PendingContinentalGPUJobs.RemoveAt(JobIndex);
         BumpOceanicAmplificationSerial();
+    }
+
+    if (bAppliedAnyJob)
+    {
+        bContinentalGPUResultWasApplied = true;
     }
 
     if (OutReadbackSeconds)
@@ -7395,6 +7676,17 @@ void UTectonicSimulationService::RefreshOceanicAmplificationFloatInputs() const
 
 void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() const
 {
+    const int32 StageBLogModeLocal = CVarPlanetaryCreationStageBProfiling.GetValueOnAnyThread();
+    const bool bCaptureMetrics = (StageBLogModeLocal > 0);
+    const double FunctionStart = bCaptureMetrics ? FPlatformTime::Seconds() : 0.0;
+    FContinentalCacheProfileMetrics LocalMetrics;
+
+    if (!bCaptureMetrics)
+    {
+        LastContinentalCacheProfileMetrics = FContinentalCacheProfileMetrics();
+        LastContinentalCacheBuildSeconds = 0.0;
+    }
+
     FContinentalAmplificationGPUInputs& Cache = ContinentalAmplificationGPUInputs;
 
     const int32 VertexCount = VertexAmplifiedElevation.Num();
@@ -7410,6 +7702,11 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         Cache.CachedDataSerial = OceanicAmplificationDataSerial;
         Cache.CachedTopologyVersion = TopologyVersion;
         Cache.CachedSurfaceVersion = SurfaceDataVersion;
+        if (bCaptureMetrics)
+        {
+            LastContinentalCacheProfileMetrics = LocalMetrics;
+            LastContinentalCacheBuildSeconds = 0.0;
+        }
         return;
     }
 
@@ -7420,6 +7717,11 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
 
     if (bUpToDate)
     {
+        if (bCaptureMetrics)
+        {
+            LastContinentalCacheProfileMetrics = LocalMetrics;
+            LastContinentalCacheBuildSeconds = 0.0;
+        }
         return;
     }
 
@@ -7650,6 +7952,14 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             continue;
         }
 
+        ++LocalMetrics.ContinentalVertexCount;
+
+        double ClassificationStart = 0.0;
+        if (bCaptureMetrics)
+        {
+            ClassificationStart = FPlatformTime::Seconds();
+        }
+
         const double BaseElevation = VertexAmplifiedElevation[VertexIdx];
         const double OrogenyAge = VertexCrustAge.IsValidIndex(VertexIdx) ? VertexCrustAge[VertexIdx] : 0.0;
 
@@ -7660,12 +7970,25 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             TerrainType = DetermineTerrainType(*PlatePtr, VertexPosition, BaseElevation, OrogenyAge);
         }
 
+        if (bCaptureMetrics)
+        {
+            LocalMetrics.ClassificationSeconds += FPlatformTime::Seconds() - ClassificationStart;
+        }
+
         const TArray<int32>* ExemplarListPtr = GetExemplarListForTerrain(TerrainType);
         const TArray<int32>& ExemplarList = ExemplarListPtr ? *ExemplarListPtr : AncientIndices;
 
         const uint32 ExemplarCount = FMath::Min<uint32>(MaxExemplarBlendCount, static_cast<uint32>(ExemplarList.Num()));
         if (ExemplarCount > 0)
         {
+            ++LocalMetrics.ExemplarAssignmentCount;
+
+            double ExemplarStart = 0.0;
+            if (bCaptureMetrics)
+            {
+                ExemplarStart = FPlatformTime::Seconds();
+            }
+
             float TotalWeight = 0.0f;
             float Weights[MaxExemplarBlendCount] = { 0.0f, 0.0f, 0.0f };
             uint32 Indices[MaxExemplarBlendCount] = { InvalidIndex, InvalidIndex, InvalidIndex };
@@ -7691,6 +8014,11 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             RandomOffset = FVector2f(static_cast<float>(RandomOffsetDouble.X), static_cast<float>(RandomOffsetDouble.Y));
 
             PackedInfo = static_cast<uint32>(TerrainType) | (ExemplarCount << 8);
+
+            if (bCaptureMetrics)
+            {
+                LocalMetrics.ExemplarSelectionSeconds += FPlatformTime::Seconds() - ExemplarStart;
+            }
         }
         else
         {
@@ -7742,6 +8070,14 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             }
         }
 #endif
+    }
+
+    if (bCaptureMetrics)
+    {
+        const double FunctionDuration = FPlatformTime::Seconds() - FunctionStart;
+        LocalMetrics.TotalSeconds = FunctionDuration;
+        LastContinentalCacheProfileMetrics = LocalMetrics;
+        LastContinentalCacheBuildSeconds = FunctionDuration;
     }
 
     Cache.CachedDataSerial = OceanicAmplificationDataSerial;
@@ -7810,6 +8146,13 @@ void UTectonicSimulationService::RefreshContinentalAmplificationCache() const
     };
 
     ContinentalAmplificationCacheEntries.SetNum(VertexCount);
+
+    const int32 PreviousBlendCacheCount = ContinentalAmplificationBlendCache.Num();
+    ContinentalAmplificationBlendCache.SetNum(VertexCount);
+    for (int32 BlendIdx = PreviousBlendCacheCount; BlendIdx < VertexCount; ++BlendIdx)
+    {
+        ContinentalAmplificationBlendCache[BlendIdx] = FContinentalBlendCache();
+    }
 
     for (int32 Index = 0; Index < VertexCount; ++Index)
     {
@@ -7885,14 +8228,9 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
         return AmplifiedElevation;
     }
 
-    if (!IsExemplarLibraryLoaded())
-    {
-        if (!LoadExemplarLibraryJSON(ProjectContentDir))
-        {
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load exemplar library, skipping continental amplification"));
-            return AmplifiedElevation;
-        }
-    }
+    FContinentalBlendCache* BlendCacheEntry = ContinentalAmplificationBlendCache.IsValidIndex(VertexIdx)
+        ? &ContinentalAmplificationBlendCache[VertexIdx]
+        : nullptr;
 
 #if UE_BUILD_DEVELOPMENT
     FContinentalAmplificationDebugInfo* DebugInfo = GetContinentalAmplificationDebugInfoPtr();
@@ -7911,6 +8249,8 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
             DebugInfo->Weights[DebugIdx] = 0.0;
         }
     }
+#else
+    FContinentalAmplificationDebugInfo* DebugInfo = nullptr;
 #endif
 
     const double WrappedU = FMath::Frac(static_cast<double>(CacheEntry.WrappedUV.X));
@@ -7918,72 +8258,107 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
 
     double BlendedHeight = 0.0;
     double TotalWeight = 0.0;
+    double ReferenceMean = 0.0;
+    bool bHasReferenceMean = false;
 
-    for (uint32 SampleIdx = 0; SampleIdx < CacheEntry.ExemplarCount; ++SampleIdx)
+    const uint64 CurrentCacheSerial = ContinentalAmplificationCacheSerial;
+    const bool bDebugRequested = (DebugInfo != nullptr);
+    const bool bBlendCacheValid = BlendCacheEntry && BlendCacheEntry->CachedSerial == CurrentCacheSerial && !bDebugRequested;
+
+    if (bBlendCacheValid)
     {
-        const uint32 LibraryIndex = CacheEntry.ExemplarIndices[SampleIdx];
-        if (LibraryIndex == MAX_uint32)
-        {
-            continue;
-        }
-
-        FExemplarMetadata* Exemplar = AccessExemplarMetadata(static_cast<int32>(LibraryIndex));
-        if (!Exemplar)
-        {
-            continue;
-        }
-
-        if (!Exemplar->bDataLoaded)
-        {
-            LoadExemplarHeightData(*Exemplar, ProjectContentDir);
-        }
-
-        const double Weight = static_cast<double>(CacheEntry.Weights[SampleIdx]);
-if (Weight <= 0.0)
-        {
-            continue;
-        }
-
-        const double SampledHeight = SampleExemplarHeight(*Exemplar, WrappedU, WrappedV);
-        BlendedHeight += SampledHeight * Weight;
-        TotalWeight += Weight;
-
-#if UE_BUILD_DEVELOPMENT
-        if (DebugInfo)
-        {
-            DebugInfo->ExemplarIndices[SampleIdx] = LibraryIndex;
-            DebugInfo->SampleHeights[SampleIdx] = SampledHeight;
-            DebugInfo->Weights[SampleIdx] = Weight;
-        }
-#endif
+        BlendedHeight = static_cast<double>(BlendCacheEntry->BlendedHeight);
+        ReferenceMean = static_cast<double>(BlendCacheEntry->ReferenceMean);
+        bHasReferenceMean = BlendCacheEntry->bHasReferenceMean;
+        TotalWeight = static_cast<double>(CacheEntry.TotalWeight);
     }
-
-    if (TotalWeight > 0.0)
+    else
     {
-        BlendedHeight /= TotalWeight;
-    }
-
-    if (CacheEntry.ExemplarCount > 0)
-    {
-        const uint32 ReferenceIndex = CacheEntry.ExemplarIndices[0];
-        if (ReferenceIndex != MAX_uint32)
+        if (!IsExemplarLibraryLoaded())
         {
-            const FExemplarMetadata* RefExemplar = AccessExemplarMetadataConst(static_cast<int32>(ReferenceIndex));
-            if (RefExemplar)
+            if (!LoadExemplarLibraryJSON(ProjectContentDir))
             {
-                const double DetailScale = (BaseElevation_m > 1000.0)
-                    ? (BaseElevation_m / RefExemplar->ElevationMean_m)
-                    : 0.5;
-                const double Detail = (BlendedHeight - RefExemplar->ElevationMean_m) * DetailScale;
-                AmplifiedElevation += Detail;
-#if UE_BUILD_DEVELOPMENT
-                if (DebugInfo)
-                {
-                    DebugInfo->ReferenceMean = RefExemplar->ElevationMean_m;
-                }
-#endif
+                UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load exemplar library, skipping continental amplification"));
+                return AmplifiedElevation;
             }
         }
+
+        double WeightedSum = 0.0;
+
+        for (uint32 SampleIdx = 0; SampleIdx < CacheEntry.ExemplarCount; ++SampleIdx)
+        {
+            const uint32 LibraryIndex = CacheEntry.ExemplarIndices[SampleIdx];
+            if (LibraryIndex == MAX_uint32)
+            {
+                continue;
+            }
+
+            FExemplarMetadata* Exemplar = AccessExemplarMetadata(static_cast<int32>(LibraryIndex));
+            if (!Exemplar)
+            {
+                continue;
+            }
+
+            if (!Exemplar->bDataLoaded && !LoadExemplarHeightData(*Exemplar, ProjectContentDir))
+            {
+                continue;
+            }
+
+            const double Weight = static_cast<double>(CacheEntry.Weights[SampleIdx]);
+            if (Weight <= 0.0)
+            {
+                continue;
+            }
+
+            const double SampledHeight = SampleExemplarHeight(*Exemplar, WrappedU, WrappedV);
+            WeightedSum += SampledHeight * Weight;
+            TotalWeight += Weight;
+
+#if UE_BUILD_DEVELOPMENT
+            if (DebugInfo)
+            {
+                DebugInfo->ExemplarIndices[SampleIdx] = LibraryIndex;
+                DebugInfo->SampleHeights[SampleIdx] = SampledHeight;
+                DebugInfo->Weights[SampleIdx] = Weight;
+            }
+#endif
+        }
+
+        if (TotalWeight > 0.0)
+        {
+            BlendedHeight = WeightedSum / TotalWeight;
+        }
+
+        if (CacheEntry.ExemplarCount > 0)
+        {
+            const uint32 ReferenceIndex = CacheEntry.ExemplarIndices[0];
+            if (ReferenceIndex != MAX_uint32)
+            {
+                const FExemplarMetadata* RefExemplar = AccessExemplarMetadataConst(static_cast<int32>(ReferenceIndex));
+                if (RefExemplar)
+                {
+                    ReferenceMean = RefExemplar->ElevationMean_m;
+                    bHasReferenceMean = true;
+                }
+            }
+        }
+
+        if (BlendCacheEntry)
+        {
+            BlendCacheEntry->BlendedHeight = static_cast<float>(BlendedHeight);
+            BlendCacheEntry->ReferenceMean = static_cast<float>(ReferenceMean);
+            BlendCacheEntry->CachedSerial = CurrentCacheSerial;
+            BlendCacheEntry->bHasReferenceMean = bHasReferenceMean;
+        }
+    }
+
+    if (bHasReferenceMean)
+    {
+        const double DetailScale = (BaseElevation_m > 1000.0)
+            ? (ReferenceMean != 0.0 ? (BaseElevation_m / ReferenceMean) : 0.0)
+            : 0.5;
+        const double Detail = (BlendedHeight - ReferenceMean) * DetailScale;
+        AmplifiedElevation += Detail;
     }
 
 #if UE_BUILD_DEVELOPMENT
@@ -7994,6 +8369,7 @@ if (Weight <= 0.0)
         DebugInfo->CpuResult = AmplifiedElevation;
         DebugInfo->UValue = static_cast<double>(CacheEntry.WrappedUV.X);
         DebugInfo->VValue = static_cast<double>(CacheEntry.WrappedUV.Y);
+        DebugInfo->ReferenceMean = ReferenceMean;
     }
 #endif
 

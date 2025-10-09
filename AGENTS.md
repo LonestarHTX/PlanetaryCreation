@@ -14,21 +14,19 @@
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
 - Run Milestone 3 automation suite: `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
 - GPU preview parity suites (Milestone 6): launch from Windows PowerShell via `Automation RunTests PlanetaryCreation.Milestone6.GPU`.
-- When driving Windows commandlets from WSL, follow this five-step template. **Execute each step in order; do not omit any part.**
-  1. **Executable (WSL path):** `"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"`
-  2. **Project path (Windows-style, quoted):** `"C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject"`
-  3. **Optional CVars:** append any console variables with `-SetCVar="Name=Value"` (e.g., `-SetCVar="r.PlanetaryCreation.StageBProfiling=1"`).
-  4. **Exec commands:** `-ExecCmds="Automation RunTests <ExactTestPath>; Quit"` — replace `<ExactTestPath>` with the suite name (ex: `PlanetaryCreation.Milestone6.GPU.OceanicParity`). Always include `; Quit`.
-  5. **Required flags:** `-unattended -nop4 -nosplash`
-
-  Example (Milestone 6 oceanic parity + profiling):
+- Running GPU automation from WSL **must** hop out to a native Windows shell (PowerShell or `cmd.exe`). Launching `UnrealEditor-Cmd.exe` directly inside WSL fails with `UtilBindVsockAnyPort` and the command times out after ~10 s.
+- Typical PowerShell pattern (swap the test name as needed):
+  ```powershell
+  & 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' `
+    'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' `
+    -SetCVar='r.PlanetaryCreation.StageBProfiling=1' `
+    -ExecCmds='Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity' `
+    -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log
   ```
-  "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
-    "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
-    -SetCVar="r.PlanetaryCreation.StageBProfiling=1" \
-    -ExecCmds="Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit" \
-    -unattended -nop4 -nosplash
+  - Swap the test name for `PlanetaryCreation.Milestone6.GPU.ContinentalParity` to capture the complementary Stage B tables; both suites now emit `[StageB][Profile]`/`[StageB][CacheProfile]` as long as the command is launched this way.
   ```
+  - **Do not** append `Quit` inside `-ExecCmds`; the automation controller exits on its own when `-TestExit="Automation Test Queue Empty"` is present. Adding `Quit` or manually terminating the process prevents the queue from running, which was the root cause of earlier “nothing happens” sessions.
+  - Let the command run to completion—the Stage B `[StageB][Profile]` / `[StageB][CacheProfile]` lines appear once the parity suite reaches the replay phase.
 
 ## Coding Style & Naming Conventions
 - Follow Unreal C++ style: 4-space indentation, no tabs.

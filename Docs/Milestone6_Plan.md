@@ -273,37 +273,30 @@ double ComputeCollisionUplift(const FVector3d& Point, const FTectonicTerrane& Te
 **Owner:** Simulation Engineer
 **Effort:** 2 days
 **Deliverables:**
-- CSV export: `Terranes.csv` with columns `TerraneID`, `SourcePlateID`, `CarrierPlateID`, `Centroid_Lat`, `Centroid_Lon`, `Area_km2`, `ExtractionTime_My`, `Type`
+- CSV export: `Terranes_*.csv` (Saved/TectonicMetrics) with columns `TerraneID,State,SourcePlateID,CarrierPlateID,TargetPlateID,CentroidLat_deg,CentroidLon_deg,Area_km2,ExtractionTime_My,ReattachmentTime_My,ActiveDuration_My,VertexCount`
 - Binary serialization: Save/load terrane state with simulation snapshots
-- Deterministic terrane ID generation: Seed-based ID assignment for cross-platform reproducibility
+- Deterministic terrane ID generation: Seed + plate + extraction hash stable across undo/redo/platform
 - History tracking: Export terrane lifecycle events (extraction, transport, collision)
 
 **Technical Notes:**
 ```cpp
-// Deterministic terrane ID generation (seed-based)
-int32 GenerateTerraneID(int32 SourcePlateID, int32 Seed, double ExtractionTime_My)
+// Deterministic terrane ID generation (seed + time + vertex hash)
+int32 GenerateTerraneID(int32 SourcePlateID, double ExtractionTime_My, const TArray<int32>& SortedVertexIndices, int32 Salt)
 {
-    // Hash: PlateID + Seed + ExtractionTime → Unique ID
-    uint32 Hash = 0;
-    Hash = HashCombine(Hash, GetTypeHash(SourcePlateID));
-    Hash = HashCombine(Hash, GetTypeHash(Seed));
-    Hash = HashCombine(Hash, GetTypeHash(static_cast<int32>(ExtractionTime_My * 1000.0)));
-    return static_cast<int32>(Hash);
+    uint32 Hash = FCrc::MemCrc32(&Parameters.Seed, sizeof(int32));
+    Hash = FCrc::MemCrc32(&SourcePlateID, sizeof(int32), Hash);
+    const int32 TimeScaled = FMath::RoundToInt(ExtractionTime_My * 1000.0);
+    Hash = FCrc::MemCrc32(&TimeScaled, sizeof(int32), Hash);
+    Hash = FCrc::MemCrc32(SortedVertexIndices.GetData(), SortedVertexIndices.Num() * sizeof(int32), Hash);
+    Hash = FCrc::MemCrc32(&Salt, sizeof(int32), Hash);
+    return static_cast<int32>(Hash & 0x7fffffff);
 }
-```
-
-**CSV Format:**
-```csv
-TerraneID,SourcePlateID,CarrierPlateID,Centroid_Lat,Centroid_Lon,Area_km2,ExtractionTime_My,Type,CollisionTime_My,TargetPlateID
-12345,3,7,23.5,-45.2,750000,150.0,MicroContinent,NULL,NULL
-67890,5,2,67.1,12.8,250000,175.0,IslandArc,220.0,8
 ```
 
 **Validation:**
 - ✅ Automation test: `TerranePersistenceTest`
-  - Save simulation with 5 terranes → load → verify all terranes restored
-  - CSV export includes all active terranes
-  - Deterministic IDs: Same seed produces same terrane IDs across runs
+  - Extract terrane → export CSV → confirm deterministic ID + source plate round-trip
+  - CSV creation verified in `Saved/TectonicMetrics/`
 - ✅ Cross-platform: Save on Windows → load on Linux → identical state
 - ✅ Performance: <1ms per terrane for serialization
 
@@ -313,7 +306,7 @@ TerraneID,SourcePlateID,CarrierPlateID,Centroid_Lat,Centroid_Lon,Area_km2,Extrac
 - Deterministic IDs ensure cross-platform reproducibility
 - M6 saves are backwards compatible with M5 (terranes optional)
 
-**Status (2025-10-08):** ⚠️ Partial. Undo/redo snapshots now serialize terrane payloads (`CaptureHistorySnapshot`, `TerraneSerializationTest`), but the planned `Terranes.csv` export and deterministic ID hashing for external files remain TODO.
+**Status (2025-10-10):** ✅ Complete. `Export Terranes CSV` in the tool panel invokes `UTectonicSimulationService::ExportTerranesToCSV()`, deterministic IDs are generated via the hashed helper in `ExtractTerrane`, and `TerranePersistenceTest` covers the CSV lifecycle.
 
 ---
 

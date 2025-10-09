@@ -1,4 +1,4 @@
-# Milestone 6 Performance Baseline (Updated 2025-10-08)
+# Milestone 6 Performance Baseline (Updated 2025-10-10)
 
 ## Test Environment
 - **Host:** Windows 11 (WSL2 client), 16C/32T CPU
@@ -12,38 +12,41 @@ All commands below are executed from WSL and invoke the Windows editor binary so
 ## Harness Commands
 | Purpose | Command |
 | --- | --- |
-| Stage B profiling + oceanic parity (LOD 7) | `"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" -ExecCmds="r.PlanetaryCreation.StageBProfiling 1; Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity; Quit" -unattended -nop4 -nosplash` |
+| Stage B profiling + GPU parity (run from Windows PowerShell) | `& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' 'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' -SetCVar='r.PlanetaryCreation.StageBProfiling=1' -ExecCmds='Automation RunTests PlanetaryCreation.Milestone6.GPU.<SuiteName>' -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log` |
 | L3 regression baseline (M5 vs M4) | `"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" -ExecCmds="Automation RunTests PlanetaryCreation.Milestone5.PerformanceRegression; Quit" -unattended -nop4 -nosplash` |
 | Insights capture (optional) | append `-trace=cpu,frame,counters,stats -statnamedevents -csvStats="csv:FrameTime,FrameTimeGPU"` to either command. Traces emit to `%LocalAppData%/UnrealEngine/Common/Analytics/UnrealInsights`. |
 
-Logs for every run are written to `Saved/Logs/PlanetaryCreation.log`. The Stage B profiling block is keyed by `[StepTiming]`.
+Logs for every run are written to `Saved/Logs/PlanetaryCreation.log`. When the GPU parity suites run through the PowerShell harness above, `[StageB][Profile]` and `[StageB][CacheProfile]` sections land in `Saved/Logs/PlanetaryCreation_2.log` automatically; use those entries alongside `[StepTiming]` for Stage B analysis.
 
 ## Results Snapshot
 
 ### Stage B Profiling (LOD 7)
 
-`Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity` and `…ContinentalParity` drive the CPU baseline + replay followed by the GPU path with Stage B profiling enabled.
+`Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity` and `…ContinentalParity` drive the CPU baseline + replay followed by the GPU path with Stage B profiling enabled. (Recorded with the PowerShell command pattern above on 2025-10-10.)
 
-**Oceanic GPU parity**
+**Oceanic GPU parity (2025-10-10)**
 
-| Step Range | Total (ms) | Stage B (ms) | Baseline | Ridge | Oceanic | Continental | Readback |
+| Phase | Total (ms) | Stage B (ms) | Baseline | Ridge | Oceanic | Cache | Readback | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CPU baseline (steps 2‑7) | 167–175 | **19.4** | 0.10 | 0.03 | **19.3 ms (CPU)** | 0.00 | 0.00 | Warm steady-state before GPU swap |
+| GPU pass (step 8) | 240.1 | **10.9** | 0.10 | 0.03 | **10.8 ms (GPU)** | 0.00 | 0.00 | Includes one-time preview/texture init cost |
+
+**Continental parity**
+
+| Phase | Stage B (ms) | Baseline | Ridge | Continental CPU | Cache | Readback | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 – 4 | 170.7 | 19.7 | 0.10 | 0.03 | 19.5 | 0.00 | 0.00 |
-| 5 – 7 | 169.2 | 19.6 | 0.10 | 0.03 | 19.4 | 0.00 | 0.00 |
+| Snapshot-backed GPU run | *(Async write-back)* | – | – | – | – | 0.00 | `[ContinentalGPUReadback] GPU applied … (snapshot)` now writes the GPU results back into `VertexAmplifiedElevation` (mean delta ≈0 m, max delta 0.0003 m). |
+| Drift fallback replay | **19.6** | 0.10 | 0.00 | **12.4–13.1 ms** | **≈7.1 ms** | 0.00 | Intentional undo/replay that verifies the CPU cache path (`Source=snapshot fallback` in the log). |
+| Reduced vertex set | 16.7 | 0.11 | 0.00 | 10.8 ms | 5.8 ms | 0.00 | After Voronoi trim during the fallback replay. |
 
-**Continental GPU parity**
-
-| Step Range | Total (ms) | Stage B (ms) | Baseline | Ridge | Oceanic | Continental | Readback |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 – 4 | 154.9 | 9.0 | 0.10 | 0.00 | 0.00 | 8.9 | 0.00 |
-| 5 – 7 | 153.0 | 8.8 | 0.10 | 0.00 | 0.00 | 8.7 | 0.00 |
 
 **Key takeaways**
-- Steady-state Stage B cost is ~**19.6 ms** when running the oceanic GPU pass and ~**8.8 ms** for the continental pass; readback remains at zero in both cases.
-- Ridge recompute cost is effectively **0.03 ms** per step thanks to the incremental Voronoi dirtying and reduced default dirty-ring depth.
-- First post-reset step still reports the full Voronoi reassignment (`163 842*`) by design, but subsequent steps dirty only **72 vertices**; longer runs stabilize around **93 k** reassigned vertices without forcing a blanket refresh.
-- Snapshot serial/hash fix still holds—no `[StageB][GPU] … hash mismatch` warnings, and GPU parity exits with max delta **0.0003 m**.
-- Navigation system ensure remains suppressed by the module handler; parity logs show only the single warning (`NavigationSystem.cpp:3808`).
+- Oceanic Stage B now holds at **~19.4 ms** on the CPU baseline and **~10.9 ms** once the GPU pass takes over; the GPU path keeps readback at zero and only pays a one-time preview setup cost.
+- Continental parity’s first replay now applies pure GPU output (`[ContinentalGPUReadback] GPU applied … (snapshot)`), while the follow-up undo still exercises the legacy cache fallback (Stage B ≈19.6 ms) for drift coverage.
+- Ridge recompute cost stays near **0.03 ms** courtesy of incremental Voronoi dirtying; only the post-reset frame rebuilds the full `163 842` vertex set.
+- Snapshot serial/hash protections are intact—no `[StageB][GPU]` mismatches and oceanic parity exits with max delta **0.0003 m**.
+- `[StageB][CacheProfile]` continues to flag continental cache rebuild time (classification ~1.5 ms, exemplar selection ~1.3 ms); this remains the top optimisation target while the CPU fallback path is still executed.
+- Navigation system ensure suppression still works; parity logs surface only the single informational warning (`NavigationSystem.cpp:3808`).
 
 ### Level 3 Baseline (M5 Regression Harness)
 
@@ -65,7 +68,10 @@ These measurements replace the extrapolated L3 figures in earlier performance do
 5. **Record metrics** in this document and in any milestone summary. Use the single source above to avoid divergent numbers.
 
 ## Latest Automation Status
-- `PlanetaryCreation.Milestone6.GPU.OceanicParity` — **PASS**, Stage B profiling enabled, max delta 0.00 m.
-- `PlanetaryCreation.Milestone5.PerformanceRegression` — **PASS**, full M5 overhead 0.32 ms.
+- `PlanetaryCreation.Milestone6.GPU.OceanicParity` — **PASS** (2025‑10‑10), Stage B profiling on, GPU pass steady at 10.9 ms, max delta 0.0003 m.
+- `PlanetaryCreation.Milestone6.GPU.ContinentalParity` — **PASS**, currently exercising the snapshot fallback (no GPU override yet); cache rebuild ≈7 ms, deltas 0.000 m.
+- `PlanetaryCreation.Milestone6.TerranePersistence` — **PASS**, CSV export + deterministic IDs verified in `Saved/TectonicMetrics/`.
+- `PlanetaryCreation.Milestone5.PerformanceRegression` — **PASS**, full M5 overhead 0.32 ms (reference baseline).
+- `PlanetaryCreation.Milestone6.ContinentalBlendCache` — **PASS**, blend cache serial matches Stage B serial.
 
 Keep this document current whenever Stage B optimizations land or hardware changes. Remove stale per-milestone performance tables elsewhere and point to this file as the canonical baseline.

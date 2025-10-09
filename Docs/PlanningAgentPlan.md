@@ -89,6 +89,8 @@
 - **Immediate Actions (PRO Review – 2025-10-07):**
   - Consolidate performance capture to a single Unreal Insights + CSV flow and refresh every doc/table with the same baseline; include subduction/collision/elevation timers to mirror the paper.
     - Harness and latest metrics live in `Docs/Performance_M6.md`; treat it as the canonical source for Stage B/L3 measurements.
+    - Run the Stage B parity harness with `-SetCVar="r.PlanetaryCreation.StageBProfiling=1"` **and** `r.PlanetaryCreation.StageBProfiling 1` in `-ExecCmds` so the logs always emit `[StageB][Profile]` / `[StageB][CacheProfile]`.
+  - Leverage the continental exemplar blend cache so CPU fallbacks reuse the first pass; the `PlanetaryCreation.Milestone6.ContinentalBlendCache` automation guards the serial sync (add it to the same CI run that executes the GPU parity suites) while Stage B logs should show only the initial `[ContinentalGPUReadback] Overrides=…` line.
   - Keep the `RefreshRidgeDirectionsIfNeeded()` flow using the render-vertex cache (no per-step recompute) and keep `RidgeDirectionCacheTest` green in CI.
   - Capture steady-state timings with the new Stage B in-place mesh refresh path (no rebuild) and document the savings; fall back to rebuild only when topology stamps diverge.
   - Use the expanded `[StepTiming]` logging (Voronoi reassignment counts plus ridge dirty/update/cache stats) to enforce ridge-cache health thresholds during undo/redo and parity automation, keep `CachedVoronoiAssignments` in sync across undo/retess paths, and confirm the adaptive ring-depth fallback (default depth 1) keeps ridge recomputes near 0 ms.
@@ -102,11 +104,10 @@
 
 ### Milestone 7 – Presentation & UX (Weeks 11–13)
 - **Owners:** Tools Engineer, Rendering Engineer, UX Designer
-- **Tasks:**
-  - Restore deferred material/lighting enhancements (ocean vs continental crust, volcanic emissive, day/night lighting).
-  - Implement Spore-style multi-band camera transitions with collision easing and surface glide.
-  - Extend UI with timeline scrubber, snapshot browser, analytics overlays, and continuous playback refinements (recording, speed modulation).
-  - Refresh validation gallery/tutorials to showcase amplified terrain.
+- **Phase 1 – Materials & Heightmap Visualizer:** Restore the deferred material/lighting stack (ocean vs continental crust, volcanic emissive, day/night lighting) so the heightmap visualizer reflects Stage B data accurately from day one.
+- **Phase 2 – Camera & World Navigation:** Implement the Spore-style multi-band camera transitions with collision easing and surface glide.
+- **Phase 3 – UI & Analytics Enhancements:** Extend the tool panel with the timeline scrubber, snapshot browser, analytics overlays, and continuous playback refinements (recording, speed modulation).
+- **Phase 4 – Presentation Collateral:** Refresh validation gallery/tutorials and prepare milestone demo collateral showcasing the amplified terrain.
 - **Dependencies:** Milestone 6 amplified terrain, camera design doc, UI framework.
 - **Risks:** UX scope creep; mitigate with phased rollout and usability reviews.
 - **Validation:** UX sign-off, updated gallery, playtest feedback.
