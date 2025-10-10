@@ -964,7 +964,8 @@ UMaterial* FTectonicSimulationController::CreateVertexColorMaterial(bool bEnable
     Material->MaterialDomain = EMaterialDomain::MD_Surface;
     Material->BlendMode = EBlendMode::BLEND_Opaque;
     Material->TwoSided = false;
-    Material->SetShadingModel(bEnablePBR ? EMaterialShadingModel::MSM_DefaultLit : EMaterialShadingModel::MSM_Unlit);
+    // Always use DefaultLit - when PBR is "off", we'll use high roughness to get matte appearance
+    Material->SetShadingModel(EMaterialShadingModel::MSM_DefaultLit);
 
     auto AddExpression = [Material](auto* Expression)
     {
@@ -974,25 +975,18 @@ UMaterial* FTectonicSimulationController::CreateVertexColorMaterial(bool bEnable
     };
 
     UMaterialExpressionVertexColor* VertexColorNode = AddExpression(NewObject<UMaterialExpressionVertexColor>(Material));
+    Material->GetEditorOnlyData()->BaseColor.Expression = VertexColorNode;
 
-    if (bEnablePBR)
-    {
-        Material->GetEditorOnlyData()->BaseColor.Expression = VertexColorNode;
+    // Create roughness parameter - high value (1.0) for matte, low value for PBR shiny
+    UMaterialExpressionScalarParameter* RoughnessParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
+    RoughnessParam->ParameterName = PlanetaryCreation::Preview::RoughnessParamName;
+    RoughnessParam->DefaultValue = bEnablePBR ? PBRRoughness : 1.0f;  // 1.0 = completely matte, no specular
+    Material->GetEditorOnlyData()->Roughness.Expression = RoughnessParam;
 
-        UMaterialExpressionScalarParameter* RoughnessParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
-        RoughnessParam->ParameterName = PlanetaryCreation::Preview::RoughnessParamName;
-        RoughnessParam->DefaultValue = PBRRoughness;
-        Material->GetEditorOnlyData()->Roughness.Expression = RoughnessParam;
-
-        UMaterialExpressionScalarParameter* MetallicParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
-        MetallicParam->ParameterName = TEXT("PBR_Metallic");
-        MetallicParam->DefaultValue = 0.0f;
-        Material->GetEditorOnlyData()->Metallic.Expression = MetallicParam;
-    }
-    else
-    {
-        Material->GetEditorOnlyData()->EmissiveColor.Expression = VertexColorNode;
-    }
+    UMaterialExpressionScalarParameter* MetallicParam = AddExpression(NewObject<UMaterialExpressionScalarParameter>(Material));
+    MetallicParam->ParameterName = TEXT("PBR_Metallic");
+    MetallicParam->DefaultValue = 0.0f;
+    Material->GetEditorOnlyData()->Metallic.Expression = MetallicParam;
 
     Material->PostEditChange();
 #if WITH_EDITOR
@@ -1073,18 +1067,6 @@ UMaterial* FTectonicSimulationController::CreateGPUPreviewMaterial() const
 
 UMaterialInterface* FTectonicSimulationController::ResolveGPUPreviewMaterial() const
 {
-    if (!bUsePBRShading)
-    {
-        if (!GPUPreviewUnlitMaterial.IsValid())
-        {
-            if (UMaterial* Loaded = LoadObject<UMaterial>(nullptr, TEXT("/Game/M_PlanetSurface_GPUDisplacement.M_PlanetSurface_GPUDisplacement")))
-            {
-                GPUPreviewUnlitMaterial = Loaded;
-            }
-        }
-        return GPUPreviewUnlitMaterial.Get();
-    }
-
     if (!GPUPreviewPBRMaterial.IsValid())
     {
         if (UMaterial* PBRMaterial = CreateGPUPreviewMaterial())
@@ -1105,46 +1087,31 @@ void FTectonicSimulationController::ApplyCPUMaterial(URealtimeMeshComponent* Com
 
     PreviewGPUInstance.Reset();
 
-    if (bUsePBRShading && PreviewCPUInstance.IsValid())
+    // Always create runtime material with vertex colors - use roughness to control PBR vs matte
+    UMaterial* BaseMaterial = CreateVertexColorMaterial(bUsePBRShading);
+    if (!BaseMaterial)
     {
-        Component->SetMaterial(0, PreviewCPUInstance.Get());
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to create vertex color material"));
         return;
     }
 
-    UMaterial* BaseMaterial = nullptr;
-
-    if (bUsePBRShading)
+    // Always create a MID so we can adjust roughness at runtime
+    if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseMaterial, Component))
     {
-        // Load the static PBR material asset created in Content Browser
-        BaseMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/M_TectonicPBR.M_TectonicPBR"));
-        if (!BaseMaterial)
-        {
-            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to load M_TectonicPBR material asset"));
-            return;
-        }
+        // Set roughness: high (1.0) for matte elevation view, low (0.4) for PBR shading
+        const float TargetRoughness = bUsePBRShading ? PBRRoughness : 1.0f;
+        MID->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, TargetRoughness);
+        MID->SetScalarParameterValue(TEXT("PBR_Metallic"), 0.0f);
+
+        Component->SetMaterial(0, MID);
+        PreviewCPUInstance = MID;
+
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[Material] Applied vertex color material (PBR=%d, Roughness=%.2f)"),
+            bUsePBRShading, TargetRoughness);
     }
     else
     {
-        // For unlit, create runtime material
-        BaseMaterial = CreateVertexColorMaterial(bUsePBRShading);
-        if (!BaseMaterial)
-        {
-            return;
-        }
-    }
-
-    if (bUsePBRShading)
-    {
-        if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(BaseMaterial, Component))
-        {
-            MID->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
-            Component->SetMaterial(0, MID);
-            PreviewCPUInstance = MID;
-        }
-    }
-    else
-    {
-        Component->SetMaterial(0, BaseMaterial);
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to create material instance dynamic"));
         PreviewCPUInstance.Reset();
     }
 }
@@ -1194,8 +1161,9 @@ void FTectonicSimulationController::ApplyPreviewMaterialMode()
                         const float ElevationScaleUE = MetersToUE(Service->GetParameters().ElevationScale);
                         MID->SetScalarParameterValue(PlanetaryCreation::Preview::ElevationScaleParamName, ElevationScaleUE);
                     }
+                    const float TargetRoughness = bUsePBRShading ? PBRRoughness : 1.0f;
                     MID->SetScalarParameterValue(PlanetaryCreation::Preview::UsePBRParamName, bUsePBRShading ? 1.0f : 0.0f);
-                    MID->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
+                    MID->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, TargetRoughness);
                 }
             }
         }
@@ -1208,13 +1176,17 @@ void FTectonicSimulationController::ApplyPreviewMaterialParameters() const
 {
     if (PreviewCPUInstance.IsValid())
     {
-        PreviewCPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
+        // Use high roughness (1.0) for matte elevation view, low roughness for PBR shading
+        const float TargetRoughness = bUsePBRShading ? PBRRoughness : 1.0f;
+        PreviewCPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, TargetRoughness);
+        PreviewCPUInstance->SetScalarParameterValue(TEXT("PBR_Metallic"), 0.0f);
     }
 
     if (PreviewGPUInstance.IsValid())
     {
+        const float TargetRoughness = bUsePBRShading ? PBRRoughness : 1.0f;
         PreviewGPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::UsePBRParamName, bUsePBRShading ? 1.0f : 0.0f);
-        PreviewGPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, PBRRoughness);
+        PreviewGPUInstance->SetScalarParameterValue(PlanetaryCreation::Preview::RoughnessParamName, TargetRoughness);
     }
 }
 
@@ -1602,54 +1574,12 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     FAmplificationVisualizationContext AmplificationContext;
     AmplificationContext.Initialize(Snapshot.VertexAmplifiedElevation, Snapshot.VertexElevationValues);
 
-    double MinElevationMeters = TNumericLimits<double>::Max();
-    double MaxElevationMeters = TNumericLimits<double>::Lowest();
-    if (EffectiveElevations)
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[ElevationDebug] Using absolute hypsometric tint (no normalization). VertexCount=%d"),
+        SourceVertexCount);
+
+    auto GetElevationColor = [](double ElevationMeters) -> FColor
     {
-        for (double Elevation : *EffectiveElevations)
-        {
-            if (!FMath::IsFinite(Elevation))
-            {
-                continue;
-            }
-
-            MinElevationMeters = FMath::Min(MinElevationMeters, Elevation);
-            MaxElevationMeters = FMath::Max(MaxElevationMeters, Elevation);
-        }
-    }
-
-    if (MinElevationMeters > MaxElevationMeters)
-    {
-        MinElevationMeters = PaperElevationConstants::AbyssalPlainDepth_m;
-        MaxElevationMeters = 2000.0;
-    }
-
-    double ElevationRangeMeters = MaxElevationMeters - MinElevationMeters;
-    if (ElevationRangeMeters < KINDA_SMALL_NUMBER)
-    {
-        ElevationRangeMeters = 1.0;
-    }
-
-    UE_LOG(LogPlanetaryCreation, Log, TEXT("[ElevationDebug] MinElev=%.1fm MaxElev=%.1fm Range=%.1fm VertexCount=%d"),
-        MinElevationMeters, MaxElevationMeters, ElevationRangeMeters, SourceVertexCount);
-
-    static const FLinearColor HeightGradientStops[] = {
-        FLinearColor(0.015f, 0.118f, 0.341f),
-        FLinearColor(0.000f, 0.392f, 0.729f),
-        FLinearColor(0.137f, 0.702f, 0.467f),
-        FLinearColor(0.933f, 0.894f, 0.298f),
-        FLinearColor(0.957f, 0.643f, 0.376f)
-    };
-
-    auto GetElevationColor = [&](double ElevationMeters) -> FColor
-    {
-        const double Normalized = FMath::Clamp((ElevationMeters - MinElevationMeters) / ElevationRangeMeters, 0.0, 1.0);
-        const int32 StopCount = UE_ARRAY_COUNT(HeightGradientStops);
-        const double Scaled = Normalized * (StopCount - 1);
-        const int32 IndexLow = FMath::Clamp(static_cast<int32>(Scaled), 0, StopCount - 1);
-        const int32 IndexHigh = FMath::Clamp(IndexLow + 1, 0, StopCount - 1);
-        const float Alpha = static_cast<float>(Scaled - IndexLow);
-        return FLinearColor::LerpUsingHSV(HeightGradientStops[IndexLow], HeightGradientStops[IndexHigh], Alpha).ToFColor(false);
+        return PlanetaryCreation::Heightmap::MakeElevationColor(ElevationMeters);
     };
 
     constexpr double MaxDisplacementMeters = 10000.0;
@@ -2285,34 +2215,6 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
         EffectiveElevations = &ElevationValues;
     }
 
-    double MinElevationMeters = TNumericLimits<double>::Max();
-    double MaxElevationMeters = TNumericLimits<double>::Lowest();
-    if (EffectiveElevations)
-    {
-        for (double Elevation : *EffectiveElevations)
-        {
-            if (!FMath::IsFinite(Elevation))
-            {
-                continue;
-            }
-
-            MinElevationMeters = FMath::Min(MinElevationMeters, Elevation);
-            MaxElevationMeters = FMath::Max(MaxElevationMeters, Elevation);
-        }
-    }
-
-    if (MinElevationMeters > MaxElevationMeters)
-    {
-        MinElevationMeters = PaperElevationConstants::AbyssalPlainDepth_m;
-        MaxElevationMeters = 2000.0;
-    }
-
-    double ElevationRangeMeters = MaxElevationMeters - MinElevationMeters;
-    if (ElevationRangeMeters < KINDA_SMALL_NUMBER)
-    {
-        ElevationRangeMeters = 1.0;
-    }
-
     FAmplificationVisualizationContext AmplificationContext;
     AmplificationContext.Initialize(AmplifiedElevation, ElevationValues);
 
@@ -2341,23 +2243,10 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
         return HSV.HSVToLinearRGB().ToFColor(false);
     };
 
-    static const FLinearColor HeightGradientStops[] = {
-        FLinearColor(0.015f, 0.118f, 0.341f),
-        FLinearColor(0.000f, 0.392f, 0.729f),
-        FLinearColor(0.137f, 0.702f, 0.467f),
-        FLinearColor(0.933f, 0.894f, 0.298f),
-        FLinearColor(0.957f, 0.643f, 0.376f)
-    };
-
-    auto GetElevationColor = [&](double ElevationMeters) -> FColor
+    // Use shared hypsometric gradient from HeightmapColorPalette.h (absolute elevation-based)
+    auto GetElevationColor = [](double ElevationMeters) -> FColor
     {
-        const double Normalized = FMath::Clamp((ElevationMeters - MinElevationMeters) / ElevationRangeMeters, 0.0, 1.0);
-        const int32 StopCount = UE_ARRAY_COUNT(HeightGradientStops);
-        const double Scaled = Normalized * (StopCount - 1);
-        const int32 IndexLow = FMath::Clamp(static_cast<int32>(Scaled), 0, StopCount - 1);
-        const int32 IndexHigh = FMath::Clamp(IndexLow + 1, 0, StopCount - 1);
-        const float Alpha = static_cast<float>(Scaled - IndexLow);
-        return FLinearColor::LerpUsingHSV(HeightGradientStops[IndexLow], HeightGradientStops[IndexHigh], Alpha).ToFColor(false);
+        return PlanetaryCreation::Heightmap::MakeElevationColor(ElevationMeters);
     };
 
     const bool bShowVelocity = VisMode == ETectonicVisualizationMode::Velocity;
@@ -2509,33 +2398,6 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
         EffectiveElevations = &Snapshot.VertexElevationValues;
     }
 
-    double MinElevationMeters = TNumericLimits<double>::Max();
-    double MaxElevationMeters = TNumericLimits<double>::Lowest();
-    if (EffectiveElevations)
-    {
-        for (double Elevation : *EffectiveElevations)
-        {
-            if (!FMath::IsFinite(Elevation))
-            {
-                continue;
-            }
-            MinElevationMeters = FMath::Min(MinElevationMeters, Elevation);
-            MaxElevationMeters = FMath::Max(MaxElevationMeters, Elevation);
-        }
-    }
-
-    if (MinElevationMeters > MaxElevationMeters)
-    {
-        MinElevationMeters = PaperElevationConstants::AbyssalPlainDepth_m;
-        MaxElevationMeters = 2000.0;
-    }
-
-    double ElevationRangeMeters = MaxElevationMeters - MinElevationMeters;
-    if (ElevationRangeMeters < KINDA_SMALL_NUMBER)
-    {
-        ElevationRangeMeters = 1.0;
-    }
-
     const double RadiusUE = MetersToUE(Snapshot.PlanetRadius);
 
     FAmplificationVisualizationContext AmplificationContext;
@@ -2598,23 +2460,10 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
         return HSV.HSVToLinearRGB().ToFColor(false);
     };
 
-    static const FLinearColor HeightGradientStops[] = {
-        FLinearColor(0.015f, 0.118f, 0.341f),
-        FLinearColor(0.000f, 0.392f, 0.729f),
-        FLinearColor(0.137f, 0.702f, 0.467f),
-        FLinearColor(0.933f, 0.894f, 0.298f),
-        FLinearColor(0.957f, 0.643f, 0.376f)
-    };
-
-    auto GetElevationColor = [&](double ElevationMeters) -> FColor
+    // Use shared hypsometric gradient from HeightmapColorPalette.h (absolute elevation-based)
+    auto GetElevationColor = [](double ElevationMeters) -> FColor
     {
-        const double Normalized = FMath::Clamp((ElevationMeters - MinElevationMeters) / ElevationRangeMeters, 0.0, 1.0);
-        const int32 StopCount = UE_ARRAY_COUNT(HeightGradientStops);
-        const double Scaled = Normalized * (StopCount - 1);
-        const int32 IndexLow = FMath::Clamp(static_cast<int32>(Scaled), 0, StopCount - 1);
-        const int32 IndexHigh = FMath::Clamp(IndexLow + 1, 0, StopCount - 1);
-        const float Alpha = static_cast<float>(Scaled - IndexLow);
-        return FLinearColor::LerpUsingHSV(HeightGradientStops[IndexLow], HeightGradientStops[IndexHigh], Alpha).ToFColor(false);
+        return PlanetaryCreation::Heightmap::MakeElevationColor(ElevationMeters);
     };
 
     TArray<FVector3f> SourcePositions;

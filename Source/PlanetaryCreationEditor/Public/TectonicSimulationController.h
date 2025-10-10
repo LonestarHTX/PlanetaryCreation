@@ -268,7 +268,6 @@ private:
     mutable FTextureRHIRef GPUHeightTexture;
     mutable FIntPoint HeightTextureSize = FIntPoint(2048, 1024);
     mutable TStrongObjectPtr<UTexture2D> GPUHeightTextureAsset;
-    mutable TWeakObjectPtr<UMaterial> GPUPreviewUnlitMaterial;
     mutable TStrongObjectPtr<UMaterial> GPUPreviewPBRMaterial;
     mutable TWeakObjectPtr<UMaterialInstanceDynamic> PreviewCPUInstance;
     mutable TWeakObjectPtr<UMaterialInstanceDynamic> PreviewGPUInstance;

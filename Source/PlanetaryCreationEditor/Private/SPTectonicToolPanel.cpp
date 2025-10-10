@@ -659,6 +659,20 @@ TSharedRef<SWidget> SPTectonicToolPanel::BuildSurfaceProcessesSection()
         .Padding(0.0f, 2.0f, 0.0f, 0.0f)
         [
             SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetHydraulicErosionState)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnHydraulicErosionChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "HydraulicToggleLabel", "Enable hydraulic erosion"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HydraulicToggleTooltip", "Run stream-power routing on amplified terrain to carve valleys. Changing this resets the simulation."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 2.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
             .IsChecked(this, &SPTectonicToolPanel::GetOceanicDampeningState)
             .OnCheckStateChanged(this, &SPTectonicToolPanel::OnOceanicDampeningChanged)
             .Content()
@@ -982,6 +996,14 @@ void SPTectonicToolPanel::OnVisualizationModeChanged(TSharedPtr<ETectonicVisuali
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
         Controller->SetVisualizationMode(*NewSelection);
+
+        // Automatically disable PBR shading for elevation mode to show pure hypsometric colors
+        // PBR lighting washes out the gradient with specular highlights
+        if (*NewSelection == ETectonicVisualizationMode::Elevation)
+        {
+            Controller->SetPBRShadingEnabled(false);
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[Visualization] Auto-disabled PBR shading for Elevation mode (prevents glossy highlights from obscuring gradient)"));
+        }
     }
 }
 
@@ -1253,6 +1275,34 @@ void SPTectonicToolPanel::OnSedimentTransportChanged(ECheckBoxState NewState)
             return true;
         },
         TEXT("Sediment transport"));
+}
+
+ECheckBoxState SPTectonicToolPanel::GetHydraulicErosionState() const
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (const UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            return Service->GetParameters().bEnableHydraulicErosion ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+        }
+    }
+    return ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnHydraulicErosionChanged(ECheckBoxState NewState)
+{
+    const bool bEnabled = (NewState == ECheckBoxState::Checked);
+    ApplySurfaceProcessMutation(
+        [bEnabled](FTectonicSimulationParameters& Params)
+        {
+            if (Params.bEnableHydraulicErosion == bEnabled)
+            {
+                return false;
+            }
+            Params.bEnableHydraulicErosion = bEnabled;
+            return true;
+        },
+        TEXT("Hydraulic erosion"));
 }
 
 ECheckBoxState SPTectonicToolPanel::GetOceanicDampeningState() const

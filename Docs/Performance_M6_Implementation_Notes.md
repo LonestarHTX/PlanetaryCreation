@@ -34,7 +34,7 @@
 
 ### ✅ GPU Compute Shaders (Stage B Amplification)
 
-**Decision:** Focus GPU compute efforts on Stage B amplification (the actual bottleneck at ~31 ms combined), not thermal/velocity fields (only 0.6 ms total).
+**Decision:** Focus GPU compute efforts on Stage B amplification (the actual bottleneck at ~33 ms combined), not thermal/velocity fields (only 0.6 ms total).
 
 **Implementation:**
 - `OceanicAmplification.usf` - Perlin 3D noise, age-based fault amplitude, ridge-perpendicular transform faults
@@ -43,17 +43,17 @@
 - `OceanicAmplificationGPU.cpp` - RDG integration, async readback pooling, snapshot hashing
 
 **Results:**
-- Oceanic amplification: **~10.9 ms** (GPU pass) with <0.1 m CPU parity
-- Continental amplification: **~19.6 ms** (GPU snapshot → CPU fallback replay) while we keep drift detection enabled
+- Oceanic amplification: **~8.2 ms** GPU in steady-state (0 ms readback; when the suite runs solo it reports ~1.7 ms because the shared displacement buffer already holds the result)
+- Continental amplification: **~22–23 ms** GPU replay with **≈2–3 ms** CPU overhead once the snapshot hash stabilises (first warm-up step still pays ≈26 ms CPU + 27 ms GPU before the cache hits)
 - Async readback: ~0 ms blocking cost (pooled `FRHIGPUBufferReadback`)
 - Stage B elevations stream into the realtime mesh as a dedicated `StageBHeight` vertex buffer, so cached LODs and GPU preview materials consume the exact amplified heights with no CPU displacement step; the preview MID now takes the live elevation scale from simulation parameters.
 - Visualization modes expanded with **Amplified Stage B** (delta heatmap) and **Amplification Blend** (plate colours tinted by Stage B deltas) so perf captures can highlight how much detail Stage B contributes without swapping materials mid-run.
 - GPU parity tests: `GPUOceanicParity`, `GPUContinentalParity`, `GPUPreviewSeamMirroring`
 - Paper defaults ship with Stage B/GPU/PBR enabled (LOD 5, CPU skip). Use `r.PlanetaryCreation.PaperDefaults 0` before profiling CPU-only baselines.
-- Preview lighting toggle (UI + `r.PlanetaryCreation.UsePBRShading`) builds a transient lit material for CPU preview and an on-the-fly lit WPO material for GPU preview; 2025‑10‑09 parity runs logged Stage B = **11.3 ms** (Oceanic GPU) and **16.9 ms CPU + 11.5 ms cache** (Continental snapshot replay) with 100 % vertices inside ±0.10 m.
+- Preview lighting toggle (UI + `r.PlanetaryCreation.UsePBRShading`) builds a transient lit material for CPU preview and an on-the-fly lit WPO material for GPU preview; 2025‑10‑10 parity runs logged Stage B steady-state at **~33–34 ms** (Oceanic GPU ≈8 ms, Continental GPU ≈23 ms, Continental CPU ≈3 ms) with 100 % vertices inside ±0.10 m. The parity harness still replays the CPU/cache fallback once (~44 ms) for drift validation.
 
 **Why Stage B Over Thermal/Velocity:**
-- Stage B: **≈30.5 ms** combined (dominant share of M6 budget) → High-value GPU target
+- Stage B: **≈33–34 ms** steady-state (dominant share of M6 budget) → High-value GPU target
 - Thermal/Velocity: **0.6ms** (1.2% of M6 budget) → Low ROI
 - GPU transfer overhead would likely exceed savings for small fields
 - CPU thermal/velocity already well-optimized
@@ -83,6 +83,47 @@
 
 ---
 
+### ✅ Hydraulic Erosion CPU Optimization (Topological Queue)
+
+**Decision:** Replace O(N log N) per-step elevation sorting with O(N) topological queue using Kahn's algorithm for flow accumulation.
+
+**Implementation:**
+- `HydraulicErosion.cpp:146-201` - Topological traversal with upstream counting and cycle detection
+- Persistent buffers: `HydraulicUpstreamCount`, `HydraulicProcessingQueue`, `HydraulicFlowAccumulation`
+- Kahn's algorithm: Seed queue with vertices having no upstream contributors, propagate flow in dependency order
+
+**Results @ LOD 7 (163,842 vertices):**
+
+| Metric | Pre-Optimization<br>(Elevation Sort) | Post-Optimization<br>(Topological Queue) | Improvement |
+|--------|--------------------------------------|------------------------------------------|-------------|
+| **Average Time** | 18.29 ms | 1.65 ms | **90.98% faster** |
+| **Min Time** | 17.77 ms | 1.60 ms | 11.11× speedup |
+| **Max Time** | 18.77 ms | 1.69 ms | 11.10× speedup |
+| **Algorithm Complexity** | O(N log N) | O(N) | Linear scaling ✅ |
+
+**Data Sources:**
+- **Pre-optimization:** `PlanetaryCreation-backup-2025.10.09-22.38.32.log` (Steps 1,2,4,8,10)
+- **Post-optimization:** `PlanetaryCreation-backup-2025.10.09-23.08.44.log` (Steps 1-8)
+
+**Key Implementation Changes:**
+1. **Upstream counting** (Lines 146-154): Count incoming edges in O(N)
+2. **Source seeding** (Lines 156-162): Queue vertices with no upstream contributors
+3. **Topological traversal** (Lines 164-193): Process vertices in dependency order
+4. **Cycle detection** (Lines 195-201): Validate complete graph coverage
+
+**Validation:**
+- ✅ Mass conservation: Erosion/deposition totals match within floating-point tolerance
+- ✅ Flow accumulation: Matches previous elevation-sorted results (parity tests pass)
+- ✅ Determinism: Same vertex order given same input elevations
+- ✅ Automation: `HydraulicRouting` and `HydraulicErosionCoupling` tests green
+
+**Why This Optimization:**
+The 16.6ms savings brings hydraulic erosion **well under the 8ms M6 budget target**, eliminating the need for GPU compute shader port (which was the original plan). The CPU path is now fast enough for real-time preview at LOD 7 with <2ms overhead.
+
+**Note:** Intermediate logs at `22.50.27` showed ~15.6ms because they ran on the **old binary** before the rebuild completed. Always verify binary timestamp vs log timestamp when profiling post-build.
+
+---
+
 ### ⏸️ GPU Thermal/Velocity Field Compute Shaders
 
 **Status:** Planned in M6 Task 4.2 but deferred as low-priority.
@@ -101,20 +142,18 @@
 ```
 M5 Baseline (L3):               6.32 ms  ✅ (includes ParallelFor)
 + Terrane extraction/tracking:  2.00 ms  (amortized, rare events)
-+ Stage B Oceanic (GPU):       10.90 ms  ✅ (compute shader pass, 0.1 m parity)
-+ Stage B Continental (GPU snapshot + CPU fallback):   19.60 ms  ✅ (snapshot write, drift replay)
-+ Hydraulic erosion:            8.00 ms  🔴 (planned, not implemented)
++ Stage B Oceanic (GPU steady-state):        8.20 ms  🟢 (compute shader pass, shared buffer keeps readback at 0 ms)
++ Stage B Continental (GPU replay + CPU assist):   25.00 ms  🟢 (GPU 22.6 ms + CPU 2.4 ms once the snapshot hash matches; warm-up step hits ~65 ms before stabilising)
++ Hydraulic erosion:            1.70 ms  🟢 (topological queue, was 18.3 ms with sorting)
 - GPU async readback:          -0.00 ms  ✅ (pooled, non-blocking)
-= M6 Current Total:            38.82 ms  (target: <90ms, 57% headroom)
-
-With hydraulic erosion:        46.82 ms  (still 48% headroom)
+= M6 Total (with hydraulic):   43.22 ms  (target: <90ms, ~52% headroom)
 ```
 
 **Notes:**
 - ParallelFor savings already baked into 6.32ms M5 baseline (not a separate line item)
 - SIMD exploration planned -2.1ms savings not implemented (ParallelFor superseded)
 - GPU thermal/velocity planned -0.45ms savings deferred (low priority)
-- Stage B GPU compute is the major M6 optimization win (~31 ms across oceanic + continental)
+- Stage B GPU compute is the major M6 optimization win (~33 ms across oceanic + continental in steady-state)
 
 ---
 
@@ -133,6 +172,7 @@ With hydraulic erosion:        46.82 ms  (still 48% headroom)
 **Implemented Code:**
 - `Source/PlanetaryCreationEditor/Private/SedimentTransport.cpp`
 - `Source/PlanetaryCreationEditor/Private/OceanicDampening.cpp`
+- `Source/PlanetaryCreationEditor/Private/HydraulicErosion.cpp` - Topological queue optimization
 - `Source/PlanetaryCreationEditor/Private/TectonicSimulationController.cpp`
 - `Source/PlanetaryCreationEditor/Shaders/Private/OceanicAmplification.usf`
 - `Source/PlanetaryCreationEditor/Shaders/Private/ContinentalAmplification.usf`
@@ -149,4 +189,4 @@ With hydraulic erosion:        46.82 ms  (still 48% headroom)
 
 ---
 
-**Last Updated:** 2025-10-10
+**Last Updated:** 2025-10-09

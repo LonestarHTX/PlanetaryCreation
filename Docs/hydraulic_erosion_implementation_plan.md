@@ -1,7 +1,7 @@
 # Hydraulic Erosion Implementation Plan (M6 Phase 3)
 
 **Created:** 2025-10-10
-**Status:** Planning - Ready for Implementation
+**Status:** Implemented – Stage B hydraulic routing/erosion landed Oct 2025
 **Owner:** Simulation Engineer
 **Effort:** 6 days (4 days Task 3.1, 2 days Task 3.2)
 
@@ -161,6 +161,14 @@ if (OrogenyAge > 100.0 && TerrainType == OldMountains) {
 ✅ Performance <8ms at L6 (continental-only if needed)
 ✅ Young mountains stay sharp, old mountains erode
 ✅ Automation tests pass
+
+## Implementation Notes (Oct 2025)
+- Hydraulic routing/erosion lives in `UTectonicSimulationService::ApplyHydraulicErosion` (new `HydraulicErosion.cpp`) and executes immediately after Stage B amplification with per-step `Hydraulic` timing reported in `FStageBProfile`.
+- Internal SoA buffers (`HydraulicDownhillNeighbor`, `HydraulicFlowAccumulation`, `HydraulicErosionBuffer`, `HydraulicSelfDepositBuffer`, `HydraulicDownstreamDepositBuffer`) are persisted on the service to avoid reallocations, and flow accumulation now uses a linear-time topological queue (no per-step sort).
+- Stream-power law uses configurable parameters (`HydraulicErosionConstant`, `HydraulicAreaExponent`, `HydraulicSlopeExponent`, `HydraulicDownstreamDepositRatio`), with age-based scaling: <20 My → 0.3×, 20–100 My → 1×, >100 My → 2×.
+- Mass is conserved by splitting eroded material between the source vertex and its downhill neighbour; any vertex without a downhill target tracks lost-to-ocean totals for diagnostics.
+- `SPTectonicToolPanel` exposes an “Enable hydraulic erosion” checkbox (mirrors `r.PlanetaryCreation.EnableHydraulicErosion`), and paper defaults ship with the pass enabled.
+- GPU port is deferred indefinitely: the optimised CPU implementation sits at ~1.7 ms (LOD 7), well inside the 8 ms budget, so `r.PlanetaryCreation.UseGPUHydraulic` currently routes to the CPU path.
 
 ---
 

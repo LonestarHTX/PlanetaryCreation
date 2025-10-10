@@ -730,7 +730,7 @@ double ComputeContinentalAmplification(
 #endif
 
     const TArray<FExemplarMetadata*> MatchingExemplars = GetExemplarsForTerrainType(TerrainType);
-    return BlendContinentalExemplars(
+    AmplifiedElevation = BlendContinentalExemplars(
         Position,
         PlateID,
         BaseElevation_m,
@@ -740,4 +740,12 @@ double ComputeContinentalAmplification(
         BoundarySummary,
         ProjectContentDir,
         Seed);
+
+    if (TerrainType == ETerrainType::OldMountains || OrogenyAge_My > 100.0)
+    {
+        const double DetailDelta = AmplifiedElevation - BaseElevation_m;
+        AmplifiedElevation = BaseElevation_m + (DetailDelta * 0.5);
+    }
+
+    return AmplifiedElevation;
 }

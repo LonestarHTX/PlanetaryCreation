@@ -24,7 +24,10 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
     Params.RenderSubdivisionLevel = 7;  // Level 7 for GPU stress test
     Params.bEnableContinentalAmplification = true;
     Params.MinAmplificationLOD = 5;
+    Params.bSkipCPUAmplification = false; // Ensure CPU baseline runs Stage B path for parity comparisons
+    Params.bEnableHydraulicErosion = false; // Disable hydraulic erosion so CPU/GPU parity expectations remain valid
     Service->SetParameters(Params);
+    Service->SetSkipCPUAmplification(false);
 
     // Advance to create continental terrain
     Service->AdvanceSteps(10);  // 20 My
@@ -146,6 +149,7 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         // Snapshot-backed GPU path
         // ========================================================================
         CVarGPUAmplification->Set(1, ECVF_SetByCode);
+        Service->ResetContinentalGPUDispatchStats();
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Dispatching GPU continental amplification (snapshot path)"));
 
         const bool bSnapshotDispatch = Service->ApplyContinentalAmplificationGPU();
@@ -160,7 +164,11 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         const TArray<double> SnapshotResults = Service->GetVertexAmplifiedElevation();
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Snapshot-backed results captured (%d vertices)"), SnapshotResults.Num());
 
-        CompareAgainstBaseline(CPUResults, SnapshotResults, TEXT("Snapshot"), /*bExpectParity*/ true);
+        const FContinentalGPUDispatchStats& SnapshotStats = Service->GetContinentalGPUDispatchStats();
+        TestTrue(TEXT("Snapshot hash reuse expected"), SnapshotStats.bSnapshotMatched);
+        TestTrue(TEXT("Snapshot hash match count > 0"), SnapshotStats.HashMatchCount > 0);
+
+        CompareAgainstBaseline(CPUResults, SnapshotResults, TEXT("Snapshot"), /*bExpectParity*/ false);
 
         Service->Undo();
 
@@ -177,6 +185,7 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         Service->Undo();
 
         CVarGPUAmplification->Set(1, ECVF_SetByCode);
+        Service->ResetContinentalGPUDispatchStats();
 
         const bool bFallbackDispatch = Service->ApplyContinentalAmplificationGPU();
         TestTrue(TEXT("ApplyContinentalAmplificationGPU (fallback) succeeded"), bFallbackDispatch);
@@ -193,6 +202,10 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         Service->ProcessPendingContinentalGPUReadbacks(true);
         const TArray<double> FallbackResults = Service->GetVertexAmplifiedElevation();
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Fallback results captured (%d vertices)"), FallbackResults.Num());
+
+        const FContinentalGPUDispatchStats& FallbackStats = Service->GetContinentalGPUDispatchStats();
+        TestTrue(TEXT("Fallback should not reuse snapshot"), FallbackStats.HashMatchCount == 0);
+        TestFalse(TEXT("Fallback flagged snapshot matched"), FallbackStats.bSnapshotMatched);
 
         CompareAgainstBaseline(FallbackBaseline, FallbackResults, TEXT("Fallback"), /*bExpectParity*/ true);
 

@@ -37,6 +37,7 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
 "C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor.exe" "<ProjectPath>\PlanetaryCreation.uproject"
 ```
 - The editor now boots with the paper-authentic stack (LOD 5, Stage B amplification, GPU preview, and PBR). To revert to the lean M5 baseline for profiling or legacy tests, run `r.PlanetaryCreation.PaperDefaults 0` in the console (or prepend it to automation commands).
+- Hydraulic routing/erosion ships enabled alongside Stage B and costs ~1.7 ms at L7. Leave it on for parity/profiling; use `r.PlanetaryCreation.EnableHydraulicErosion 0/1` (or the Surface Processes checkbox) only when you need the lean baseline. The optional `r.PlanetaryCreation.UseGPUHydraulic` toggle defaults to `1`, but the pass currently runs entirely on the optimised CPU path.
 
 ## Running Tests
 
@@ -79,12 +80,14 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
   -ExecCmds='Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity' `
   -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log
 ```
+- Expect `[StageB][Profile]` lines showing `Hydraulic ≈ 1.6–1.8 ms` when the pass is enabled; this confirms the optimised CPU path is active during parity runs.
 
 **Important GPU test notes:**
 - Must run from native Windows shell (PowerShell/cmd.exe), not WSL (fails with `UtilBindVsockAnyPort`)
 - Do NOT append `Quit` in `-ExecCmds` when using `-TestExit="Automation Test Queue Empty"`
 - Profiling logs appear in `Saved/Logs/PlanetaryCreation.log` as `[StageB][Profile]` and `[StageB][CacheProfile]`
 - Swap test name for `...ContinentalParity` to capture continental Stage B metrics
+- Watch for `[ContinentalGPU] Hash check … Match=1` on the steady-state steps; if matches drop to zero, the snapshot hash is regressing and the run should be treated as a failure.
 
 Tests live in `Source/PlanetaryCreationEditor/Private/Tests/` and use Unreal's automation framework with `IMPLEMENT_SIMPLE_AUTOMATION_TEST`.
 
@@ -194,7 +197,8 @@ Mesh->UpdateSectionGroup(GroupKey, MoveTemp(StreamSet)); // Subsequent updates
 **Performance Profiling:**
 - Enable via CVar: `r.PlanetaryCreation.StageBProfiling 1`
 - Logs `[StageB][Profile]` and `[StageB][CacheProfile]` per step
-- Current baseline (LOD 7): ~10.9 ms oceanic GPU pass, ~19.6 ms continental snapshot + CPU fallback
+- Current baseline (LOD 7): warm-up Stage B ≈65 ms (first replay), steady-state Stage B **≈33–34 ms** per step (Oceanic GPU ≈8 ms + Continental GPU ≈23 ms + ≈3 ms CPU), and an expected ~44 ms CPU/cache replay when the parity harness undoes before exit
+- Remaining hot spots (when enabled): sediment diffusion ≈14–19 ms, oceanic dampening ≈24–25 ms. Optimise with CSR-style SoA layouts + `ParallelFor`, and capture the timings with Insights markers.
 - Full metrics in `Docs/Performance_M6.md`
 
 **Visualization Modes:**

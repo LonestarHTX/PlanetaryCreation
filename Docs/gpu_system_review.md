@@ -1,7 +1,7 @@
 # PlanetaryCreation GPU System Review
 
 ## Summary
-The GPU preview implementation in *PlanetaryCreation* is performing extremely well. Logs indicate that GPU preview mode has cleanly taken over Stage B amplification, the CPU path is skipped, and all relevant compute stages are now running efficiently with LOD caching in effect.
+The GPU preview pipeline now drives Stage B amplification reliably, but the steady-state cost is **~33–34 ms** per step at L7 (Oceanic GPU ≈8 ms, Continental GPU ≈23 ms, Continental CPU ≈3 ms). The first replay after a reset still pays a one-time warm-up (~65 ms) and the parity harness intentionally replays the CPU/cache fallback (~44 ms) before quitting, yet hash-stable frames stay on the fast GPU path with zero readback cost.
 
 ---
 
@@ -19,12 +19,14 @@ The GPU preview implementation in *PlanetaryCreation* is performing extremely we
 
 ### Performance Metrics
 ```
-Step 1 | Total 185.68 ms | StageB 0.11 ms | Erosion 6.00 ms | Sediment 14.48 ms | Dampening 23.95 ms
-Step 2 | Total 199.81 ms | StageB 0.12 ms | Erosion 6.37 ms | Sediment 19.00 ms | Dampening 24.53 ms
+[StageB][Profile] Step 1 | LOD L7 | Baseline 0.10 ms | Ridge 0.03 ms | OceanicGPU 11.62 ms | ContinentalCPU 26.21 ms | ContinentalGPU 27.47 ms | Total 65.43 ms
+[StageB][Profile] Step 5 | LOD L7 | Baseline 0.10 ms | Ridge 0.03 ms | OceanicGPU 8.23 ms | ContinentalCPU 2.54 ms | ContinentalGPU 22.41 ms | Total 33.32 ms
+[StageB][Profile] Step 10 | LOD L7 | Baseline 0.10 ms | Ridge 0.03 ms | OceanicGPU 8.50 ms | ContinentalCPU 2.43 ms | ContinentalGPU 22.06 ms | Total 33.12 ms
+[StageB][Profile] Step 11 | LOD L7 | Baseline 0.10 ms | Ridge 0.03 ms | OceanicCPU 20.03 ms | ContinentalCPU 13.45 ms | Cache 8.53 ms | Total 42.47 ms
 ```
-- Stage B is effectively free (~0.1 ms).
-- Major compute costs are now in **Sediment (~14–19 ms)** and **Dampening (~24–25 ms)**.
-- Stable timing and consistent LOD cache hits confirm system stability.
+- Warm-up replay (step 1) still incurs ~65 ms while the GPU snapshot seeds.
+- Steady-state frames (steps 2‑10) stay on the hash-stable GPU path: Stage B totals **≈33–34 ms** with readback at 0 ms.
+- The parity harness deliberately undoes once (step 11), forcing the legacy CPU/cache replay (~44 ms) before exit.
 
 ---
 

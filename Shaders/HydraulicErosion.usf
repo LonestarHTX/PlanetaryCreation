@@ -1,0 +1,99 @@
+#include "/Engine/Private/Common.ush"
+
+struct FHydraulicVertex
+{
+    float AmplifiedElevation;
+    float CrustAge;
+    int DownhillIndex;
+    float FlowAccumulation;
+    float ErosionDelta;
+};
+
+StructuredBuffer<FHydraulicVertex> InHydraulicVerts : register(t0);
+StructuredBuffer<int> InSortedIndices : register(t1);
+RWStructuredBuffer<FHydraulicVertex> OutHydraulicVerts : register(u0);
+
+uint GetVertexCount();
+
+[numthreads(64, 1, 1)]
+void HydraulicFlowAccumulationCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    const uint SortedIndex = DispatchThreadID.x;
+    const uint VertexCount = GetVertexCount();
+    if (SortedIndex >= VertexCount)
+    {
+        return;
+    }
+
+    const int VertexIdx = InSortedIndices[SortedIndex];
+    FHydraulicVertex Vert = InHydraulicVerts[VertexIdx];
+
+    const int DownhillIdx = Vert.DownhillIndex;
+    if (DownhillIdx >= 0 && DownhillIdx < int(VertexCount))
+    {
+        InterlockedAdd(OutHydraulicVerts[DownhillIdx].FlowAccumulation, Vert.FlowAccumulation);
+    }
+}
+
+cbuffer HydraulicConstants : register(b0)
+{
+    float HydraulicConstant;
+    float AreaExponent;
+    float SlopeExponent;
+    float DownstreamRatio;
+    float DeltaTimeMy;
+    float SeaLevel;
+}
+
+StructuredBuffer<float> InSlope : register(t2);
+RWStructuredBuffer<float> OutAmplifiedElevation : register(u1);
+
+[numthreads(64, 1, 1)]
+void HydraulicErosionCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    const uint VertexIdx = DispatchThreadID.x;
+    const uint VertexCount = GetVertexCount();
+    if (VertexIdx >= VertexCount)
+    {
+        return;
+    }
+
+    FHydraulicVertex Vert = OutHydraulicVerts[VertexIdx];
+
+    const float Flow = max(Vert.FlowAccumulation, 1.0f);
+    const float Slope = max(InSlope[VertexIdx], 1e-6f);
+
+    float AgeFactor = 1.0f;
+    if (Vert.CrustAge < 20.0f)
+    {
+        AgeFactor = 0.3f;
+    }
+    else if (Vert.CrustAge > 100.0f)
+    {
+        AgeFactor = 2.0f;
+    }
+
+    const float K = max(HydraulicConstant, 0.0f) * AgeFactor;
+    const float Discharge = pow(Flow, AreaExponent);
+    const float SlopeTerm = pow(Slope, SlopeExponent);
+
+    float ErosionRate = K * Discharge * SlopeTerm;
+    if (ErosionRate <= 0.0f)
+    {
+        return;
+    }
+
+    float ErosionAmount = ErosionRate * DeltaTimeMy;
+    ErosionAmount = min(ErosionAmount, Vert.AmplifiedElevation - SeaLevel);
+    if (ErosionAmount <= 0.0f)
+    {
+        return;
+    }
+
+    Vert.ErosionDelta = ErosionAmount;
+    Vert.AmplifiedElevation -= ErosionAmount;
+
+    OutHydraulicVerts[VertexIdx] = Vert;
+    OutAmplifiedElevation[VertexIdx] = Vert.AmplifiedElevation;
+}
+

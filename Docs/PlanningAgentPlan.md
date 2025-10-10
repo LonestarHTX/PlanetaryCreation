@@ -82,7 +82,7 @@
   - Add terrane extraction/reattachment and localized uplift during continental collisions.
   - Implement continental erosion & sediment transport tied to stress/elevation history.
   - ✅ Applied ParallelFor multi-threading to sediment/dampening/mesh build (achieved 6.32ms vs 110ms budget).
-  - ✅ Implemented GPU compute shaders for Stage B oceanic/continental amplification (~23ms combined).
+  - ✅ Implemented GPU compute shaders for Stage B oceanic/continental amplification (steady-state ≈33–34 ms per step at L7: Oceanic GPU ≈8 ms, Continental GPU ≈23 ms, CPU bookkeeping ≈3 ms; first warm-up replay ≈65 ms).
   - ⏸️ GPU thermal/velocity fields deferred (0.6ms CPU cost not worth transfer overhead).
   - Update automation/CSV exports to include new amplification metrics; reproduce paper figures at Level 7 for parity.
 - **Dependencies:** Milestone 5 data exports, exemplar datasets *(✅ Stage B SRTM catalog & cutter ready)*, profiling harness.
@@ -93,12 +93,15 @@
     - Harness and latest metrics live in `Docs/Performance_M6.md`; treat it as the canonical source for Stage B/L3 measurements.
     - Run the Stage B parity harness with `-SetCVar="r.PlanetaryCreation.StageBProfiling=1"` **and** `r.PlanetaryCreation.StageBProfiling 1` in `-ExecCmds` so the logs always emit `[StageB][Profile]` / `[StageB][CacheProfile]`.
   - Leverage the continental exemplar blend cache so CPU fallbacks reuse the first pass; the `PlanetaryCreation.Milestone6.ContinentalBlendCache` automation guards the serial sync (add it to the same CI run that executes the GPU parity suites) while Stage B logs should show only the initial `[ContinentalGPUReadback] Overrides=…` line.
+  - Surface the `[ContinentalGPU] Hash check … Match=1` log lines in CI output (Oceanic + Continental parity suites) and fail the run if the match rate drops—this keeps the snapshot hash fix exercised.
   - Keep the `RefreshRidgeDirectionsIfNeeded()` flow using the render-vertex cache (no per-step recompute) and keep `RidgeDirectionCacheTest` green in CI.
   - Capture steady-state timings with the new Stage B in-place mesh refresh path (no rebuild) and document the savings; fall back to rebuild only when topology stamps diverge.
   - Use the expanded `[StepTiming]` logging (Voronoi reassignment counts plus ridge dirty/update/cache stats) to enforce ridge-cache health thresholds during undo/redo and parity automation, keep `CachedVoronoiAssignments` in sync across undo/retess paths, and confirm the adaptive ring-depth fallback (default depth 1) keeps ridge recomputes near 0 ms.
   - Keep an eye on the navigation-system warning (`NavigationSystem.cpp:3808`) now suppressed by the module ensure handler and confirm no new ensures slip through automation logs.
   - Raise `RetessellationThresholdDegrees` default to 45° with a “High Accuracy (30°)” toggle for review builds so perf measurements match the documented quick win.
   - Normalize sediment/dampening loops to rely on cached adjacency weights to cut repeated neighbor scans.
+  - Profile sediment (~14–19 ms) and dampening (~24–25 ms) passes with Stage B enabled and queue follow-up SoA/ParallelFor work so they become the next optimization focus now that Stage B sits at ~33 ms steady-state.
+  - Draft `Docs/ReleaseNotes_M6.md` and `Docs/PaperParityReport_M6.md` (or equivalent sections) with the updated Stage B timings (65 ms warm-up / 33–34 ms steady-state / 44 ms parity undo) so hand-off collateral stays consistent.
   - Treat Level 7 as a validation tier until async GPU amplification lands; document this expectation in milestone hand-off notes.
 
 - **New:** M6 Task 2.3.1 (Stage B Perf Profiling) instruments amplification loops to get us under 1s per step at L7; required before we flip Stage B on by default. Once CPU cost is under control, revisit GPU offload and UI polish in M7.

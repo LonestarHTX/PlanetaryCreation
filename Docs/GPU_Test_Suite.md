@@ -64,6 +64,7 @@ Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity
 **Acceptance Criteria:**
 - ✅ Snapshot-backed run reports 100% of sampled vertices within ±0.1 m (`MeanDelta < 0.05 m`, `MaxDelta < 1 m`).
 - ✅ Fallback run completes without error and logs `Source=snapshot fallback`.
+- ✅ Test asserts that the dispatch stats report at least one hash match during the snapshot run (`FContinentalGPUDispatchStats::HashMatchCount > 0`) and zero matches during the forced fallback (snapshot reuse regression causes an automation failure).
 
 **Enable Command:**
 ```

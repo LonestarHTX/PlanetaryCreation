@@ -31,6 +31,7 @@ struct FStageBProfile
     double OceanicGPUMs = 0.0;
     double ContinentalCPUMs = 0.0;
     double ContinentalGPUMs = 0.0;
+    double HydraulicMs = 0.0;
     double GpuReadbackMs = 0.0;
     double CacheInvalidationMs = 0.0;
     int32 RidgeDirtyVertices = 0;
@@ -44,7 +45,15 @@ struct FStageBProfile
 
     double TotalMs() const
     {
-        return BaselineMs + RidgeMs + OceanicCPUMs + OceanicGPUMs + ContinentalCPUMs + ContinentalGPUMs + GpuReadbackMs + CacheInvalidationMs;
+        return BaselineMs +
+            RidgeMs +
+            OceanicCPUMs +
+            OceanicGPUMs +
+            ContinentalCPUMs +
+            ContinentalGPUMs +
+            HydraulicMs +
+            GpuReadbackMs +
+            CacheInvalidationMs;
     }
 };
 
@@ -91,6 +100,15 @@ struct FContinentalAmplificationGPUInputs
     uint64 CachedDataSerial = 0;
     int32 CachedTopologyVersion = INDEX_NONE;
     int32 CachedSurfaceVersion = INDEX_NONE;
+};
+
+struct FContinentalGPUDispatchStats
+{
+    bool bDispatchAttempted = false;
+    bool bDispatchSucceeded = false;
+    bool bSnapshotMatched = false;
+    int32 HashCheckCount = 0;
+    int32 HashMatchCount = 0;
 };
 
 struct FContinentalAmplificationCacheEntry
@@ -859,6 +877,35 @@ struct FTectonicSimulationParameters
     bool bEnableContinentalAmplification = true;
 
     /**
+     * Milestone 6 Task 3.1: Stream-power hydraulic erosion constant (m/My).
+     * Multiplies A^m * S^n to yield erosion per mega-year. Paper plan defaults to 0.002.
+     */
+    UPROPERTY()
+    double HydraulicErosionConstant = 0.002;
+
+    /** Milestone 6 Task 3.1: Flow accumulation exponent (m in stream power law). */
+    UPROPERTY()
+    double HydraulicAreaExponent = 0.5;
+
+    /** Milestone 6 Task 3.1: Slope exponent (n in stream power law). */
+    UPROPERTY()
+    double HydraulicSlopeExponent = 1.0;
+
+    /**
+     * Milestone 6 Task 3.1: Fraction of eroded material transported to downstream neighbor.
+     * Remaining fraction redeposits locally to conserve mass.
+     */
+    UPROPERTY()
+    double HydraulicDownstreamDepositRatio = 0.5;
+
+    /**
+     * Milestone 6 Task 3.1: Enable hydraulic erosion pass on amplified terrain.
+     * Paper default: true (valley carving enabled). Disable to profile Stage B without erosion cost.
+     */
+    UPROPERTY()
+    bool bEnableHydraulicErosion = true;
+
+    /**
      * Milestone 6 Task 2.1: Minimum render subdivision level for amplification.
      * Amplification only applies at LOD levels >= this value (prevents wasted computation at low LOD).
      * Default 5 (10,242 vertices, high-detail preview per plan).
@@ -924,6 +971,18 @@ struct FContinentalAmplificationSnapshot
             PlateAssignments.Num() == VertexCount &&
             AmplifiedElevation.Num() == VertexCount;
     }
+};
+
+struct FHydraulicErosionGPUInputs
+{
+    TArray<float> AmplifiedElevation;
+    TArray<float> CrustAge;
+    TArray<int32> DownhillIndices;
+    TArray<int32> SortedVertexOrder;
+    int32 CachedVertexCount = 0;
+    uint64 CachedDataSerial = 0;
+    int32 CachedSurfaceVersion = INDEX_NONE;
+    int32 CachedTopologyVersion = INDEX_NONE;
 };
 
 
@@ -1013,10 +1072,17 @@ public:
 
     /** Milestone 5 Task 2.3: Accessor for per-vertex crust age (My). */
     const TArray<double>& GetVertexCrustAge() const { return VertexCrustAge; }
+    TArray<double>& GetMutableVertexCrustAge() { return VertexCrustAge; }
 
     /** Milestone 6 Task 2.1: Accessor for per-vertex amplified elevation (Stage B, meters). */
     const TArray<double>& GetVertexAmplifiedElevation() const { return VertexAmplifiedElevation; }
     TArray<double>& GetMutableVertexAmplifiedElevation() { return VertexAmplifiedElevation; }
+    const FHydraulicErosionGPUInputs& GetHydraulicGPUInputs() const;
+
+    /** Milestone 6 Task 3.1: Last-step hydraulic erosion mass metrics (meters). */
+    double GetLastHydraulicTotalEroded() const { return LastHydraulicTotalEroded; }
+    double GetLastHydraulicTotalDeposited() const { return LastHydraulicTotalDeposited; }
+    double GetLastHydraulicLostToOcean() const { return LastHydraulicLostToOcean; }
 
     const TArray<int32>& GetRenderVertexAdjacencyOffsets() const { return RenderVertexAdjacencyOffsets; }
     const TArray<int32>& GetRenderVertexAdjacency() const { return RenderVertexAdjacency; }
@@ -1089,6 +1155,11 @@ public:
     bool ShouldUseGPUAmplification() const;
     bool ApplyOceanicAmplificationGPU();
     bool ApplyContinentalAmplificationGPU();
+    bool ShouldUseGPUHydraulic() const;
+    bool ApplyHydraulicErosionGPU(double DeltaTimeMy);
+
+    void ResetContinentalGPUDispatchStats();
+    const FContinentalGPUDispatchStats& GetContinentalGPUDispatchStats() const { return ContinentalGPUDispatchStats; }
 
     /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
     void ExportMetricsToCSV();
@@ -1501,6 +1572,9 @@ private:
     /** Milestone 5 Task 2.2: Redistribute sediment via diffusion (Stage 0, mass-conserving). */
     void ApplySedimentTransport(double DeltaTimeMy);
 
+    /** Milestone 6 Task 3.1: Apply hydraulic erosion on amplified terrain (Stage B). */
+    void ApplyHydraulicErosion(double DeltaTimeMy);
+
     /** Milestone 5 Task 2.3: Apply oceanic dampening and age-subsidence to seafloor. */
     void ApplyOceanicDampening(double DeltaTimeMy);
 
@@ -1522,6 +1596,7 @@ private:
     void InitializeAmplifiedElevationBaseline();
     /** Ensure Stage B data structures (crust age, ridge directions, amplified buffers) are sized before running amplification. */
     void EnsureStageBPrimed();
+    void RefreshHydraulicGPUInputs() const;
 
     /** Rebuilds Stage B amplification for the current render LOD without advancing simulation time. */
     void RebuildStageBForCurrentLOD();
@@ -1569,6 +1644,19 @@ private:
 
     /** Milestone 6 Task 2.1: Per-vertex amplified elevation (Stage B, meters). */
     TArray<double> VertexAmplifiedElevation;
+
+    /** Milestone 6 Task 3.1: Hydraulic erosion working buffers (reused each step). */
+    TArray<int32> HydraulicDownhillNeighbor;
+    TArray<float> HydraulicFlowAccumulation;
+    TArray<float> HydraulicErosionBuffer;
+    TArray<float> HydraulicSelfDepositBuffer;
+    TArray<float> HydraulicDownstreamDepositBuffer;
+    TArray<int32> HydraulicUpstreamCount;
+    TArray<int32> HydraulicProcessingQueue;
+    double LastHydraulicTotalEroded = 0.0;
+    double LastHydraulicTotalDeposited = 0.0;
+    double LastHydraulicLostToOcean = 0.0;
+    mutable FHydraulicErosionGPUInputs HydraulicGPUInputs;
 
     /** Optional sealevel emphasis toggle (visual only). */
     bool bHighlightSeaLevel = false;
@@ -1671,6 +1759,8 @@ private:
     mutable int32 LastRidgeMissingTangentCount = 0;
     mutable int32 LastRidgePoorAlignmentCount = 0;
     mutable int32 LastRidgeGradientFallbackCount = 0;
+
+    FContinentalGPUDispatchStats ContinentalGPUDispatchStats;
 
 #if WITH_EDITOR
     struct FOceanicGPUAsyncJob

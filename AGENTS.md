@@ -10,6 +10,8 @@
 
 ## Build, Test, and Development Commands
 - The editor now boots with the full paper pipeline (LOD 5 + Stage B/GPU/PBR). Run `r.PlanetaryCreation.PaperDefaults 0` when you need the lean M5 baseline (CPU profiling, older automation).
+- Stream-power hydraulic erosion is part of the default Stage B stack and now costs ~1.7 ms at L7. Leave it enabled for parity/profiling runs; use `r.PlanetaryCreation.EnableHydraulicErosion 0` only when you explicitly need the lean M5 baseline.
+- The toggle `r.PlanetaryCreation.UseGPUHydraulic` remains available (default `1`), but the pass still runs on the optimised CPU path—no GPU compute dispatch is required.
 - Launch playable build: `"<UE5>\Engine\Binaries\Win64\UnrealEditor.exe" PlanetaryCreation.uproject -game`.
 - Rebuild editor target: `"<UE5>\Engine\Build\BatchFiles\Build.bat" PlanetaryCreationEditor Win64 Development -project="%CD%\PlanetaryCreation.uproject"`.
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
@@ -41,6 +43,7 @@
   1. Launch the editor (defaults land in LOD 5 + Stage B/GPU/PBR).
   2. Step the simulation once and confirm plate colours + amplification blend render (no flat grey fallback).
   3. Toggle `PaperDefaults 0/1` to ensure the switch still works before running heavy automation.
+  4. When running the Milestone 6 parity suites, confirm `[StageB][Profile]` logs include `Hydraulic ≈ 1.6–1.8 ms` to verify the optimised pass is active.
 - Use Unreal's Automation Testing framework (`IMPLEMENT_SIMPLE_AUTOMATION_TEST`) and name suites `FPlanetaryCreation<Feature>Test`.
 - Run targeted tests headless: `"<UE5>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" PlanetaryCreation.uproject -ExecCmds="Automation RunTests PlanetaryCreation" -TestExit="Automation Test Queue Empty"`.
 - Inspect logs with `powershell -Command "Get-Content 'Saved/Logs/PlanetaryCreation.log' | Select-String 'Result={Success}'"`.

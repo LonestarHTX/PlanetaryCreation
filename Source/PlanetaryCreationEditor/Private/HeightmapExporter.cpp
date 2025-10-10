@@ -87,10 +87,6 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 		const FVector3d& Position = RenderVertices[VertexIdx];
 		const double Elevation = ElevationSource[VertexIdx];
 
-		// Normalize elevation to [0, 1]
-		const double NormalizedHeight = (MaxElevation > MinElevation) ?
-			(Elevation - MinElevation) / (MaxElevation - MinElevation) : 0.5;
-
 		// Project to equirectangular UV
 		const FVector2D UV = VertexToEquirectangularUV(Position);
 
@@ -99,18 +95,18 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 		const int32 Y = FMath::Clamp(static_cast<int32>(UV.Y * ImageHeight), 0, ImageHeight - 1);
 		const int32 PixelIdx = Y * ImageWidth + X;
 
-		// Write color
-                const FColor ElevColor = PlanetaryCreation::Heightmap::MakeElevationColor(NormalizedHeight);
+		// Write color using absolute elevation (in meters)
+		const FColor ElevColor = PlanetaryCreation::Heightmap::MakeElevationColor(Elevation);
 		ImageData[PixelIdx] = ElevColor;
 
 		// Debug: Log first few samples
-        if (DebugSampleCount < 5)
-        {
-            UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Vertex %d: Pos=(%.2f,%.2f,%.2f) Elev=%.1f Norm=%.3f UV=(%.3f,%.3f) Pixel=(%d,%d) Color=(%d,%d,%d)"),
-                VertexIdx, Position.X, Position.Y, Position.Z, Elevation, NormalizedHeight,
-                UV.X, UV.Y, X, Y, ElevColor.R, ElevColor.G, ElevColor.B);
-            DebugSampleCount++;
-        }
+		if (DebugSampleCount < 5)
+		{
+			UE_LOG(LogPlanetaryCreation, VeryVerbose, TEXT("Vertex %d: Pos=(%.2f,%.2f,%.2f) Elev=%.1fm UV=(%.3f,%.3f) Pixel=(%d,%d) Color=(%d,%d,%d)"),
+				VertexIdx, Position.X, Position.Y, Position.Z, Elevation,
+				UV.X, UV.Y, X, Y, ElevColor.R, ElevColor.G, ElevColor.B);
+			DebugSampleCount++;
+		}
     }
 
     // Fill gaps (pixels that had no vertex mapped to them)

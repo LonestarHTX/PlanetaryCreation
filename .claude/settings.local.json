@@ -50,7 +50,14 @@
       "Bash(if [ -f /tmp/oceanic_amplification_validation.log ])",
       "Bash(then tail -200 /tmp/oceanic_amplification_validation.log)",
       "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.Debug.PlateMovementDiagnostic; Quit\" -unattended -nop4 -nosplash -log)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(for:*)",
+      "Bash(do grep -l \"Hydraulic [1-9]\" \"$log\")",
+      "Bash(done)",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.StageBScreenshots; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(if [ -f /tmp/hypsometric_test.log ])",
+      "Bash(then tail -50 /tmp/hypsometric_test.log)",
+      "Bash(else echo \"Log not created yet\")"
     ],
     "deny": [],
     "ask": []

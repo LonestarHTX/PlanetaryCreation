@@ -26,27 +26,36 @@ Logs for every run are written to `Saved/Logs/PlanetaryCreation.log`. When the G
 
 **Oceanic GPU parity (2025-10-10)**
 
-| Phase | Total (ms) | Stage B (ms) | Baseline | Ridge | Oceanic | Cache | Readback | Notes |
+Running the oceanic suite by itself now records a flat **1.7–1.8 ms** Stage B cost at L7. The log shows `OceanicGPU 0.00 ms` because the GPU preview path shares the same displacement buffer the CPU baseline populates during the warm-up pass; only the hydraulic pass (~1.6 ms) executes on the CPU before the parity harness snapshots the result.
+
+**Continental parity (2025-10-10)**
+
+| Phase | Stage B Total (ms) | Baseline | Ridge | Oceanic GPU | Continental CPU | Continental GPU | Cache | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CPU baseline (steps 2‑7) | 167–175 | **19.4** | 0.10 | 0.03 | **19.3 ms (CPU)** | 0.00 | 0.00 | Warm steady-state before GPU swap |
-| GPU pass (step 8) | 240.1 | **10.9** | 0.10 | 0.03 | **10.8 ms (GPU)** | 0.00 | 0.00 | Includes one-time preview/texture init cost |
+| Step 1 warm-up | **65.4** | 0.10 | 0.03 | **11.6** | **26.2** | **27.5** | 0.00 | First replay primes the GPU snapshot and still executes the legacy CPU path once. |
+| Steps 2‑10 steady-state (avg) | **33.7** | 0.10 | 0.03 | **8.2** | **2.8** | **22.6** | 0.00 | Snapshot hash now matches every frame, so the GPU readback is applied directly with ≈2.8 ms CPU overhead. |
+| CPU fallback validation (Steps 11‑12) | **44.2** | 0.11 | 0.03 | **≈19.5 (CPU)** | **14.9** | 0.00 | **9.6** | Parity intentionally replays the CPU cache to validate drift handling before exiting. |
 
-**Continental parity**
-
-| Phase | Stage B (ms) | Baseline | Ridge | Continental CPU | Cache | Readback | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Snapshot-backed GPU run | *(Async write-back)* | – | – | – | – | 0.00 | `[ContinentalGPUReadback] GPU applied … (snapshot)` now writes the GPU results back into `VertexAmplifiedElevation` (mean delta ≈0 m, max delta 0.0003 m). |
-| Drift fallback replay | **19.6** | 0.10 | 0.00 | **12.4–13.1 ms** | **≈7.1 ms** | 0.00 | Intentional undo/replay that verifies the CPU cache path (`Source=snapshot fallback` in the log). |
-| Reduced vertex set | 16.7 | 0.11 | 0.00 | 10.8 ms | 5.8 ms | 0.00 | After Voronoi trim during the fallback replay. |
-
+Log excerpt with the new instrumentation:
+```
+[ContinentalGPU] Hash check JobId 11 Snapshot=0x92b4ed5b Current=0x92b4ed5b Match=1 (DataSerial=83/83 Topology=0/0 Surface=22/22)
+```
 
 **Key takeaways**
-- Oceanic Stage B now holds at **~19.4 ms** on the CPU baseline and **~10.9 ms** once the GPU pass takes over; the GPU path keeps readback at zero and only pays a one-time preview setup cost.
-- Continental parity’s first replay now applies pure GPU output (`[ContinentalGPUReadback] GPU applied … (snapshot)`), while the follow-up undo still exercises the legacy cache fallback (Stage B ≈19.6 ms) for drift coverage.
-- Ridge recompute cost stays near **0.03 ms** courtesy of incremental Voronoi dirtying; only the post-reset frame rebuilds the full `163 842` vertex set.
-- Snapshot serial/hash protections are intact—no `[StageB][GPU]` mismatches and oceanic parity exits with max delta **0.0003 m**.
-- `[StageB][CacheProfile]` continues to flag continental cache rebuild time (classification ~1.5 ms, exemplar selection ~1.3 ms); this remains the top optimisation target while the CPU fallback path is still executed.
-- Navigation system ensure suppression still works; parity logs surface only the single informational warning (`NavigationSystem.cpp:3808`).
+- Hash refinement keeps the GPU snapshot hot: steps 2‑10 now stay on the fast path (`ContinentalCPU ≈2.8 ms`, `ContinentalGPU ≈22.6 ms`) instead of replaying the ~19 ms CPU fallback every frame.
+- The only time we pay the CPU/cache cost is when the parity harness deliberately rewinds (steps 11‑12); steady-state Stage B is down to **≈33–34 ms** at L7 (Oceanic GPU ~8 ms + Continental GPU ~23 ms + 2–3 ms CPU bookkeeping).
+- Oceanic parity remains cheap when run solo (≈1.7 ms total) because the hydraulic pass dominates; when combined with continental parity, the oceanic GPU leg contributes the expected ~8 ms per frame.
+- Ridge recompute and Voronoi updates remain around **0.03 ms**, and readback stays at zero thanks to the async job fencing.
+- Snapshot/serial guards now log their status explicitly, making it easy to confirm when the GPU replay path is active in automation runs.
+
+**Stage B + Surface Processes (Paper defaults, L7)**  
+`Automation RunTests PlanetaryCreation.Milestone6.Perf.StageBSurfaceProcesses` (with GPU amplification on) reports:
+- Stage B steady-state: **1.8 ms** (null GPU path for this targeted run)
+- Hydraulic erosion: **≈1.7 ms**
+- Sediment diffusion: **≈8.5–10.1 ms**
+- Oceanic dampening: **≈1.0–1.2 ms**
+
+These figures confirm sediment diffusion is the dominant remaining surface-process cost when Stage B is disabled for profiling; optimisation passes should target bringing sediment under 10 ms at L7.
 
 ### Level 3 Baseline (M5 Regression Harness)
 
@@ -68,8 +77,8 @@ These measurements replace the extrapolated L3 figures in earlier performance do
 5. **Record metrics** in this document and in any milestone summary. Use the single source above to avoid divergent numbers.
 
 ## Latest Automation Status
-- `PlanetaryCreation.Milestone6.GPU.OceanicParity` — **PASS** (2025‑10‑10), Stage B profiling on, GPU pass steady at 10.9 ms, max delta 0.0003 m.
-- `PlanetaryCreation.Milestone6.GPU.ContinentalParity` — **PASS**, currently exercising the snapshot fallback (no GPU override yet); cache rebuild ≈7 ms, deltas 0.000 m.
+- `PlanetaryCreation.Milestone6.GPU.OceanicParity` — **PASS** (2025‑10‑10), Stage B profiling on, solo run reports ~1.7 ms total (hydraulic only) while combined runs log Oceanic GPU ≈8 ms; max delta 0.0003 m.
+- `PlanetaryCreation.Milestone6.GPU.ContinentalParity` — **PASS**, steady-state frames stay on the GPU fast path (Continental GPU ≈22–23 ms, Continental CPU ≈2–3 ms, Cache 0 ms); parity undo still exercises the CPU fallback (~44 ms) by design.
 - `PlanetaryCreation.Milestone6.TerranePersistence` — **PASS**, CSV export + deterministic IDs verified in `Saved/TectonicMetrics/`.
 - `PlanetaryCreation.Milestone5.PerformanceRegression` — **PASS**, full M5 overhead 0.32 ms (reference baseline).
 - `PlanetaryCreation.Milestone6.ContinentalBlendCache` — **PASS**, blend cache serial matches Stage B serial.

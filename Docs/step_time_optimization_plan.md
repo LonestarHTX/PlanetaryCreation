@@ -91,6 +91,24 @@ Avoid rebuilding realtime-mesh sections when topology is unchanged so Stage B 
 
 ---
 
+## 5. Sediment & Dampening Optimisation Focus
+
+### Current Profiling (Paper Defaults, L7 – 2025‑10‑10 Logs)
+- **Sediment diffusion:** ~14–19 ms per step when enabled.
+- **Oceanic dampening:** ~24–25 ms per step.
+- These passes now dominate the frame after the Stage B hash fix drove amplification down to ≈33 ms steady-state.
+
+### Immediate Actions
+1. **Data layout:** Convert neighbour traversal to a CSR-style SoA (`NeighborsIndex`, `NeighborsStart`, `NeighborsCount`) so diffusion/dampening can scan contiguous memory.
+2. **Parallel execution:** Reintroduce `ParallelFor` (mirroring the existing sediment CPU pass) once the SoA layout lands, targeting ≥40 % reduction.
+3. **Profiling hooks:** Wrap both passes with Insights markers and emit `[StepTiming] Sediment/Dampening` entries when the toggles are on.
+4. **Automation:** Extend the performance harness to capture sediment/dampening timings so CI can flag regressions once the optimisation work begins.
+
+### Target
+- Sediment diffusion <10 ms at L7, dampening <15 ms at L7, keeping the total step time <90 ms with Stage B enabled.
+
+---
+
 ## 5. Suggested Order of Implementation
 1. Implement **Re-Tessellation Throttling** (immediate, low risk).
 2. Add **Ridge Direction Caching** with topology stamping.

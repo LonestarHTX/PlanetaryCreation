@@ -127,11 +127,13 @@ User clicks "Step"
 | L6  | 40,962   | ~35 ms    | 120 ms | ✅ 3× under budget |
 | L7  | 163,842  | TBD       | 200 ms | 📊 Baseline pending |
 
-**M6 Features:**
-- Terrane mechanics: ~2ms (amortized)
-- Stage B Oceanic GPU: ~10.9ms (compute shader pass)
-- Stage B Continental (GPU snapshot + CPU fallback): ~19.6ms
-- **Current total:** ~38.8ms at L3 (57% headroom remaining)
+**M6 Features (Paper defaults, L7):**
+- Terrane mechanics: ~2 ms (amortized)
+- Stage B warm-up: ~65 ms on the first replay while the GPU snapshot seeds
+- Stage B steady-state: **~33–34 ms** (Oceanic GPU ≈8 ms + Continental GPU ≈23 ms + ≈3 ms CPU)
+- Parity undo: ~44 ms (expected CPU/cache fallback before the suite exits)
+- Hydraulic erosion: ~1.7 ms (topological queue)
+- **Current steady-state total:** ≈43 ms at L7 (≤90 ms budget) with 52 % headroom; L3 remains 6.32 ms (17× under its 90 ms budget)
 
 ---
 
@@ -150,7 +152,7 @@ User clicks "Step"
 ### ✅ GPU Compute Shaders (Stage B)
 **What:** Offload Stage B amplification to GPU compute shaders
 **Why:** Stage B dominates the M6 budget (~31 ms combined), high ROI
-**Result:** Oceanic ~10.9 ms (GPU pass) + Continental ~19.6 ms (GPU snapshot + CPU fallback) with <0.1 m parity
+**Result:** Warm-up ~65 ms (one-time), then steady-state Stage B ≈33–34 ms per step (Oceanic GPU ≈8 ms, Continental GPU ≈23 ms, Continental CPU ≈3 ms) with <0.1 m parity and a final CPU/cache replay (~44 ms) when the parity harness undoes
 
 **Shaders:**
 - `OceanicAmplification.usf` - Perlin noise, transform faults

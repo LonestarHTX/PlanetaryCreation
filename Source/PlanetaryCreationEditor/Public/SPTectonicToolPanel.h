@@ -104,6 +104,9 @@ private:
     ECheckBoxState GetSedimentTransportState() const;
     void OnSedimentTransportChanged(ECheckBoxState NewState);
 
+    ECheckBoxState GetHydraulicErosionState() const;
+    void OnHydraulicErosionChanged(ECheckBoxState NewState);
+
     ECheckBoxState GetOceanicDampeningState() const;
     void OnOceanicDampeningChanged(ECheckBoxState NewState);
 

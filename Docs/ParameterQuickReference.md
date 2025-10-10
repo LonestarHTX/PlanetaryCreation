@@ -63,13 +63,19 @@ This sheet captures the core simulation knobs now that the system operates in me
 |-----------|---------|-------|
 | `bEnableOceanicAmplification` | true | Paper default; disable via `r.PlanetaryCreation.PaperDefaults 0` or the Stage B toggle when profiling CPU baselines. |
 | `bEnableContinentalAmplification` | true | Paper default matching the published exemplar pipeline; revert with `r.PlanetaryCreation.PaperDefaults 0`. |
+| `bEnableHydraulicErosion` | true | Stream-power routing on amplified terrain; toggle with `r.PlanetaryCreation.EnableHydraulicErosion 0/1`. |
 | `bSkipCPUAmplification` | true | GPU preview renders Stage B directly; set to false if you need the CPU fallback for comparison tests. |
 | `MinAmplificationLOD` | 5 | Stage B only runs at or above this render LOD. |
+| `HydraulicErosionConstant` | 0.002 | Base stream-power strength (m/My); increase for more aggressive valley carving. |
+| `HydraulicAreaExponent` | 0.5 | Flow accumulation exponent (A<sup>m</sup>) in stream-power law. |
+| `HydraulicSlopeExponent` | 1.0 | Slope exponent (S<sup>n</sup>) in stream-power law. |
+| `HydraulicDownstreamDepositRatio` | 0.5 | Fraction of eroded material transported to the downhill neighbour (remainder redeposits locally). |
+| `UseGPUHydraulic` | 1 | Present for future GPU work; currently routes to the optimised CPU pass even when enabled. |
 
 ## Usage Tips
 
 - Adjust `PlanetRadius` and LODs first; other distances (camera, rift widths) should then make intuitive sense.
 - Toggle erosion/sediment/dampening together to observe the full Phase 5 weathering workflow.
+- Use `r.PlanetaryCreation.EnableHydraulicErosion 0/1` to benchmark Stage B with or without the stream-power pass; the CPU implementation costs ~1.7 ms at L7.
 - Keep deterministic runs locked to a single parameter set; changing any value mid-run alters snapshot fingerprints.
 - Use `r.PlanetaryCreation.PaperDefaults 0/1` to flip between the paper-authentic defaults (LOD 5, Stage B/GPU/PBR on) and the lighter M5 baseline for CPU-only profiling.
-

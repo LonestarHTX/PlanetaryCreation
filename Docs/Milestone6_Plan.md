@@ -542,7 +542,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
 
 **Next Step:** Additional milestone if we push Stage B to GPU (move to M7 or M8 once CPU gets under control).
 
-**Status (2025-10-09):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1100`). Oceanic/continental GPU readbacks now run asynchronously, and the pooled readback helpers keep continental amplification and preview rebuilds in sync without blocking. Latest Level 7 capture (post LOD cascade) shows Stage B totals sitting at **26–29 ms** per step with continental CPU amplification ≈16 ms and cache rebuild ≈11 ms; ridge cache stays clean (0 gradient fallbacks) thanks to the dirty-mask refresh.
+**Status (2025-10-09):** ✅ Instrumentation shipped with `FStageBProfile`, `r.PlanetaryCreation.StageBProfiling`, and per-pass timers inside `TectonicSimulationService::AdvanceSteps` (see `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h:18` and `Private/TectonicSimulationService.cpp:900-1100`). Oceanic/continental GPU readbacks now run asynchronously, and the pooled readback helpers keep continental amplification and preview rebuilds in sync without blocking. Latest Level 7 capture (post hash fix) shows steady-state Stage B totals at **~33–34 ms** per frame (oceanic GPU ≈8 ms, continental GPU ≈22–23 ms, continental CPU ≈2–3 ms) with the cache rebuild avoided entirely; ridge cache stays clean (0 gradient fallbacks) thanks to the dirty-mask refresh.
 
 ---
 
@@ -573,7 +573,7 @@ double ComputeContinentalAmplification(const FVector3d& Position, const FContine
   - Confirm mesh streaming path propagates Stage B heights correctly
   - Cached LODs inherit amplified elevations after `SetRenderSubdivisionLevel()`
   - GPU preview materials receive correct elevation scale from simulation params
-- ✅ Performance: Stage B ~30.5ms at L7 (oceanic 10.9ms GPU + continental 19.6ms)
+- ✅ Performance: Stage B steady-state ~33–34 ms at L7 (oceanic GPU ≈8 ms + continental GPU ≈23 ms + ≈3 ms CPU; warm-up step ~65 ms, parity undo still exercises the CPU/cache fallback at ~44 ms)
 
 **Acceptance Criteria:**
 - ✅ Amplification seamlessly integrated into existing LOD system
@@ -874,8 +874,8 @@ void ComputeVelocityField(uint3 DispatchThreadID : SV_DispatchThreadID)
 ```
 
 **Actual Gains (Measured October 2025):**
-- Oceanic amplification: ~10.9ms (GPU) with <0.1m CPU parity
-- Continental amplification: ~19.6ms (GPU snapshot + CPU fallback for drift replay)
+- Oceanic amplification: ~8.2 ms GPU per frame in steady-state (0 ms readback; when the suite runs solo it reports ~1.7 ms because the shared displacement buffer already holds the GPU result)
+- Continental amplification: GPU replay ≈22–23 ms with ≈2–3 ms CPU overhead once the snapshot hash stabilises (first warm-up step still pays ≈26 ms CPU + 27 ms GPU before the cache hits)
 - GPU preview: Equirect texture generation for real-time WPO displacement
 - Async readback: ~0ms blocking cost (pooled FRHIGPUBufferReadback)
 - Thermal/velocity fields: Remain CPU-only (0.2ms + 0.4ms = 0.6ms total, not a bottleneck)
@@ -888,7 +888,7 @@ Focus shifted to **Stage B amplification** (the actual performance bottleneck) i
 - Thermal/velocity fields (0.6ms combined) deemed not worth GPU transfer overhead
 
 - **Why Stage B Over Thermal/Velocity:**
-- Stage B: 10.9ms + 19.6ms = **~30.5ms** (major share of the M6 budget) → High-value GPU target
+- Stage B: 8.2ms + 22.6ms + 2.8ms = **~33–34ms** (major share of the M6 budget) → High-value optimisation target, now achieved by the hash fix
 - Thermal/Velocity: **0.6ms** (≈1% of the budget) → Low ROI for GPU port
 - GPU transfer overhead would likely exceed savings for small fields
 - CPU implementation already well-optimized with cached adjacency
@@ -929,23 +929,23 @@ Focus shifted to **Stage B amplification** (the actual performance bottleneck) i
 | L7 📊 | 163,842 | TBD | <200ms | ~50km sampling | Document for M7 |
 | L8 🎯 | 655,362 | TBD | <400ms | **Paper-parity** (~25km sampling) | Table 2 validation |
 
-**M6 Performance Budget Breakdown (Revised October 2025):**
+**Measured Stage B Timing (Paper defaults, L7 @ Oct 9 2025):**
 ```
 M5 Baseline (L3):               6.32 ms (includes ParallelFor optimizations)
 + Terrane extraction/tracking:  2.00 ms (amortized, rare events)
-+ Stage B Oceanic (GPU):       10.90 ms (transform fault compute shader)
-+ Stage B Continental (GPU snapshot + CPU fallback):   19.60 ms (exemplar blending)
-+ Hydraulic erosion:            8.00 ms (planned - flow routing + redistribution)
++ Stage B Oceanic (GPU steady-state):        8.20 ms (transform-fault shader, mean of steps 2‑10; solo suite logs ~1.7 ms because the shared displacement buffer already holds the result)
++ Stage B Continental (GPU replay + CPU assist):   25.00 ms (GPU 22.6 ms + CPU 2.4 ms once the snapshot hash matches; first warm-up pass hits ~65 ms before the cache stabilises)
++ Hydraulic erosion:            1.70 ms (stream-power pass with linear-time flow accumulation)
 - GPU Preview optimization:    -0.00 ms (async readback, no blocking)
 - ParallelFor (already in M5):  0.00 ms (sediment/dampening parallelized)
-= M6 Total (L3):               38.82 ms (target: <90ms, 57% headroom) ✅
+= L7 Stage B subtotal:         39.55 ms (target <90 ms, 56% headroom) ✅
 
-Note: ParallelFor savings already reflected in 6.32ms M5 baseline
-Note: GPU thermal/velocity deferred (0.6ms not worth transfer overhead)
-Note: SIMD vectorization exploration docs remain for reference, not implemented
-
-M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
+M6 Total (L6):                ~120 ms (extrapolated, 4× vertex scaling)
 ```
+
+Note: Hydraulic erosion now sits well below the 8 ms budget at L7 after replacing the per-step sort with a linear topological pass.
+Note: GPU thermal/velocity deferred (0.6 ms not worth transfer overhead)
+Note: SIMD vectorization exploration docs remain for reference, not implemented
 
 **Validation Targets:**
 - Profiling session: Capture 500-step run at L6 with Unreal Insights
@@ -1112,7 +1112,7 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 - ✅ **Section 5:** Procedural amplification (3D Gabor noise, transform faults)
 - ✅ **Section 5:** Exemplar-based amplification (real-world DEM blending)
 - ✅ **Section 4.2:** Terrane extraction, transport, reattachment
-- ⚠️ **Section 4.5:** Hydraulic erosion upgrade (planned in Phase 3)
+- ✅ **Section 4.5:** Hydraulic erosion upgrade (stream-power routing integrated in Stage B)
 
 ### Paper Parity Status
 - ⚠️ **Section 4:** Partial (4.1-4.4 implemented; hydraulic routing pending)
@@ -1246,7 +1246,7 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 - [x] GPU compute shaders (`OceanicAmplification.usf`, `ContinentalAmplification.usf`, `OceanicAmplificationPreview.usf`) ✅
 - [x] Mesh streaming (`StageBHeight` vertex buffer, material scale sync) ✅
 - [x] Multi-threading optimizations (`ParallelFor` in sediment/dampening/mesh build) ✅
-- [ ] Hydraulic erosion upgrade (`ComputeHydraulicErosion()`, flow routing) 🔴 Planned
+- [x] Hydraulic erosion upgrade (`ApplyHydraulicErosion()`, flow routing) ✅ Implemented Oct 2025
 - [x] ~~SIMD optimizations~~ (superseded by ParallelFor) ⏸️ Deferred
 - [x] ~~GPU thermal/velocity fields~~ (0.6ms CPU, not worth GPU transfer) ⏸️ Deferred
 
@@ -1267,9 +1267,9 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 
 ### Documentation
 - [ ] `Docs/UserGuide.md` (updated with M6 features)
-- [ ] `Docs/ReleaseNotes_M6.md`
+- [x] `Docs/ReleaseNotes_M6.md`
 - [ ] `Docs/Performance_M6.md` (profiling report)
-- [ ] `Docs/PaperParityReport_M6.md` (Table 2 validation)
+- [x] `Docs/PaperParityReport_M6.md` (Table 2 validation)
 - [ ] `Docs/Milestone6_CompletionSummary.md`
 - [ ] `CLAUDE.md` (updated with M6 patterns)
 
@@ -1289,12 +1289,12 @@ M6 Total (L6):                ~120ms (extrapolated, 4× vertex scaling)
 - ✅ **Test Coverage:** 57 total tests (27 M4/M5 + 16 M6 + 14 other), GPU parity passing ✅
 - ✅ **Performance:**
   - L3: **3.70ms** (target <90ms) = **24× under budget** ✅
-  - L7 Stage B: **30.5ms** (oceanic 10.9ms GPU + continental 19.6ms)
-  - M6 Total: **44.2ms** (target <90ms) = **51% headroom** ✅
+  - L7 Stage B (steady-state): **≈33–34 ms** (oceanic GPU ≈8 ms + continental GPU ≈23 ms + ≈3 ms CPU; warm-up step peaks at ~65 ms before the snapshot hash hits)
+  - M6 Total: **≈44 ms** (target <90ms) = **51% headroom** ✅
 - ✅ **Memory:** <8 MB total (target met) ✅
 - ✅ **Optimization Gains:**
   - ParallelFor: 24× performance headroom at L3 (superseded SIMD approach) ✅
-  - GPU Stage B: 8.5ms oceanic savings (44% reduction), 0ms async readback ✅
+  - GPU Stage B: Oceanic ≈8 ms + Continental ≈23 ms steady-state with hash-stable GPU replay (removes previous 19 ms CPU fallback), 0 ms async readback ✅
   - Mesh streaming: Direct `StageBHeight` buffer eliminates CPU displacement ✅
 - 🔴 **Paper Parity:** L8 Table 2 metrics pending (requires L7/L8 profiling baseline)
 
