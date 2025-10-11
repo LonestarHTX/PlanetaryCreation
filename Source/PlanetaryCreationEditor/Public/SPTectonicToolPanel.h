@@ -2,8 +2,11 @@
 
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Input/SComboBox.h"
+#include "TectonicSimulationService.h"
 #include "TectonicPlaybackController.h"
 #include "Templates/Function.h"
+#include "StageBAmplificationTypes.h"
+#include "Delegates/Delegate.h"
 
 class FTectonicSimulationController;
 struct FTectonicSimulationParameters;
@@ -81,6 +84,14 @@ private:
     ECheckBoxState GetGPUPreviewState() const;
     void OnGPUPreviewChanged(ECheckBoxState NewState);
 
+    // Heightmap palette toggle
+    ECheckBoxState GetNormalizedPaletteState() const;
+    void OnNormalizedPaletteChanged(ECheckBoxState NewState);
+    bool IsNormalizedPaletteToggleEnabled() const;
+    FText GetPaletteStatusText() const;
+    FSlateColor GetPaletteStatusColor() const;
+    EVisibility GetPaletteStatusVisibility() const;
+
     // PBR shading toggle for preview material
     ECheckBoxState GetPBRShadingState() const;
     void OnPBRShadingChanged(ECheckBoxState NewState);
@@ -144,6 +155,10 @@ private:
     TSharedRef<SWidget> BuildStageBSection();
     TSharedRef<SWidget> BuildSurfaceProcessesSection();
     TSharedRef<SWidget> BuildCameraSection();
+    void RefreshStageBReadinessFromService();
+    void HandleStageBReadyChanged(bool bReady, EStageBAmplificationReadyReason Reason);
+    void RefreshCachedPaletteMode();
+    void BindStageBReadyDelegate();
 
     TWeakPtr<FTectonicSimulationController> ControllerWeak;
 
@@ -160,4 +175,10 @@ private:
     TArray<TSharedPtr<int32>> BoundaryModeOptions;
     TSharedPtr<int32> SelectedBoundaryMode;
     TSharedPtr<SComboBox<TSharedPtr<int32>>> BoundaryModeCombo;
+
+    bool bCachedStageBReady = false;
+    EStageBAmplificationReadyReason CachedStageBReason = EStageBAmplificationReadyReason::None;
+    EHeightmapPaletteMode CachedPaletteMode = EHeightmapPaletteMode::AbsoluteHypsometric;
+    FText CachedPaletteStatusText;
+    FDelegateHandle StageBReadyDelegateHandle;
 };

@@ -83,9 +83,13 @@ void UTectonicSimulationService::ApplyContinentalErosion(double DeltaTimeMy)
         // M5 Phase 3.7 fix: Apply stress-driven uplift BEFORE checking sea level
         // Scaling: 1 MPa → 100 m elevation (reasonable for tectonic mountain building)
         // Example: 50 MPa convergence → 5 km mountain (Himalayas-scale)
-        const double StressLift_m = VertexStressValues.IsValidIndex(VertexIdx)
-            ? (VertexStressValues[VertexIdx] * 100.0) // 1 MPa → 100 m
-            : 0.0;
+        double StressLift_m = 0.0;
+        if (VertexStressValues.IsValidIndex(VertexIdx))
+        {
+            constexpr double StressToElevationScale = 10.0; // 1 MPa → 10 m uplift
+            constexpr double MaxPerStepStressLift = 1500.0; // Cap uplift to a plausible per-step change
+            StressLift_m = FMath::Clamp(VertexStressValues[VertexIdx] * StressToElevationScale, 0.0, MaxPerStepStressLift);
+        }
 
         if (StressLift_m > 0.0)
         {
