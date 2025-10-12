@@ -28,12 +28,110 @@ namespace
     constexpr double HeightmapSamplingBudgetMs = 200.0;
     constexpr double HeightmapExportTotalBudgetMs = 350.0;
 
+    // Tiled export baseline (Docs/PathToParity/TiledHeightmapExport.md): 512x512 tiles with 2px overlap.
+    constexpr int32 HeightmapTileSizePixels = 512;
+    constexpr int32 HeightmapTileOverlapPixels = 2;
+
     constexpr uint64 HeightmapPNGExtraBytes = 8ull * 1024ull * 1024ull;         // 8 MiB cushion for encoder scratch
     constexpr uint64 HeightmapPreflightSafetyHeadroomBytes = 512ull * 1024ull * 1024ull; // 512 MiB safety margin
 
     constexpr double BytesToMiB(uint64 Bytes)
     {
         return static_cast<double>(Bytes) / (1024.0 * 1024.0);
+    }
+
+    struct FHeightmapTileBuffer
+    {
+        int32 StartX = 0;
+        int32 StartY = 0;
+        int32 EndX = 0;
+        int32 EndY = 0;
+        int32 PaddedWidth = 0;
+        int32 PaddedHeight = 0;
+        TArray<uint8> RGBA;
+    };
+
+    [[maybe_unused]] static FHeightmapTileBuffer ProcessTile(int32 StartX, int32 StartY, int32 EndX, int32 EndY)
+    {
+        FHeightmapTileBuffer Tile;
+        Tile.StartX = StartX;
+        Tile.StartY = StartY;
+        Tile.EndX = EndX;
+        Tile.EndY = EndY;
+        Tile.PaddedWidth = FMath::Max(0, EndX - StartX);
+        Tile.PaddedHeight = FMath::Max(0, EndY - StartY);
+
+        const int64 PixelCount = static_cast<int64>(Tile.PaddedWidth) * static_cast<int64>(Tile.PaddedHeight);
+
+        if (PixelCount > 0)
+        {
+            Tile.RGBA.SetNumZeroed(PixelCount * 4);
+#if !UE_BUILD_SHIPPING
+            const double AllocMiB = BytesToMiB(static_cast<uint64>(Tile.RGBA.GetAllocatedSize()));
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[HeightmapExport][TileMemory] Start=(%d,%d) End=(%d,%d) Size=%dx%d Pixels=%lld Alloc=%.2f MiB"),
+                Tile.StartX,
+                Tile.StartY,
+                Tile.EndX,
+                Tile.EndY,
+                Tile.PaddedWidth,
+                Tile.PaddedHeight,
+                PixelCount,
+                AllocMiB);
+#endif
+        }
+        else
+        {
+            Tile.RGBA.Reset();
+#if !UE_BUILD_SHIPPING
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[HeightmapExport][TileMemory] Start=(%d,%d) End=(%d,%d) Size=0x0 Pixels=0 Alloc=0.00 MiB"),
+                Tile.StartX,
+                Tile.StartY,
+                Tile.EndX,
+                Tile.EndY);
+#endif
+        }
+
+        return Tile;
+    }
+
+    [[maybe_unused]] static void StitchTile(const FHeightmapTileBuffer& Tile, TArray<uint8>& Destination, int32 DestWidth, int32 DestHeight)
+    {
+        const int32 TileWidth = Tile.PaddedWidth;
+        const int32 TileHeight = Tile.PaddedHeight;
+        if (TileWidth <= 0 || TileHeight <= 0)
+        {
+            return;
+        }
+
+        const int32 CopyWidth = FMath::Min(TileWidth, FMath::Max(0, DestWidth - Tile.StartX));
+        const int32 CopyHeight = FMath::Min(TileHeight, FMath::Max(0, DestHeight - Tile.StartY));
+
+        if (CopyWidth <= 0 || CopyHeight <= 0 || Tile.RGBA.Num() < (TileWidth * TileHeight * 4))
+        {
+            return;
+        }
+
+        const int32 TileStrideBytes = TileWidth * 4;
+        const int32 DestStridePixels = DestWidth;
+
+        for (int32 LocalY = 0; LocalY < CopyHeight; ++LocalY)
+        {
+            const int32 DestRow = Tile.StartY + LocalY;
+            if (DestRow < 0 || DestRow >= DestHeight)
+            {
+                continue;
+            }
+
+            const int32 SrcOffset = LocalY * TileStrideBytes;
+            const int32 DestOffset = (DestRow * DestStridePixels + Tile.StartX) * 4;
+
+            FMemory::Memcpy(
+                Destination.GetData() + DestOffset,
+                Tile.RGBA.GetData() + SrcOffset,
+                static_cast<SIZE_T>(CopyWidth) * 4);
+        }
     }
 
     struct FHeightmapPreflightInfo
@@ -244,6 +342,43 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 		return FString();
 	}
 
+    if (bAmplifiedAvailable)
+    {
+        RefreshOceanicAmplificationFloatInputs();
+    }
+
+    const uint64 StageBSerialAtSnapshot = bAmplifiedAvailable ? GetOceanicAmplificationDataSerial() : 0;
+
+#if !UE_BUILD_SHIPPING
+    UE_LOG(LogPlanetaryCreation, Log,
+        TEXT("[HeightmapExport][TileConfig] TileSize=%d Overlap=%d UsingAmplified=%s StageBSerial=%llu"),
+        HeightmapTileSizePixels,
+        HeightmapTileOverlapPixels,
+        bAmplifiedAvailable ? TEXT("true") : TEXT("false"),
+        StageBSerialAtSnapshot);
+#endif
+
+    const auto ValidateStageBSerial = [this, StageBSerialAtSnapshot, bAmplifiedAvailable](const TCHAR* Context) -> bool
+    {
+        if (!bAmplifiedAvailable)
+        {
+            return true;
+        }
+
+        const uint64 CurrentSerial = GetOceanicAmplificationDataSerial();
+        if (CurrentSerial != StageBSerialAtSnapshot)
+        {
+            UE_LOG(LogPlanetaryCreation, Error,
+                TEXT("[HeightmapExport][Corruption] Stage B serial changed during export (Context=%s Snapshot=%llu Current=%llu)"),
+                Context,
+                StageBSerialAtSnapshot,
+                CurrentSerial);
+            return false;
+        }
+
+        return true;
+    };
+
     const double SamplerSetupStartSeconds = FPlatformTime::Seconds();
     FHeightmapSampler Sampler(*this);
     SamplerSetupMs = (FPlatformTime::Seconds() - SamplerSetupStartSeconds) * 1000.0;
@@ -251,6 +386,11 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     {
         UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: Sampler initialization failed (vertices=%d, triangles=%d)"),
             RenderVertices.Num(), RenderTriangles.Num() / 3);
+        return FString();
+    }
+
+    if (bAmplifiedAvailable && !ValidateStageBSerial(TEXT("AfterSamplerInit")))
+    {
         return FString();
     }
 
@@ -512,6 +652,11 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     const double RmsSeamDelta = SeamSamples > 0 ? FMath::Sqrt(SeamRmsAccum / static_cast<double>(SeamSamples)) : 0.0;
 
     SamplingMs = (FPlatformTime::Seconds() - SamplingStartSeconds) * 1000.0;
+
+    if (bAmplifiedAvailable && !ValidateStageBSerial(TEXT("PostSampling")))
+    {
+        return FString();
+    }
 
     Metrics.SeamRowsEvaluated = SeamSamples;
     Metrics.SeamRowsAboveHalfMeter = RowsAboveHalfMeter;
