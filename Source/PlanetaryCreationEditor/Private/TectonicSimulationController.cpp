@@ -38,6 +38,7 @@
 #include "HeightmapColorPalette.h"
 #include "Engine/Texture2D.h"
 #include "HAL/IConsoleManager.h"
+#include <limits>
 
 namespace PlanetaryCreation
 {
@@ -58,6 +59,40 @@ namespace PlanetaryCreation
 
 static FTectonicSimulationController* GActiveSimulationController = nullptr;
 static bool bApplyingPBRFromController = false;
+
+namespace
+{
+    void LogStageBPreviewFallback(bool bStageBReady, bool bAmplificationEnabled, EStageBAmplificationReadyReason Reason)
+    {
+        static bool bLoggedFallback = false;
+        static EStageBAmplificationReadyReason LoggedReason = EStageBAmplificationReadyReason::None;
+
+        if (!bAmplificationEnabled)
+        {
+            bLoggedFallback = false;
+            LoggedReason = EStageBAmplificationReadyReason::None;
+            return;
+        }
+
+        if (!bStageBReady)
+        {
+            if (!bLoggedFallback || LoggedReason != Reason)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][Ready] Preview mesh using baseline elevations because Stage B is not ready (%s: %s)."),
+                    PlanetaryCreation::StageB::GetReadyReasonLabel(Reason),
+                    PlanetaryCreation::StageB::GetReadyReasonDescription(Reason));
+                bLoggedFallback = true;
+                LoggedReason = Reason;
+            }
+        }
+        else
+        {
+            bLoggedFallback = false;
+            LoggedReason = EStageBAmplificationReadyReason::None;
+        }
+    }
+}
 
 FTectonicSimulationController* FTectonicSimulationController::GetActiveController()
 {
@@ -181,6 +216,69 @@ namespace
             return SampleAmplificationGradient(ComputeNormalized(Index));
         }
     };
+
+    struct FElevationPaletteState
+    {
+        PlanetaryCreation::Heightmap::FHeightmapPalette Palette;
+        bool bHasSamples = false;
+        bool bHasFiniteSamples = false;
+
+        bool RequestedNormalized() const
+        {
+            return Palette.IsNormalizedRequested();
+        }
+
+        bool UsesNormalized() const
+        {
+            return Palette.UsesNormalizedSampling();
+        }
+
+        double Range() const
+        {
+            return Palette.GetRange();
+        }
+    };
+
+    static FElevationPaletteState BuildElevationPaletteState(EHeightmapPaletteMode Mode, const TArray<double>* Elevations)
+    {
+        FElevationPaletteState State;
+
+        double MinElevation = 0.0;
+        double MaxElevation = 0.0;
+
+        if (Elevations && Elevations->Num() > 0)
+        {
+            State.bHasSamples = true;
+
+            MinElevation = std::numeric_limits<double>::max();
+            MaxElevation = std::numeric_limits<double>::lowest();
+
+            for (double Value : *Elevations)
+            {
+                if (!FMath::IsFinite(Value))
+                {
+                    continue;
+                }
+
+                MinElevation = FMath::Min(MinElevation, Value);
+                MaxElevation = FMath::Max(MaxElevation, Value);
+            }
+
+            if (MinElevation < std::numeric_limits<double>::max() && MaxElevation > std::numeric_limits<double>::lowest())
+            {
+                State.bHasFiniteSamples = true;
+            }
+            else
+            {
+                MinElevation = 0.0;
+                MaxElevation = 0.0;
+                State.bHasFiniteSamples = false;
+            }
+        }
+
+        State.Palette = PlanetaryCreation::Heightmap::FHeightmapPalette::FromMode(Mode, MinElevation, MaxElevation);
+        return State;
+    }
 }
 
 #if UE_BUILD_DEVELOPMENT
@@ -364,15 +462,21 @@ FMeshBuildSnapshot FTectonicSimulationController::CreateMeshBuildSnapshot() cons
         Snapshot.VertexStressValues = Service->GetVertexStressValues();
         Snapshot.VertexElevationValues = Service->GetVertexElevationValues(); // M5 Phase 3.7: Use actual elevations from erosion
         Snapshot.VertexAmplifiedElevation = Service->GetVertexAmplifiedElevation(); // M6 Task 2.1: Stage B amplified elevation
-        Snapshot.ElevationScale = Service->GetParameters().ElevationScale;
-        Snapshot.PlanetRadius = Service->GetParameters().PlanetRadius; // M5 Phase 3: For unit conversion
+        const FTectonicSimulationParameters Parameters = Service->GetParameters();
+        const bool bStageBReady = Service->IsStageBAmplificationReady();
+        const EStageBAmplificationReadyReason ReadyReason = Service->GetStageBAmplificationNotReadyReason();
+        const bool bAmplificationEnabled =
+            (Parameters.bEnableOceanicAmplification || Parameters.bEnableContinentalAmplification) &&
+            Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
+
+        LogStageBPreviewFallback(bStageBReady, bAmplificationEnabled, ReadyReason);
+        Snapshot.ElevationScale = Parameters.ElevationScale;
+        Snapshot.PlanetRadius = Parameters.PlanetRadius; // M5 Phase 3: For unit conversion
 
         // M6 Task 2.3: Enable amplified elevation if EITHER oceanic OR continental amplification is active
-        Snapshot.bUseAmplifiedElevation = (Service->GetParameters().bEnableOceanicAmplification ||
-                                           Service->GetParameters().bEnableContinentalAmplification) &&
-                                          Service->GetParameters().RenderSubdivisionLevel >= Service->GetParameters().MinAmplificationLOD;
-        Snapshot.Parameters = Service->GetParameters(); // M6 Task 2.3: For heightmap visualization mode
-        Snapshot.VisualizationMode = Service->GetParameters().VisualizationMode;
+        Snapshot.bUseAmplifiedElevation = bStageBReady && bAmplificationEnabled;
+        Snapshot.Parameters = Parameters; // M6 Task 2.3: For heightmap visualization mode
+        Snapshot.VisualizationMode = Parameters.VisualizationMode;
         Snapshot.bHighlightSeaLevel = Service->IsHighlightSeaLevelEnabled();
         Snapshot.StageBProfile = Service->GetLatestStageBProfile();
     }
@@ -1574,13 +1678,8 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     FAmplificationVisualizationContext AmplificationContext;
     AmplificationContext.Initialize(Snapshot.VertexAmplifiedElevation, Snapshot.VertexElevationValues);
 
-    UE_LOG(LogPlanetaryCreation, Log, TEXT("[ElevationDebug] Using absolute hypsometric tint (no normalization). VertexCount=%d"),
-        SourceVertexCount);
-
-    auto GetElevationColor = [](double ElevationMeters) -> FColor
-    {
-        return PlanetaryCreation::Heightmap::MakeElevationColor(ElevationMeters);
-    };
+    const FElevationPaletteState ElevationPaletteState =
+        BuildElevationPaletteState(Snapshot.Parameters.HeightmapPaletteMode, EffectiveElevations);
 
     constexpr double MaxDisplacementMeters = 10000.0;
 
@@ -1608,6 +1707,47 @@ void FTectonicSimulationController::BuildMeshFromSnapshot(int32 LODLevel, int32 
     const bool bAmplificationBlend = (VisualizationMode == ETectonicVisualizationMode::AmplificationBlend) && AmplificationContext.HasData();
     const bool bHighlightSeaLevel = Snapshot.bHighlightSeaLevel;
     const double SeaLevelMeters = Snapshot.Parameters.SeaLevel;
+
+    if (bElevColor)
+    {
+        if (ElevationPaletteState.RequestedNormalized() && !ElevationPaletteState.UsesNormalized())
+        {
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[ElevationDebug] Normalized palette requested but elevation range collapsed (range=%.6f). Falling back to hypsometric."),
+                ElevationPaletteState.Range());
+        }
+
+        if (ElevationPaletteState.bHasFiniteSamples)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ElevationDebug] Elevation palette: %s (%.1f m → %.1f m). VertexCount=%d"),
+                ElevationPaletteState.UsesNormalized() ? TEXT("normalized") : TEXT("absolute hypsometric"),
+                ElevationPaletteState.Palette.GetMinElevation(),
+                ElevationPaletteState.Palette.GetMaxElevation(),
+                SourceVertexCount);
+        }
+        else if (!ElevationPaletteState.bHasSamples)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ElevationDebug] Elevation palette: %s (no elevation dataset available). VertexCount=%d"),
+                ElevationPaletteState.UsesNormalized() ? TEXT("normalized") : TEXT("absolute hypsometric"),
+                SourceVertexCount);
+        }
+        else
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ElevationDebug] Elevation palette: %s (no finite elevation samples; using fallback). VertexCount=%d"),
+                ElevationPaletteState.UsesNormalized() ? TEXT("normalized") : TEXT("absolute hypsometric"),
+                SourceVertexCount);
+        }
+    }
+
+    const PlanetaryCreation::Heightmap::FHeightmapPalette ElevationPalette = ElevationPaletteState.Palette;
+
+    auto GetElevationColor = [ElevationPalette](double ElevationMeters) -> FColor
+    {
+        return ElevationPalette.Sample(ElevationMeters);
+    };
 
     const TArray<float>* SoANormalX = nullptr;
     const TArray<float>* SoANormalY = nullptr;
@@ -2218,6 +2358,9 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
     FAmplificationVisualizationContext AmplificationContext;
     AmplificationContext.Initialize(AmplifiedElevation, ElevationValues);
 
+    const FElevationPaletteState ElevationPaletteState =
+        BuildElevationPaletteState(FreshSnapshot.Parameters.HeightmapPaletteMode, EffectiveElevations);
+
     auto GetPlateColor = [](int32 PlateID) -> FColor
     {
         constexpr float GoldenRatio = 0.618033988749895f;
@@ -2243,17 +2386,18 @@ void FTectonicSimulationController::BuildMeshFromCacheWithColorRefresh(const FCa
         return HSV.HSVToLinearRGB().ToFColor(false);
     };
 
-    // Use shared hypsometric gradient from HeightmapColorPalette.h (absolute elevation-based)
-    auto GetElevationColor = [](double ElevationMeters) -> FColor
-    {
-        return PlanetaryCreation::Heightmap::MakeElevationColor(ElevationMeters);
-    };
-
     const bool bShowVelocity = VisMode == ETectonicVisualizationMode::Velocity;
     const bool bStressColor = VisMode == ETectonicVisualizationMode::Stress;
     const bool bElevColor = (VisMode == ETectonicVisualizationMode::Elevation) && EffectiveElevations != nullptr;
     const bool bAmplifiedColor = (VisMode == ETectonicVisualizationMode::Amplified) && AmplificationContext.HasData();
     const bool bAmplificationBlend = (VisMode == ETectonicVisualizationMode::AmplificationBlend) && AmplificationContext.HasData();
+
+    const PlanetaryCreation::Heightmap::FHeightmapPalette ElevationPalette = ElevationPaletteState.Palette;
+
+    auto GetElevationColor = [ElevationPalette](double ElevationMeters) -> FColor
+    {
+        return ElevationPalette.Sample(ElevationMeters);
+    };
 
     for (int32 Index = 0; Index < VertexCount; ++Index)
     {
@@ -2403,6 +2547,9 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
     FAmplificationVisualizationContext AmplificationContext;
     AmplificationContext.Initialize(Snapshot.VertexAmplifiedElevation, Snapshot.VertexElevationValues);
 
+    const FElevationPaletteState ElevationPaletteState =
+        BuildElevationPaletteState(Snapshot.Parameters.HeightmapPaletteMode, EffectiveElevations);
+
     const TArray<float>* SoANormalX = nullptr;
     const TArray<float>* SoANormalY = nullptr;
     const TArray<float>* SoANormalZ = nullptr;
@@ -2460,10 +2607,11 @@ bool FTectonicSimulationController::UpdateCachedMeshFromSnapshot(FCachedLODMesh&
         return HSV.HSVToLinearRGB().ToFColor(false);
     };
 
-    // Use shared hypsometric gradient from HeightmapColorPalette.h (absolute elevation-based)
-    auto GetElevationColor = [](double ElevationMeters) -> FColor
+    const PlanetaryCreation::Heightmap::FHeightmapPalette ElevationPalette = ElevationPaletteState.Palette;
+
+    auto GetElevationColor = [ElevationPalette](double ElevationMeters) -> FColor
     {
-        return PlanetaryCreation::Heightmap::MakeElevationColor(ElevationMeters);
+        return ElevationPalette.Sample(ElevationMeters);
     };
 
     TArray<FVector3f> SourcePositions;
@@ -2639,10 +2787,13 @@ bool FTectonicSimulationController::TryFastSurfaceRefresh(FCachedLODMesh& Cached
     CachedMesh.Snapshot.VisualizationMode = CachedMesh.Snapshot.Parameters.VisualizationMode;
     CachedMesh.Snapshot.bHighlightSeaLevel = Service.IsHighlightSeaLevelEnabled();
     CachedMesh.Snapshot.StageBProfile = Service.GetLatestStageBProfile();
-
-    CachedMesh.Snapshot.bUseAmplifiedElevation =
+    const bool bAmplificationEnabled =
         (CachedMesh.Snapshot.Parameters.bEnableOceanicAmplification || CachedMesh.Snapshot.Parameters.bEnableContinentalAmplification) &&
         CachedMesh.Snapshot.Parameters.RenderSubdivisionLevel >= CachedMesh.Snapshot.Parameters.MinAmplificationLOD;
+    const bool bStageBReady = Service.IsStageBAmplificationReady();
+    const EStageBAmplificationReadyReason ReadyReason = Service.GetStageBAmplificationNotReadyReason();
+    LogStageBPreviewFallback(bStageBReady, bAmplificationEnabled, ReadyReason);
+    CachedMesh.Snapshot.bUseAmplifiedElevation = bStageBReady && bAmplificationEnabled;
     CachedMesh.Snapshot.PlanetRadius = CachedMesh.Snapshot.Parameters.PlanetRadius;
     CachedMesh.Snapshot.ElevationMode = CurrentElevationMode;
 

@@ -6,6 +6,7 @@
 #include "Containers/BitArray.h"
 #include "Editor.h"
 #include "RHI.h"
+#include "Tests/PlanetaryCreationAutomationGPU.h"
 
 namespace GPUPreviewVertexParity
 {
@@ -25,9 +26,21 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FGPUPreviewVertexParityTest::RunTest(const FString& Parameters)
 {
+    using namespace PlanetaryCreation::Automation;
+    if (!ShouldRunGPUAmplificationAutomation(*this, TEXT("GPU.PreviewVertexParity")))
+    {
+        return true;
+    }
+
     if (!GDynamicRHI || FCString::Stricmp(GDynamicRHI->GetName(), TEXT("NullDrv")) == 0)
     {
         AddInfo(TEXT("Skipping GPU preview vertex parity test (NullRHI detected)."));
+        return true;
+    }
+
+    FScopedStageBThrottleGuard StageBThrottleGuard(*this, 50.0f);
+    if (StageBThrottleGuard.ShouldSkipTest())
+    {
         return true;
     }
 

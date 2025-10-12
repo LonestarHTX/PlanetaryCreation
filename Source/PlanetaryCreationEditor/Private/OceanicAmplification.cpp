@@ -205,8 +205,9 @@ double ComputeOceanicAmplification(
 
     // Paper: "oceanic crust age a_o to accentuate the faults where the crust is young"
     // Age-based amplitude decay: young crust has strong faults, old crust smooths out
+    const double ClampedAgeMy = FMath::Max(CrustAge_My, 0.0);
     const double AgeFalloff = FMath::Max(Parameters.OceanicAgeFalloff, 0.0);
-    const double AgeFactor = (AgeFalloff > 0.0) ? FMath::Exp(-CrustAge_My * AgeFalloff) : 1.0;
+    const double AgeFactor = (AgeFalloff > 0.0) ? FMath::Exp(-ClampedAgeMy * AgeFalloff) : 1.0;
     const double FaultAmplitude_m = Parameters.OceanicFaultAmplitude * AgeFactor;
 
     // Transform faults are perpendicular to ridge direction (r_c from paper)
@@ -276,10 +277,10 @@ double ComputeOceanicAmplification(
     // Debug: Log amplification breakdown for first few young crust vertices
 #if UE_BUILD_DEBUG
     static int32 DebugLogCount = 0;
-    if (DebugLogCount < 5 && CrustAge_My < 10.0)
+    if (DebugLogCount < 5 && ClampedAgeMy < 10.0)
     {
         UE_LOG(LogPlanetaryCreation, Log, TEXT("Debug OceanicAmp [%d]: Age=%.2f My, Base=%.1f m, Fault=%.1f m (GaborNoise=%.3f), Fine=%.1f m, Total=%.1f m, Diff=%.1f m"),
-            DebugLogCount, CrustAge_My, BaseElevation_m, FaultDetail_m, GaborNoise, FineDetail_m, AmplifiedElevation, AmplifiedElevation - BaseElevation_m);
+            DebugLogCount, ClampedAgeMy, BaseElevation_m, FaultDetail_m, GaborNoise, FineDetail_m, AmplifiedElevation, AmplifiedElevation - BaseElevation_m);
         DebugLogCount++;
     }
 #endif

@@ -276,3 +276,17 @@ Fixes: Reviewer feedback (2025-10-10), high-severity race condition
 ---
 
 **Status:** ✅ Fixed, awaiting validation testing
+
+---
+
+## Snapshot Discipline Update (2025-10-13)
+
+- `FOceanicAmplificationSnapshot` is now the single source of truth for Stage B oceanic parity. Every GPU dispatch records `{SnapshotId, RenderLOD, TopologyVersion, SurfaceVersion, Parameters, Baseline_f, Ridge_f, Age_f, Pos_f, Mask_u32, PlateAssignments}` and computes an explicit `InputHash`.
+- Readbacks accept snapshots **only** when `(LOD, TopologyVersion, SurfaceVersion, InputHash)` matches the live service data. Hash mismatches or metadata drift trigger a CPU replay that feeds on the captured snapshot buffers—never the mutable service arrays.
+- When a snapshot is applied we immediately bump `OceanicAmplificationDataSerial` and call `InvalidateOceanicAmplificationFloatInputs()`, so callers are forced to rebuild the float SoA mirror on the next tick.
+- Logging now makes the accept/drop reason obvious. Example:
+  ```
+  [StageB][GPU] Accepted oceanic snapshot (JobId=5 SnapshotId=42 LOD=6 Hash=0xe91f3ab0)
+  [StageB][GPU] Dropping oceanic snapshot (JobId=5 SnapshotId=42) metadata mismatch...
+  ```
+- Automation guard: `PlanetaryCreation.StageB.StageB_Parity_UsesSnapshot` mutates live crust age data between dispatch and readback and fails if the parity path ever samples the live service arrays instead of the snapshot payload.

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "PlanetaryCreationLogging.h"
+#include "StageBAmplificationTypes.h"
 #include "Subsystems/UnrealEditorSubsystem.h"
 #include "Containers/BitArray.h"
 #include "TectonicSimulationService.generated.h"
@@ -23,8 +24,74 @@ enum class ETectonicVisualizationMode : uint8
     AmplificationBlend UMETA(DisplayName = "Amplification Blend")
 };
 
+UENUM(BlueprintType)
+enum class EHeightmapPaletteMode : uint8
+{
+    AbsoluteHypsometric UMETA(DisplayName = "Absolute hypsometric"),
+    NormalizedRange UMETA(DisplayName = "Normalized (min to max)")
+};
+
+struct FHeightmapExportMetrics
+{
+    bool bValid = false;
+    bool bSamplerUsedAmplified = false;
+    bool bStageBReadyAtExport = false;
+    bool bUsedSnapshotFloatBuffer = false;
+    bool bPerformanceBudgetExceeded = false;
+
+    int32 Width = 0;
+    int32 Height = 0;
+    int64 PixelCount = 0;
+    int64 SuccessfulSamples = 0;
+    int64 FailedSamples = 0;
+
+    double CoveragePercent = 0.0;
+    double AverageTraversalSteps = 0.0;
+    int32 MaxTraversalSteps = 0;
+
+    double MinElevation = 0.0;
+    double MaxElevation = 0.0;
+
+    int32 SeamRowsEvaluated = 0;
+    int32 SeamRowsAboveHalfMeter = 0;
+    int32 SeamRowsWithFailures = 0;
+    double SeamMeanAbsDelta = 0.0;
+   double SeamRmsDelta = 0.0;
+   double SeamMaxAbsDelta = 0.0;
+
+    double SamplerSetupMs = 0.0;
+    double SamplingMs = 0.0;
+    double EncodeMs = 0.0;
+    double TotalMs = 0.0;
+};
+
+struct FHeightmapExportPerformanceSample
+{
+    double SamplerSetupMs = 0.0;
+    double SamplingMs = 0.0;
+    double EncodeMs = 0.0;
+    double TotalMs = 0.0;
+    int32 Width = 0;
+    int32 Height = 0;
+    bool bUsedAmplified = false;
+    bool bUsedSnapshotFloatBuffer = false;
+    bool bBudgetExceeded = false;
+};
+
+enum class EStagePipelinePhase : uint8
+{
+    Idle,
+    StageA,
+    StageBComplete,
+    PostErosion
+};
+
 struct FStageBProfile
 {
+    bool bAmplificationReady = false;
+    EStageBAmplificationReadyReason ReadyReason = EStageBAmplificationReadyReason::NoRenderMesh;
+    int32 PendingOceanicJobs = 0;
+    int32 PendingContinentalJobs = 0;
     double BaselineMs = 0.0;
     double RidgeMs = 0.0;
     double OceanicCPUMs = 0.0;
@@ -40,8 +107,13 @@ struct FStageBProfile
     int32 RidgeMissingTangents = 0;
     int32 RidgePoorAlignment = 0;
     int32 RidgeGradientFallbacks = 0;
+    int32 RidgePlateFallbacks = 0;
+    int32 RidgeMotionFallbacks = 0;
     int32 VoronoiReassignedVertices = 0;
     bool bVoronoiForcedFullRidge = false;
+    int32 OceanicBaselineReuseCount = 0;
+    int32 OceanicMaskMismatchCount = 0;
+    bool bForcedOceanicCpuFallback = false;
 
     double TotalMs() const
     {
@@ -790,6 +862,10 @@ struct FTectonicSimulationParameters
     UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Use VisualizationMode instead."))
     bool bEnableHeightmapVisualization = false;
 
+    /** Heightmap palette selection for visualization/export (absolute vs normalized). */
+    UPROPERTY()
+    EHeightmapPaletteMode HeightmapPaletteMode = EHeightmapPaletteMode::AbsoluteHypsometric;
+
     /**
      * Milestone 6 GPU Preview: Skip CPU amplification path when controller handles GPU preview.
      * When true, AdvanceSteps() skips ApplyOceanicAmplification/ApplyContinentalAmplification CPU paths.
@@ -921,20 +997,31 @@ struct FTectonicSimulationParameters
      */
     UPROPERTY()
     int32 RidgeDirectionDirtyRingDepth = 1;
+
+    /**
+     * Angular distance threshold (radians) for using cached ridge tangents.
+     * Vertices farther than this from a divergent boundary fall back to gradient estimation.
+     */
+    UPROPERTY()
+    double RidgeBoundaryInfluenceRadians = FMath::DegreesToRadians(25.0);
 };
 
 struct FOceanicAmplificationSnapshot
 {
+    FTectonicSimulationParameters Parameters;
+    int32 RenderLOD = INDEX_NONE;
+    int32 TopologyVersion = INDEX_NONE;
+    int32 SurfaceVersion = INDEX_NONE;
+    uint64 SnapshotId = 0;
+    uint64 DataSerial = 0;
+    uint32 InputHash = 0;
+    int32 VertexCount = 0;
     TArray<float> BaselineElevation;
     TArray<FVector4f> RidgeDirections;
     TArray<float> CrustAge;
     TArray<FVector3f> RenderPositions;
     TArray<uint32> OceanicMask;
     TArray<int32> PlateAssignments;
-    FTectonicSimulationParameters Parameters;
-    uint64 DataSerial = 0;
-    uint32 Hash = 0;
-    int32 VertexCount = 0;
 
     bool IsConsistent() const
     {
@@ -1084,6 +1171,12 @@ public:
     double GetLastHydraulicTotalDeposited() const { return LastHydraulicTotalDeposited; }
     double GetLastHydraulicLostToOcean() const { return LastHydraulicLostToOcean; }
 
+    EStageBAmplificationReadyReason GetStageBAmplificationNotReadyReason() const { return StageBReadyReason; }
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    FString GetStageBAmplificationReadyDescription() const;
+    FOnStageBAmplificationReadyChanged& OnStageBAmplificationReadyChanged() { return StageBReadyChangedDelegate; }
+    void ForceStageBAmplificationRebuild(const TCHAR* Context);
+
     const TArray<int32>& GetRenderVertexAdjacencyOffsets() const { return RenderVertexAdjacencyOffsets; }
     const TArray<int32>& GetRenderVertexAdjacency() const { return RenderVertexAdjacency; }
 
@@ -1105,6 +1198,15 @@ public:
     int32 GetLastRidgeMissingTangentCount() const { return LastRidgeMissingTangentCount; }
     int32 GetLastRidgePoorAlignmentCount() const { return LastRidgePoorAlignmentCount; }
     int32 GetLastRidgeGradientFallbackCount() const { return LastRidgeGradientFallbackCount; }
+    int32 GetLastRidgePlateFallbackCount() const { return LastRidgePlateFallbackCount; }
+    int32 GetLastRidgeMotionFallbackCount() const { return LastRidgeMotionFallbackCount; }
+    int32 GetLastRidgeOceanicVertexCount() const { return LastRidgeOceanicVertexCount; }
+    int32 GetLastRidgeValidTangentCount() const { return LastRidgeValidTangentCount; }
+    double GetLastRidgeTangentCoveragePercent() const { return LastRidgeTangentCoveragePercent; }
+    int32 GetLastOceanicBaselineReuseCount() const { return LastOceanicBaselineReuseCount; }
+    int32 GetLastOceanicMaskMismatchCount() const { return LastOceanicMaskMismatchCount; }
+    bool WasOceanicCpuFallbackForcedLastStep() const { return bLastOceanicForcedCpuFallback; }
+    const TArray<FRenderVertexBoundaryInfo>& GetRenderVertexBoundaryCache() const { return RenderVertexBoundaryCache; }
 
     /** Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification. */
     void InitializeGPUExemplarResources();
@@ -1133,6 +1235,12 @@ public:
      * and leaves tectonic history untouched.
      */
     void SetHeightmapVisualizationEnabled(bool bEnabled);
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    void SetHeightmapPaletteMode(EHeightmapPaletteMode Mode);
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    EHeightmapPaletteMode GetHeightmapPaletteMode() const;
+    const FHeightmapExportMetrics& GetLastHeightmapExportMetrics() const { return LastHeightmapExportMetrics; }
+    const TArray<FHeightmapExportPerformanceSample>& GetHeightmapExportPerformanceHistory() const { return HeightmapExportPerformanceHistory; }
     void SetVisualizationMode(ETectonicVisualizationMode Mode);
     ETectonicVisualizationMode GetVisualizationMode() const { return Parameters.VisualizationMode; }
 
@@ -1157,6 +1265,13 @@ public:
     bool ApplyContinentalAmplificationGPU();
     bool ShouldUseGPUHydraulic() const;
     bool ApplyHydraulicErosionGPU(double DeltaTimeMy);
+    bool IsStagePipelineStageBComplete() const;
+    void WarnIfStageBInvokedOutOfOrder(const TCHAR* Context) const;
+    void BeginStagePipelineStep(int64 StepSerial);
+    void MarkStagePipelineStageBComplete();
+    void MarkStagePipelinePostErosion();
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    bool IsStageBAmplificationReady() const;
 
     void ResetContinentalGPUDispatchStats();
     const FContinentalGPUDispatchStats& GetContinentalGPUDispatchStats() const { return ContinentalGPUDispatchStats; }
@@ -1483,6 +1598,11 @@ public:
     FString ExportHeightmapVisualization(int32 ImageWidth = 2048, int32 ImageHeight = 1024);
 
 private:
+    void SetStageBAmplificationReady(bool bReady, EStageBAmplificationReadyReason Reason, const TCHAR* Context);
+    void TryMarkStageBReady(const TCHAR* Context);
+    bool HasPendingStageBGPUJobs() const;
+    const TCHAR* PipelinePhaseToString(EStagePipelinePhase Phase) const;
+
     void GenerateDefaultSphereSamples();
 
     /** Phase 1 Task 1: Generate icosphere-based plate tessellation. */
@@ -1592,6 +1712,10 @@ private:
     /** Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based terrain synthesis). */
     void ApplyContinentalAmplification();
 
+    /** STG-00: Temporary isotropic Stage B amplification spike (noise × age/ridge falloff). */
+    bool ShouldUseTemporaryIsotropicStageB() const;
+    void ApplyTemporaryIsotropicStageBAmplification(double& OutOceanicCpuSeconds, bool& OutSurfaceDataChanged);
+
     /** Ensures VertexAmplifiedElevation starts from the latest base elevation before Stage B passes. */
     void InitializeAmplifiedElevationBaseline();
     /** Ensure Stage B data structures (crust age, ridge directions, amplified buffers) are sized before running amplification. */
@@ -1641,6 +1765,8 @@ private:
 
     /** Milestone 6 Task 2.1: Per-vertex ridge direction (for transform fault orientation). */
     TArray<FVector3d> VertexRidgeDirections;
+    /** Milestone 6 Task 2.1: Cached per-vertex ridge tangents (prepared for Stage B anisotropy). */
+    TArray<FVector3f> VertexRidgeTangents;
 
     /** Milestone 6 Task 2.1: Per-vertex amplified elevation (Stage B, meters). */
     TArray<double> VertexAmplifiedElevation;
@@ -1660,6 +1786,12 @@ private:
 
     /** Optional sealevel emphasis toggle (visual only). */
     bool bHighlightSeaLevel = false;
+    /** Cached palette mode for exporter/UI wiring. */
+    EHeightmapPaletteMode HeightmapPaletteMode = EHeightmapPaletteMode::AbsoluteHypsometric;
+    /** Metrics from the most recent heightmap export. */
+    FHeightmapExportMetrics LastHeightmapExportMetrics;
+    TArray<FHeightmapExportPerformanceSample> HeightmapExportPerformanceHistory;
+    static constexpr int32 MaxHeightmapPerformanceSamples = 8;
 
     /** Cached render vertex adjacency (CSR layout: Offsets.Num == RenderVertices.Num + 1). */
     TArray<int32> RenderVertexAdjacencyOffsets;
@@ -1715,6 +1847,10 @@ private:
     /** Milestone 5 Task 1.3: Maximum history size (prevents unbounded memory growth). */
     int32 MaxHistorySize = 100;
 
+    /** Stage pipeline status (Stage A → Stage B → erosion). */
+    EStagePipelinePhase StagePipelinePhase = EStagePipelinePhase::Idle;
+    int64 StagePipelineStepSerial = -1;
+
 #if WITH_AUTOMATION_TESTS
 public:
     void SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure = false, const FString& InOverrideOutputDirectory = FString());
@@ -1744,6 +1880,7 @@ private:
 
     /** Monotonic serial tracking modifications to amplification inputs. */
     uint64 OceanicAmplificationDataSerial = 1;
+    uint64 NextOceanicSnapshotId = 1;
     mutable uint64 ContinentalAmplificationCacheSerial = 0;
     mutable int32 ContinentalAmplificationCacheTopologyVersion = INDEX_NONE;
     mutable int32 ContinentalAmplificationCacheSurfaceVersion = INDEX_NONE;
@@ -1752,15 +1889,33 @@ private:
     mutable TBitArray<> RidgeDirectionDirtyMask;
     mutable int32 RidgeDirectionDirtyCount = 0;
     mutable int32 CachedRidgeDirectionTopologyVersion = INDEX_NONE;
-   mutable int32 CachedRidgeDirectionVertexCount = 0;
-   mutable int32 LastRidgeDirectionUpdateCount = 0;
+    mutable int32 CachedRidgeDirectionVertexCount = 0;
+    mutable int32 LastRidgeDirectionUpdateCount = 0;
     mutable int32 LastRidgeDirtyVertexCount = 0;
     mutable int32 LastRidgeCacheHitCount = 0;
     mutable int32 LastRidgeMissingTangentCount = 0;
     mutable int32 LastRidgePoorAlignmentCount = 0;
     mutable int32 LastRidgeGradientFallbackCount = 0;
+    mutable int32 LastRidgePlateFallbackCount = 0;
+    mutable int32 LastRidgeMotionFallbackCount = 0;
+    mutable int32 LastRidgeOceanicVertexCount = 0;
+    mutable int32 LastRidgeValidTangentCount = 0;
+    mutable double LastRidgeTangentCoveragePercent = 0.0;
+    int32 LastOceanicBaselineReuseCount = 0;
+    int32 LastOceanicMaskMismatchCount = 0;
+    bool bLastOceanicForcedCpuFallback = false;
 
     FContinentalGPUDispatchStats ContinentalGPUDispatchStats;
+    bool bStageBAmplificationReady = false;
+    EStageBAmplificationReadyReason StageBReadyReason = EStageBAmplificationReadyReason::NoRenderMesh;
+    FOnStageBAmplificationReadyChanged StageBReadyChangedDelegate;
+    void EmitStageBValidationPlanTelemetry(int32 RenderVertexCount);
+
+    bool bUseIsotropicStageBSpike = true;
+    bool bLoggedIsotropicStageBNotice = false;
+    bool bForceHydraulicErosionDisabled = true;
+    bool bLoggedHydraulicDisableNotice = false;
+    bool bStageBValidationPlanLogged = false;
 
 #if WITH_EDITOR
     struct FOceanicGPUAsyncJob
@@ -1800,6 +1955,7 @@ private:
 
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer();
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer();
+    uint64 AllocateOceanicSnapshotId();
     bool EnsureLatestOceanicSnapshotApplied();
     bool IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
     bool IsContinentalReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
@@ -1809,6 +1965,7 @@ private:
 #else
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer() { return nullptr; }
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer() { return nullptr; }
+    uint64 AllocateOceanicSnapshotId() { return 0; }
     bool EnsureLatestOceanicSnapshotApplied() { return false; }
     bool IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>&) const { return false; }
     bool IsContinentalReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>&) const { return false; }
@@ -1816,6 +1973,7 @@ private:
 
     void RefreshRenderVertexFloatSoA() const;
     void RefreshOceanicAmplificationFloatInputs() const;
+    void InvalidateOceanicAmplificationFloatInputs();
     void RefreshContinentalAmplificationGPUInputs() const;
     void RefreshContinentalAmplificationCache() const;
     void BumpOceanicAmplificationSerial();

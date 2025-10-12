@@ -126,14 +126,13 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
         return;
     }
 
-    const float Baseline = InBaseline[Index];
-
     if (InOceanicMask[Index] == 0u)
     {
-        OutAmplified[Index] = Baseline;
+        OutAmplified[Index] = InBaseline[Index];
         return;
     }
 
+    const float Baseline = InBaseline[Index];
     const float CrustAge = InCrustAge[Index];
     float3 RidgeDir = normalize(InRidgeDirection[Index].xyz);
     float3 Position = InRenderPosition[Index];

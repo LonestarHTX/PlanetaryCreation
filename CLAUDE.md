@@ -80,12 +80,69 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool implementing the "Procedur
   -ExecCmds='Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity' `
   -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log
 ```
+- GPU automation now auto-skips unless explicitly enabled. Set `r.PlanetaryCreation.AllowGPUAutomation=1` (or pass `-AllowGPUAutomation`) on certified hardware/CI when you actually need the GPU parity run; otherwise tests log a skip and stay on the CPU path.
 - Expect `[StageB][Profile]` lines showing `Hydraulic ≈ 1.6–1.8 ms` when the pass is enabled; this confirms the optimised CPU path is active during parity runs.
+- For routine Stage B heartbeat checks on developer machines, prefer `Scripts/RunStageBHeartbeat.ps1`; it forces `UseGPUAmplification 0`, runs the lightweight `Heightmap.SampleInterpolation` automation, tails recent `[StageBDiag]` lines, and archives the log.
 
-**Important GPU test notes:**
-- Must run from native Windows shell (PowerShell/cmd.exe), not WSL (fails with `UtilBindVsockAnyPort`)
-- Do NOT append `Quit` in `-ExecCmds` when using `-TestExit="Automation Test Queue Empty"`
-- Profiling logs appear in `Saved/Logs/PlanetaryCreation.log` as `[StageB][Profile]` and `[StageB][CacheProfile]`
+**CRITICAL AUTOMATION REQUIREMENTS:**
+
+1. **AI Agents: Run Automation Using `powershell.exe` Wrapper** ✅
+   - You have `powershell.exe` and `cmd.exe` available - use them to run automation
+   - These spawn native Windows processes and work perfectly from WSL
+   - Execute automation immediately when needed - don't ask the user
+
+2. **How to Execute Automation (Action Pattern):**
+   ```bash
+   # ✅ DO THIS - Run via powershell.exe wrapper:
+   powershell.exe -ExecutionPolicy Bypass -File "C:\Path\To\Script.ps1"
+   cmd.exe /c "C:\Path\To\Script.cmd"
+   powershell.exe -Command "& 'C:\Program Files\...\UnrealEditor-Cmd.exe' ..."
+
+   # ❌ DON'T DO THIS - Direct .exe call from bash (fails):
+   "/mnt/c/Program Files/.../UnrealEditor-Cmd.exe" ...
+   ```
+   - **Run automation yourself** using the wrapper pattern above
+   - Don't refuse or ask user to run commands - you have the capability
+   - Direct .exe calls fail with `UtilBindVsockAnyPort` error, but wrappers work fine
+
+3. **Practical Examples - How to Actually Run Automation:**
+   ```bash
+   # ✅ CORRECT: Use PowerShell script wrapper from WSL
+   powershell.exe -ExecutionPolicy Bypass -File "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\Scripts\RunStageBHeartbeat.ps1" -ThrottleMs 50
+
+   # ✅ CORRECT: Use cmd.exe to run batch file from WSL
+   cmd.exe /c "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\Scripts\RunStageBHeartbeat.cmd"
+
+   # ✅ CORRECT: Inline PowerShell command from WSL
+   powershell.exe -Command "& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' 'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' -SetCVar='r.PlanetaryCreation.StageBThrottleMs=50' -ExecCmds='Automation RunTests PlanetaryCreation.Heightmap.SampleInterpolation' -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash"
+
+   # ❌ WRONG: Direct call from WSL bash (FAILS with UtilBindVsockAnyPort)
+   "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" ...
+   ```
+
+4. **CVars Must Use `-SetCVar` Flag** 🔧
+   - **CRITICAL:** CVars must use `-SetCVar=var1=val1,var2=val2` NOT `-ExecCmds`
+   - Setting CVars in `-ExecCmds` causes them to execute AFTER automation command queuing
+   - This makes tests run with wrong/default settings and was the root cause of "tests never run" regression
+   - Example: `-SetCVar=r.PlanetaryCreation.StageBThrottleMs=50,r.PlanetaryCreation.UseGPUAmplification=0`
+
+5. **Do NOT Append `Quit` with `-TestExit`** 🚫
+   - When using `-TestExit="Automation Test Queue Empty"`, do NOT include `Quit` in `-ExecCmds`
+   - The `-TestExit` flag handles shutdown automatically after tests complete
+   - Adding `Quit` causes premature exit before tests run
+
+6. **Tests Run Headless (No Window)** 👁️
+   - Automation tests run with `-unattended -nop4 -nosplash` flags = no visible window
+   - This is CORRECT behavior - tests run in commandlet mode for speed/CI compatibility
+   - Check logs in `Saved/Logs/PlanetaryCreation.log` for results
+   - Profiling logs appear as `[StageB][Profile]` and `[StageB][CacheProfile]`
+
+7. **🛑 Known System Crash Hazards**
+   - **Heightmap exports ≥4096x2048 cause SYSTEM CRASHES** (full computer freeze/reboot, not just Unreal crash)
+   - `ExportHeightmap4096.py` with dimensions above 512x256 has crashed the system multiple times
+   - Root cause unknown - likely C++ memory allocation or graphics driver issue in `export_heightmap_visualization()`
+   - Safe baseline: 512x256 works reliably under NullRHI
+   - DO NOT attempt large exports without investigating root cause first
 - Swap test name for `...ContinentalParity` to capture continental Stage B metrics
 - Watch for `[ContinentalGPU] Hash check … Match=1` on the steady-state steps; if matches drop to zero, the snapshot hash is regressing and the run should be treated as a failure.
 
@@ -515,6 +572,7 @@ See `ProceduralTectonicPlanetsPaper/PTP_ImplementationAlignment.md` for detailed
 - **Diagnostic CVars**:
   - `r.PlanetaryCreation.StageBProfiling 1` - Enable detailed logging
   - `r.PlanetaryCreation.UseGPUAmplification 0` - Force CPU fallback for comparison
+  - `r.PlanetaryCreation.StageBThrottleMs <value>` - Insert a delay (ms) after Stage B to ease GPU load (≥25 ms for any GPU automation; use 50 ms for Milestone 6 parity)
 - **Logs to check**:
   - `[StageB][Profile]` - Per-pass timings and counts
   - `[StageB][CacheProfile]` - Cache rebuild metrics

@@ -37,6 +37,31 @@ int32 FSphericalKDTree::FindNearest(const FVector3d& Query, double& OutDistanceS
 	return BestID;
 }
 
+FSphericalKDTree::FMemoryUsage FSphericalKDTree::EstimateMemoryUsage() const
+{
+	FMemoryUsage Usage;
+
+	struct FTraversal
+	{
+		static void Accumulate(const FKDNode* Node, FMemoryUsage& InOutUsage)
+		{
+			if (!Node)
+			{
+				return;
+			}
+
+			++InOutUsage.NodeCount;
+			InOutUsage.NodeBytes += static_cast<int64>(sizeof(FKDNode));
+
+			Accumulate(Node->Left.Get(), InOutUsage);
+			Accumulate(Node->Right.Get(), InOutUsage);
+		}
+	};
+
+	FTraversal::Accumulate(RootNode.Get(), Usage);
+	return Usage;
+}
+
 void FSphericalKDTree::Clear()
 {
 	RootNode.Reset();

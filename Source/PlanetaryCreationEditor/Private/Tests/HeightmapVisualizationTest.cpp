@@ -12,6 +12,7 @@
 #include "IImageWrapper.h"
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
+#include "Tests/PlanetaryCreationAutomationGPU.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHeightmapVisualizationTest,
     "PlanetaryCreation.Milestone6.HeightmapVisualization",
@@ -19,11 +20,16 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHeightmapVisualizationTest,
 
 bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
 {
+    using namespace PlanetaryCreation::Automation;
+
     // Get simulation service
     UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
     TestNotNull(TEXT("TectonicSimulationService must exist"), Service);
     if (!Service)
         return false;
+
+    // Force CPU amplification to avoid GPU spikes during local automation runs.
+    FScopedGPUAmplificationOverride ForceCPUAmplification(0);
 
     // Setup: Enable both oceanic and continental amplification for full detail
     FTectonicSimulationParameters Params;
@@ -149,12 +155,16 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHeightmapSeamContinuityTest,
 
 bool FHeightmapSeamContinuityTest::RunTest(const FString& Parameters)
 {
+    using namespace PlanetaryCreation::Automation;
+
     UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
     TestNotNull(TEXT("Simulation service must exist"), Service);
     if (!Service)
     {
         return false;
     }
+
+    FScopedGPUAmplificationOverride ForceCPUAmplification(0);
 
     FTectonicSimulationParameters Params;
     Params.Seed = 1337;
@@ -171,48 +181,46 @@ bool FHeightmapSeamContinuityTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Export should succeed"), !OutputPath.IsEmpty());
     TestTrue(TEXT("Heightmap file exists"), FPaths::FileExists(OutputPath));
 
-    bool bResult = true;
+    const FHeightmapExportMetrics& Metrics = Service->GetLastHeightmapExportMetrics();
+    TestTrue(TEXT("Heightmap export metrics should be valid"), Metrics.bValid);
+    if (Metrics.bValid)
+    {
+        TestEqual(TEXT("Export width matches request"), Metrics.Width, 1024);
+        TestEqual(TEXT("Export height matches request"), Metrics.Height, 512);
+        TestTrue(TEXT("Pixel count matches width*height"),
+            Metrics.PixelCount == static_cast<int64>(Metrics.Width) * static_cast<int64>(Metrics.Height));
+
+        TestTrue(TEXT("Heightmap coverage should be 100%"),
+            FMath::IsNearlyEqual(Metrics.CoveragePercent, 100.0, 1.0e-3));
+        TestEqual(TEXT("No seam rows should fail sampling"), Metrics.SeamRowsWithFailures, 0);
+        TestTrue(TEXT("Seam metrics should cover at least one row"), Metrics.SeamRowsEvaluated > 0);
+        TestTrue(TEXT("Timing metrics captured"), Metrics.TotalMs >= 0.0 && Metrics.SamplingMs >= 0.0);
+
+        const TArray<FHeightmapExportPerformanceSample>& PerfHistory = Service->GetHeightmapExportPerformanceHistory();
+        TestTrue(TEXT("Performance history retains last sample"), PerfHistory.Num() > 0);
+        if (PerfHistory.Num() > 0)
+        {
+            const FHeightmapExportPerformanceSample& LastSample = PerfHistory.Last();
+            TestEqual(TEXT("History width matches metrics"), LastSample.Width, Metrics.Width);
+            TestEqual(TEXT("History height matches metrics"), LastSample.Height, Metrics.Height);
+            TestTrue(TEXT("History total ms matches metrics"),
+                FMath::IsNearlyEqual(LastSample.TotalMs, Metrics.TotalMs, 1.0e-3));
+        }
+
+        if (Metrics.bSamplerUsedAmplified)
+        {
+            TestTrue(TEXT("Stage B seam max delta under 1 m"), Metrics.SeamMaxAbsDelta < 1.0);
+        }
+        else
+        {
+            AddInfo(TEXT("Stage B amplification inactive; seam delta threshold skipped (baseline export)."));
+        }
+    }
 
     if (!OutputPath.IsEmpty())
     {
-        TArray<uint8> FileData;
-        if (FFileHelper::LoadFileToArray(FileData, *OutputPath))
-        {
-            IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
-            TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
-            if (ImageWrapper.IsValid() && ImageWrapper->SetCompressed(FileData.GetData(), FileData.Num()))
-            {
-                TArray<uint8> Raw;
-                if (ImageWrapper->GetRaw(ERGBFormat::RGBA, 8, Raw))
-                {
-                    const int32 Width = ImageWrapper->GetWidth();
-                    const int32 Height = ImageWrapper->GetHeight();
-
-                    int64 LeftAlphaSum = 0;
-                    int64 RightAlphaSum = 0;
-                    for (int32 Y = 0; Y < Height; ++Y)
-                    {
-                        const int32 LeftIdx = (Y * Width) * 4;
-                        const int32 RightIdx = (Y * Width + (Width - 1)) * 4;
-
-                        const uint8 AlphaLeft = Raw[LeftIdx + 3];
-                        const uint8 AlphaRight = Raw[RightIdx + 3];
-
-                        LeftAlphaSum += AlphaLeft;
-                        RightAlphaSum += AlphaRight;
-                    }
-
-                    bResult = (LeftAlphaSum > 0) && (RightAlphaSum > 0);
-                    if (!bResult)
-                    {
-                        AddError(TEXT("Seam continuity failed: one of the seam columns is entirely empty"));
-                    }
-                }
-            }
-        }
-
         IFileManager::Get().Delete(*OutputPath, false, true, true);
     }
 
-    return bResult;
+    return true;
 }

@@ -59,6 +59,13 @@ static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
     TEXT("Enable GPU compute path for Stage B amplification. 0 = CPU fallback, 1 = GPU (paper default)."),
     FConsoleVariableDelegate::CreateStatic(&HandleUseGPUAmplificationChanged));
 
+static TAutoConsoleVariable<int32> CVarPlanetaryCreationAllowGPUAutomation(
+    TEXT("r.PlanetaryCreation.AllowGPUAutomation"),
+    0,
+    TEXT("Allow Milestone 6 GPU automation suites to execute without skipping. ")
+    TEXT("Enable explicitly on certified hardware or CI agents; stays disabled by default to protect dev machines."),
+    ECVF_Default);
+
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationVisualizationMode(
     TEXT("r.PlanetaryCreation.VisualizationMode"),
     static_cast<int32>(ETectonicVisualizationMode::AmplificationBlend),
@@ -76,6 +83,12 @@ static TAutoConsoleVariable<int32> CVarPlanetaryCreationHydraulicErosion(
     1,
     TEXT("Toggle hydraulic routing + erosion pass on amplified terrain. 0=disabled, 1=enabled (paper default)."),
     FConsoleVariableDelegate::CreateStatic(&HandleHydraulicErosionChanged));
+
+static TAutoConsoleVariable<float> CVarPlanetaryCreationStageBThrottleMs(
+    TEXT("r.PlanetaryCreation.StageBThrottleMs"),
+    0.0f,
+    TEXT("Optional delay (milliseconds) inserted after Stage B to ease GPU load during debugging. 0 = disabled."),
+    ECVF_Default);
 
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUHydraulic(
     TEXT("r.PlanetaryCreation.UseGPUHydraulic"),
@@ -360,7 +373,6 @@ namespace
         Hash = HashMemory(Hash, Snapshot.OceanicMask.GetData(), Snapshot.OceanicMask.Num() * sizeof(uint32));
         Hash = HashMemory(Hash, Snapshot.PlateAssignments.GetData(), Snapshot.PlateAssignments.Num() * sizeof(int32));
         Hash = HashMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
-        Hash = HashMemory(Hash, &Snapshot.DataSerial, sizeof(uint64));
         Hash = HashMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
         return Hash;
     }
@@ -395,18 +407,15 @@ namespace
             return false;
         }
 
-        const FTectonicSimulationParameters LiveParams = Service.GetParameters();
-
-        uint32 Hash = 0;
-        Hash = HashMemory(Hash, LiveBaseline->GetData(), LiveBaseline->Num() * sizeof(float));
-        Hash = HashMemory(Hash, LiveRidge->GetData(), LiveRidge->Num() * sizeof(FVector4f));
-        Hash = HashMemory(Hash, LiveCrustAge->GetData(), LiveCrustAge->Num() * sizeof(float));
-        Hash = HashMemory(Hash, LivePositions->GetData(), LivePositions->Num() * sizeof(FVector3f));
-        Hash = HashMemory(Hash, LiveMask->GetData(), LiveMask->Num() * sizeof(uint32));
-        Hash = HashMemory(Hash, LivePlateAssignments.GetData(), LivePlateAssignments.Num() * sizeof(int32));
-        Hash = HashMemory(Hash, &LiveParams, sizeof(FTectonicSimulationParameters));
-        Hash = HashMemory(Hash, &Snapshot.DataSerial, sizeof(uint64));
-        Hash = HashMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
+    uint32 Hash = 0;
+    Hash = HashMemory(Hash, LiveBaseline->GetData(), LiveBaseline->Num() * sizeof(float));
+    Hash = HashMemory(Hash, LiveRidge->GetData(), LiveRidge->Num() * sizeof(FVector4f));
+    Hash = HashMemory(Hash, LiveCrustAge->GetData(), LiveCrustAge->Num() * sizeof(float));
+    Hash = HashMemory(Hash, LivePositions->GetData(), LivePositions->Num() * sizeof(FVector3f));
+    Hash = HashMemory(Hash, LiveMask->GetData(), LiveMask->Num() * sizeof(uint32));
+    Hash = HashMemory(Hash, LivePlateAssignments.GetData(), LivePlateAssignments.Num() * sizeof(int32));
+    Hash = HashMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
+    Hash = HashMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
 
         OutHash = Hash;
         return true;
@@ -590,7 +599,68 @@ void UTectonicSimulationService::Deinitialize()
     VertexVelocities.Reset();
     VertexStressValues.Reset();
     RenderVertexBoundaryCache.Reset();
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ExternalReset, TEXT("Deinitialize"));
     Super::Deinitialize();
+}
+
+void UTectonicSimulationService::SetStageBAmplificationReady(bool bReady, EStageBAmplificationReadyReason Reason, const TCHAR* Context)
+{
+    if (!Context)
+    {
+        Context = TEXT("Unknown");
+    }
+
+    if (bStageBAmplificationReady == bReady && StageBReadyReason == Reason)
+    {
+        return;
+    }
+
+    bStageBAmplificationReady = bReady;
+    StageBReadyReason = Reason;
+
+    UE_LOG(LogPlanetaryCreation, Log,
+        TEXT("[StageB][Ready] State=%s Reason=%s (%s) Context=%s"),
+        bReady ? TEXT("Ready") : TEXT("NotReady"),
+        PlanetaryCreation::StageB::GetReadyReasonLabel(Reason),
+        PlanetaryCreation::StageB::GetReadyReasonDescription(Reason),
+        Context);
+
+    StageBReadyChangedDelegate.Broadcast(bStageBAmplificationReady, StageBReadyReason);
+}
+
+bool UTectonicSimulationService::IsStageBAmplificationReady() const
+{
+    return bStageBAmplificationReady;
+}
+
+FString UTectonicSimulationService::GetStageBAmplificationReadyDescription() const
+{
+    return FString(PlanetaryCreation::StageB::GetReadyReasonDescription(StageBReadyReason));
+}
+
+bool UTectonicSimulationService::HasPendingStageBGPUJobs() const
+{
+#if WITH_EDITOR
+    return PendingOceanicGPUJobs.Num() > 0 || PendingContinentalGPUJobs.Num() > 0;
+#else
+    return false;
+#endif
+}
+
+void UTectonicSimulationService::TryMarkStageBReady(const TCHAR* Context)
+{
+    if (HasPendingStageBGPUJobs())
+    {
+        SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::PendingGPUReadback, Context);
+        return;
+    }
+
+    if (StagePipelinePhase == EStagePipelinePhase::Idle || StagePipelinePhase == EStagePipelinePhase::StageA)
+    {
+        return;
+    }
+
+    SetStageBAmplificationReady(true, EStageBAmplificationReadyReason::None, Context);
 }
 
 void UTectonicSimulationService::InvalidateRidgeDirectionCache()
@@ -867,6 +937,13 @@ void UTectonicSimulationService::ResetSimulation()
     CurrentTimeMy = 0.0;
     TotalStepsSimulated = 0;
     RetessellationCadenceStats.Reset();
+    StagePipelinePhase = EStagePipelinePhase::Idle;
+    StagePipelineStepSerial = -1;
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ExternalReset, TEXT("ResetSimulation"));
+    bStageBValidationPlanLogged = false;
+    bLoggedIsotropicStageBNotice = false;
+    LastHeightmapExportMetrics = FHeightmapExportMetrics();
+    HeightmapExportPerformanceHistory.Reset();
 
 #if WITH_EDITOR
     PendingOceanicGPUJobs.Empty();
@@ -881,6 +958,7 @@ void UTectonicSimulationService::ResetSimulation()
 
     // Milestone 6: Clear amplification arrays
     VertexRidgeDirections.Empty();
+    VertexRidgeTangents.Empty();
     VertexAmplifiedElevation.Empty();
     HydraulicDownhillNeighbor.Reset();
     HydraulicFlowAccumulation.Reset();
@@ -1030,6 +1108,10 @@ void UTectonicSimulationService::ResetSimulation()
     CaptureHistorySnapshot();
     BumpOceanicAmplificationSerial();
     UE_LOG(LogPlanetaryCreation, Log, TEXT("ResetSimulation: History stack initialized with initial state"));
+    const EStageBAmplificationReadyReason FinalReason = (RenderVertices.Num() > 0)
+        ? EStageBAmplificationReadyReason::PendingCPUAmplification
+        : EStageBAmplificationReadyReason::NoRenderMesh;
+    SetStageBAmplificationReady(false, FinalReason, TEXT("ResetSimulationComplete"));
 }
 
 void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
@@ -1055,6 +1137,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         TRACE_CPUPROFILER_EVENT_SCOPE(TectonicStep);
         const double StepLoopStart = FPlatformTime::Seconds();
         const int32 AbsoluteStep = (TotalStepsSimulated - StepCount) + (Step + 1);
+        BeginStagePipelineStep(AbsoluteStep);
 
         double ErosionTime = 0.0;
         double SedimentTime = 0.0;
@@ -1223,11 +1306,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             BaselineInitTime += FPlatformTime::Seconds() - BlockStart;
         }
 
-        // Milestone 6 Task 2.1: Apply Stage B oceanic amplification
-        // Must run after erosion/dampening to use base elevations as input
-        // Must run before topology changes to ensure valid vertex indices
-        // Skip if controller is handling GPU preview mode (avoids redundant CPU work)
-        if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
+        const bool bUseIsotropicStageB = ShouldUseTemporaryIsotropicStageB();
+        if (bUseIsotropicStageB)
         {
             bool bUpdatedRidgeDirections = false;
             {
@@ -1247,130 +1327,155 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             }
 #endif
 
-            bool bUsedGPU = false;
-#if WITH_EDITOR
-            if (ShouldUseGPUAmplification())
+            ApplyTemporaryIsotropicStageBAmplification(OceanicCpuTime, bSurfaceDataChanged);
+        }
+        else
+        {
+            // Milestone 6 Task 2.1: Apply Stage B oceanic amplification (GPU/CPU path)
+            if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
             {
-                // Milestone 6 GPU: Lazy initialization on first use
-                InitializeGPUExemplarResources();
-
-                TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplificationGPU);
-                const double GpuBlockStart = FPlatformTime::Seconds();
-                bUsedGPU = ApplyOceanicAmplificationGPU();
-                if (bUsedGPU)
+                bool bUpdatedRidgeDirections = false;
                 {
-                    OceanicGpuDispatchTime += FPlatformTime::Seconds() - GpuBlockStart;
-                    const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
-                    ProcessPendingOceanicGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
-                    bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
-#if WITH_EDITOR
-                    if (bPendingOceanicGPUReadback)
+                    TRACE_CPUPROFILER_EVENT_SCOPE(UpdateRidgeDirectionsStageB);
+                    const double BlockStart = FPlatformTime::Seconds();
+                    bUpdatedRidgeDirections = RefreshRidgeDirectionsIfNeeded();
+                    if (bUpdatedRidgeDirections)
                     {
-                        if (bForceReadbackSync)
+                        RidgeDirectionTime += FPlatformTime::Seconds() - BlockStart;
+                    }
+                }
+
+#if UE_BUILD_DEVELOPMENT
+                if (bUpdatedRidgeDirections)
+                {
+                    LogBoundaryCacheState(TEXT("AfterComputeRidgeDirections"));
+                }
+#endif
+
+                bool bUsedGPU = false;
+#if WITH_EDITOR
+                if (ShouldUseGPUAmplification())
+                {
+                    InitializeGPUExemplarResources();
+
+                    TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplificationGPU);
+                    const double GpuBlockStart = FPlatformTime::Seconds();
+                    bUsedGPU = ApplyOceanicAmplificationGPU();
+                    if (bUsedGPU)
+                    {
+                        OceanicGpuDispatchTime += FPlatformTime::Seconds() - GpuBlockStart;
+                        const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
+                        ProcessPendingOceanicGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
+                        bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+#if WITH_EDITOR
+                        if (bPendingOceanicGPUReadback)
+                        {
+                            if (bForceReadbackSync)
+                            {
+                                UE_LOG(LogPlanetaryCreation, Warning,
+                                    TEXT("[StageB][GPU] Oceanic amplification readback still pending after forced sync. Subsequent steps may stall detail updates."));
+                            }
+                            const bool bAppliedSnapshot = EnsureLatestOceanicSnapshotApplied();
+                            if (bAppliedSnapshot)
+                            {
+                                bSurfaceDataChanged = true;
+                            }
+                            bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+                        }
+#endif
+                    }
+                }
+#endif // WITH_EDITOR
+                if (!bUsedGPU)
+                {
+                    if (!Parameters.bSkipCPUAmplification)
+                    {
+                        TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
+                        const double CpuBlockStart = FPlatformTime::Seconds();
+                        ApplyOceanicAmplification();
+                        OceanicCpuTime += FPlatformTime::Seconds() - CpuBlockStart;
+                        bSurfaceDataChanged = true;
+                    }
+                    else
+                    {
+                        static bool bLoggedOceanicSkip = false;
+                        if (!bLoggedOceanicSkip)
                         {
                             UE_LOG(LogPlanetaryCreation, Warning,
-                                TEXT("[StageB][GPU] Oceanic amplification readback still pending after forced sync. Subsequent steps may stall detail updates."));
+                                TEXT("[StageB][GPU] Oceanic amplification skipped: GPU path unavailable while CPU amplification is disabled. Stage B elevations may remain at baseline."));
+                            bLoggedOceanicSkip = true;
                         }
-                        const bool bAppliedSnapshot = EnsureLatestOceanicSnapshotApplied();
-                        if (bAppliedSnapshot)
-                        {
-                            bSurfaceDataChanged = true;
-                        }
-                        bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
-                    }
-#endif
-                }
-            }
-#endif // WITH_EDITOR
-            if (!bUsedGPU)
-            {
-                if (!Parameters.bSkipCPUAmplification)
-                {
-                    TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
-                    const double CpuBlockStart = FPlatformTime::Seconds();
-                    ApplyOceanicAmplification();
-                    OceanicCpuTime += FPlatformTime::Seconds() - CpuBlockStart;
-                    bSurfaceDataChanged = true;
-                }
-                else
-                {
-                    static bool bLoggedOceanicSkip = false;
-                    if (!bLoggedOceanicSkip)
-                    {
-                        UE_LOG(LogPlanetaryCreation, Warning,
-                            TEXT("[StageB][GPU] Oceanic amplification skipped: GPU path unavailable while CPU amplification is disabled. Stage B elevations may remain at baseline."));
-                        bLoggedOceanicSkip = true;
                     }
                 }
             }
-        }
 
-        // Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based)
-        // Skip if controller is handling GPU preview mode (avoids redundant CPU work)
-        if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
-        {
-            if (bPendingOceanicGPUReadback)
+            // Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based)
+            if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
             {
-                // Continental amplification depends on oceanic outputs already being written back.
-                ProcessPendingOceanicGPUReadbacks(false, &GpuReadbackSeconds);
-#if WITH_EDITOR
-                const bool bAppliedSnapshot = EnsureLatestOceanicSnapshotApplied();
-                if (bAppliedSnapshot)
+                if (bPendingOceanicGPUReadback)
                 {
-                    bSurfaceDataChanged = true;
-                }
-                bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+                    ProcessPendingOceanicGPUReadbacks(false, &GpuReadbackSeconds);
+#if WITH_EDITOR
+                    const bool bAppliedSnapshot = EnsureLatestOceanicSnapshotApplied();
+                    if (bAppliedSnapshot)
+                    {
+                        bSurfaceDataChanged = true;
+                    }
+                    bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
 #else
-                bPendingOceanicGPUReadback = false;
+                    bPendingOceanicGPUReadback = false;
 #endif
-            }
+                }
 
-            bool bUsedGPU = false;
+                bool bUsedGPU = false;
 #if WITH_EDITOR
-            if (ShouldUseGPUAmplification())
-            {
-                // Milestone 6 GPU: Lazy initialization on first use
-                InitializeGPUExemplarResources();
-
-                TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplificationGPU);
-                const double GpuBlockStart = FPlatformTime::Seconds();
-                bUsedGPU = ApplyContinentalAmplificationGPU();
-                if (bUsedGPU)
+                if (ShouldUseGPUAmplification())
                 {
-                    ContinentalGpuDispatchTime += FPlatformTime::Seconds() - GpuBlockStart;
-                    const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
-                    ProcessPendingContinentalGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
-                    if (bForceReadbackSync && !bContinentalGPUResultWasApplied)
+                    InitializeGPUExemplarResources();
+
+                    TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplificationGPU);
+                    const double GpuBlockStart = FPlatformTime::Seconds();
+                    bUsedGPU = ApplyContinentalAmplificationGPU();
+                    if (bUsedGPU)
                     {
-                        UE_LOG(LogPlanetaryCreation, Warning,
-                            TEXT("[StageB][GPU] Continental amplification readback did not complete after forced sync. Detail output may lag this step."));
+                        ContinentalGpuDispatchTime += FPlatformTime::Seconds() - GpuBlockStart;
+                        const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
+                        ProcessPendingContinentalGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
+                        if (bForceReadbackSync && !bContinentalGPUResultWasApplied)
+                        {
+                            UE_LOG(LogPlanetaryCreation, Warning,
+                                TEXT("[StageB][GPU] Continental amplification readback did not complete after forced sync. Detail output may lag this step."));
+                        }
                     }
                 }
-            }
 #endif
-            if ((!bUsedGPU || !bContinentalGPUResultWasApplied) && !Parameters.bSkipCPUAmplification)
-            {
-                TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
-                const double CpuBlockStart = FPlatformTime::Seconds();
-                ApplyContinentalAmplification();
-                const double BlockDuration = FPlatformTime::Seconds() - CpuBlockStart;
-                ContinentalCpuTime += BlockDuration;
-                CacheInvalidationSeconds += LastContinentalCacheBuildSeconds;
-                bSurfaceDataChanged = true;
-            }
-            else if (!bUsedGPU || !bContinentalGPUResultWasApplied)
-            {
-                static bool bLoggedContinentalSkip = false;
-                if (!bLoggedContinentalSkip)
+                if ((!bUsedGPU || !bContinentalGPUResultWasApplied) && !Parameters.bSkipCPUAmplification)
                 {
-                    UE_LOG(LogPlanetaryCreation, Warning,
-                        TEXT("[StageB][GPU] Continental amplification skipped: GPU result unavailable while CPU amplification is disabled. Stage B elevations may remain at baseline."));
-                    bLoggedContinentalSkip = true;
+                    TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
+                    const double CpuBlockStart = FPlatformTime::Seconds();
+                    ApplyContinentalAmplification();
+                    const double BlockDuration = FPlatformTime::Seconds() - CpuBlockStart;
+                    ContinentalCpuTime += BlockDuration;
+                    CacheInvalidationSeconds += LastContinentalCacheBuildSeconds;
+                    bSurfaceDataChanged = true;
+                }
+                else if (!bUsedGPU || !bContinentalGPUResultWasApplied)
+                {
+                    static bool bLoggedContinentalSkip = false;
+                    if (!bLoggedContinentalSkip)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("[StageB][GPU] Continental amplification skipped: GPU result unavailable while CPU amplification is disabled. Stage B elevations may remain at baseline."));
+                        bLoggedContinentalSkip = true;
+                    }
                 }
             }
         }
 
-        if (Parameters.bEnableHydraulicErosion && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
+        MarkStagePipelineStageBComplete();
+
+        const bool bHydraulicEnabled = Parameters.bEnableHydraulicErosion && !bForceHydraulicErosionDisabled;
+        if (bHydraulicEnabled && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
         {
             if (VertexAmplifiedElevation.Num() == RenderVertices.Num())
             {
@@ -1386,6 +1491,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 {
                     HydraulicTime += FPlatformTime::Seconds() - BlockStart;
                     bSurfaceDataChanged = true;
+                    MarkStagePipelinePostErosion();
                 }
                 else
 #endif
@@ -1393,6 +1499,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                     ApplyHydraulicErosion(StepDurationMy);
                     HydraulicTime += FPlatformTime::Seconds() - BlockStart;
                     bSurfaceDataChanged = true;
+                    MarkStagePipelinePostErosion();
                 }
             }
             else
@@ -1505,7 +1612,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         const double StageBDuration = BaselineInitTime + RidgeDirectionTime + OceanicCombinedTime + ContinentalCombinedTime + HydraulicTime + GpuReadbackSeconds + CacheInvalidationSeconds;
 
         UE_LOG(LogPlanetaryCreation, Log,
-            TEXT("[StepTiming] Step %d | LOD L%d | Total %.2f ms | StageB %.2f ms (Baseline %.2f | Ridge %.2f [Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d] | Voronoi %d%s | Oceanic %.2f | Continental %.2f | Hydraulic %.2f | Readback %.2f) | Erosion %.2f ms | Sediment %.2f ms | Dampening %.2f ms"),
+            TEXT("[StepTiming] Step %d | LOD L%d | Total %.2f ms | StageB %.2f ms (Baseline %.2f | Ridge %.2f [Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d | PlateFallback %d | MotionFallback %d] | Voronoi %d%s | Oceanic %.2f | Continental %.2f | Hydraulic %.2f | Readback %.2f) | Erosion %.2f ms | Sediment %.2f ms | Dampening %.2f ms"),
             AbsoluteStep,
             Parameters.RenderSubdivisionLevel,
             StepElapsed * 1000.0,
@@ -1518,6 +1625,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             LastRidgeMissingTangentCount,
             LastRidgePoorAlignmentCount,
             LastRidgeGradientFallbackCount,
+            LastRidgePlateFallbackCount,
+            LastRidgeMotionFallbackCount,
             LastVoronoiReassignedCount,
             bLastVoronoiForcedFullRidgeUpdate ? TEXT("*") : TEXT(""),
             OceanicCombinedTime * 1000.0,
@@ -1548,6 +1657,15 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         }
 
         FStageBProfile Profile;
+        Profile.bAmplificationReady = IsStageBAmplificationReady();
+        Profile.ReadyReason = GetStageBAmplificationNotReadyReason();
+#if WITH_EDITOR
+        Profile.PendingOceanicJobs = PendingOceanicGPUJobs.Num();
+        Profile.PendingContinentalJobs = PendingContinentalGPUJobs.Num();
+#else
+        Profile.PendingOceanicJobs = 0;
+        Profile.PendingContinentalJobs = 0;
+#endif
         Profile.BaselineMs = BaselineInitTime * 1000.0;
         Profile.RidgeMs = RidgeDirectionTime * 1000.0;
         Profile.OceanicCPUMs = OceanicCpuTime * 1000.0;
@@ -1563,17 +1681,99 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         Profile.RidgeMissingTangents = LastRidgeMissingTangentCount;
         Profile.RidgePoorAlignment = LastRidgePoorAlignmentCount;
         Profile.RidgeGradientFallbacks = LastRidgeGradientFallbackCount;
+        Profile.RidgePlateFallbacks = LastRidgePlateFallbackCount;
+        Profile.RidgeMotionFallbacks = LastRidgeMotionFallbackCount;
         Profile.VoronoiReassignedVertices = LastVoronoiReassignedCount;
         Profile.bVoronoiForcedFullRidge = bLastVoronoiForcedFullRidgeUpdate;
+        Profile.OceanicBaselineReuseCount = LastOceanicBaselineReuseCount;
+        Profile.OceanicMaskMismatchCount = LastOceanicMaskMismatchCount;
+        Profile.bForcedOceanicCpuFallback = bLastOceanicForcedCpuFallback;
         LatestStageBProfile = Profile;
+
+        {
+            const int32 AmplifiedCount = VertexAmplifiedElevation.Num();
+            const int32 RenderCount = RenderVertices.Num();
+            const bool bCountsMatch = AmplifiedCount == RenderCount && RenderCount > 0;
+            const bool bReady = IsStageBAmplificationReady();
+            const TCHAR* ReadyReason = PlanetaryCreation::StageB::GetReadyReasonLabel(Profile.ReadyReason);
+
+            TArray<int32> SampleIndices;
+            if (AmplifiedCount > 0)
+            {
+                SampleIndices.Add(0);
+                if (AmplifiedCount > 1)
+                {
+                    const int32 MidIndex = FMath::Clamp(AmplifiedCount / 2, 0, AmplifiedCount - 1);
+                    SampleIndices.AddUnique(MidIndex);
+                }
+                if (AmplifiedCount > 2)
+                {
+                    SampleIndices.AddUnique(AmplifiedCount - 1);
+                }
+            }
+
+            int32 FiniteSamples = 0;
+            int32 NonZeroSamples = 0;
+            TArray<FString> SamplePairs;
+            SamplePairs.Reserve(SampleIndices.Num());
+
+            for (const int32 SampleIndex : SampleIndices)
+            {
+                if (!VertexAmplifiedElevation.IsValidIndex(SampleIndex))
+                {
+                    continue;
+                }
+
+                const double SampleValue = VertexAmplifiedElevation[SampleIndex];
+                const bool bFinite = FMath::IsFinite(SampleValue);
+                const bool bNonZero = bFinite && FMath::Abs(SampleValue) > KINDA_SMALL_NUMBER;
+
+                FiniteSamples += bFinite ? 1 : 0;
+                NonZeroSamples += bNonZero ? 1 : 0;
+
+                if (bFinite)
+                {
+                    SamplePairs.Add(FString::Printf(TEXT("%d:%.2f"), SampleIndex, SampleValue));
+                }
+                else
+                {
+                    SamplePairs.Add(FString::Printf(TEXT("%d:NaN"), SampleIndex));
+                }
+            }
+
+            const int32 SampleCount = SamplePairs.Num();
+            const FString SamplesString = SampleCount > 0
+                ? FString::Join(SamplePairs, TEXT(", "))
+                : FString(TEXT("none"));
+
+            EmitStageBValidationPlanTelemetry(RenderCount);
+
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[StageBDiag] Step %d Ready=%d Reason=%s Amplified=%d Render=%d Match=%s Samples={%s} Finite=%d/%d NonZero=%d/%d"),
+                AbsoluteStep,
+                bReady ? 1 : 0,
+                ReadyReason,
+                AmplifiedCount,
+                RenderCount,
+                bCountsMatch ? TEXT("yes") : TEXT("no"),
+                *SamplesString,
+                FiniteSamples,
+                SampleCount,
+                NonZeroSamples,
+                SampleCount);
+        }
 
         const int32 StageBLogMode = CVarPlanetaryCreationStageBProfiling.GetValueOnAnyThread();
         if (StageBLogMode > 0)
         {
             UE_LOG(LogPlanetaryCreation, Log,
-                TEXT("[StageB][Profile] Step %d | LOD L%d | Baseline %.2f ms | Ridge %.2f ms (Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d) | Voronoi %d%s | OceanicCPU %.2f ms | OceanicGPU %.2f ms | ContinentalCPU %.2f ms | ContinentalGPU %.2f ms | Hydraulic %.2f ms | Readback %.2f ms | Cache %.2f ms | Total %.2f ms"),
+                TEXT("[StageB][Profile] Step %d | LOD L%d | Ready %d (%s) | PendingGPU O:%d C:%d | Baseline %.2f ms | Ridge %.2f ms (Dirty %d | Updated %d | CacheHits %d | Missing %d | PoorAlign %d | Gradient %d | PlateFallback %d | MotionFallback %d) | Voronoi %d%s | OceanicCPU %.2f ms | OceanicGPU %.2f ms | ContinentalCPU %.2f ms | ContinentalGPU %.2f ms | Hydraulic %.2f ms | Readback %.2f ms | Cache %.2f ms | BaselineReuse %d | MaskMismatch %d | CPUFallback %d | Total %.2f ms"),
                 AbsoluteStep,
                 Parameters.RenderSubdivisionLevel,
+                Profile.bAmplificationReady ? 1 : 0,
+                PlanetaryCreation::StageB::GetReadyReasonLabel(Profile.ReadyReason),
+                Profile.PendingOceanicJobs,
+                Profile.PendingContinentalJobs,
                 Profile.BaselineMs,
                 Profile.RidgeMs,
                 Profile.RidgeDirtyVertices,
@@ -1582,6 +1782,8 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 Profile.RidgeMissingTangents,
                 Profile.RidgePoorAlignment,
                 Profile.RidgeGradientFallbacks,
+                Profile.RidgePlateFallbacks,
+                Profile.RidgeMotionFallbacks,
                 Profile.VoronoiReassignedVertices,
                 Profile.bVoronoiForcedFullRidge ? TEXT("*") : TEXT(""),
                 Profile.OceanicCPUMs,
@@ -1591,6 +1793,9 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                 Profile.HydraulicMs,
                 Profile.GpuReadbackMs,
                 Profile.CacheInvalidationMs,
+                Profile.OceanicBaselineReuseCount,
+                Profile.OceanicMaskMismatchCount,
+                Profile.bForcedOceanicCpuFallback ? 1 : 0,
                 Profile.TotalMs());
 
             if (Parameters.bEnableHydraulicErosion)
@@ -1612,13 +1817,23 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             if (CacheMetrics.TotalSeconds > 0.0 || CacheMetrics.ContinentalVertexCount > 0)
             {
                 UE_LOG(LogPlanetaryCreation, Log,
-                    TEXT("[StageB][CacheProfile] ContinentalCache Total %.2f ms | Classification %.2f ms | Exemplar %.2f ms | ContinentalVerts %d | ExemplarVerts %d"),
+                    TEXT("[StageB][CacheProfile] ContinentalCache Total %.2f ms | Classification %.2f ms | Exemplar %.2f ms | ContinentalVerts %d | ExemplarVerts %d | Ready %d (%s) | PendingGPU O:%d C:%d"),
                     CacheMetrics.TotalSeconds * 1000.0,
                     CacheMetrics.ClassificationSeconds * 1000.0,
                     CacheMetrics.ExemplarSelectionSeconds * 1000.0,
                     CacheMetrics.ContinentalVertexCount,
-                    CacheMetrics.ExemplarAssignmentCount);
+                    CacheMetrics.ExemplarAssignmentCount,
+                    Profile.bAmplificationReady ? 1 : 0,
+                    PlanetaryCreation::StageB::GetReadyReasonLabel(Profile.ReadyReason),
+                    Profile.PendingOceanicJobs,
+                    Profile.PendingContinentalJobs);
             }
+        }
+
+        const float StageBThrottleMs = CVarPlanetaryCreationStageBThrottleMs.GetValueOnAnyThread();
+        if (StageBThrottleMs > KINDA_SMALL_NUMBER)
+        {
+            FPlatformProcess::Sleep(FMath::Clamp(StageBThrottleMs, 0.0f, 1000.0f) / 1000.0f);
         }
     }
 
@@ -1630,9 +1845,74 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
     ProcessPendingContinentalGPUReadbacks(false);
 }
 
+void UTectonicSimulationService::BeginStagePipelineStep(int64 StepSerial)
+{
+    StagePipelineStepSerial = StepSerial;
+    StagePipelinePhase = EStagePipelinePhase::StageA;
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::PendingCPUAmplification, TEXT("BeginStagePipelineStep"));
+}
+
+void UTectonicSimulationService::MarkStagePipelineStageBComplete()
+{
+    StagePipelinePhase = EStagePipelinePhase::StageBComplete;
+    TryMarkStageBReady(TEXT("MarkStagePipelineStageBComplete"));
+}
+
+void UTectonicSimulationService::MarkStagePipelinePostErosion()
+{
+    if (StagePipelinePhase == EStagePipelinePhase::StageBComplete)
+    {
+        StagePipelinePhase = EStagePipelinePhase::PostErosion;
+    }
+    TryMarkStageBReady(TEXT("MarkStagePipelinePostErosion"));
+}
+
+bool UTectonicSimulationService::IsStagePipelineStageBComplete() const
+{
+    return StagePipelinePhase == EStagePipelinePhase::StageBComplete ||
+        StagePipelinePhase == EStagePipelinePhase::PostErosion;
+}
+
+const TCHAR* UTectonicSimulationService::PipelinePhaseToString(EStagePipelinePhase Phase) const
+{
+    switch (Phase)
+    {
+    case EStagePipelinePhase::Idle:
+        return TEXT("Idle");
+    case EStagePipelinePhase::StageA:
+        return TEXT("StageA");
+    case EStagePipelinePhase::StageBComplete:
+        return TEXT("StageBComplete");
+    case EStagePipelinePhase::PostErosion:
+        return TEXT("PostErosion");
+    default:
+        return TEXT("Unknown");
+    }
+}
+
+void UTectonicSimulationService::WarnIfStageBInvokedOutOfOrder(const TCHAR* Context) const
+{
+    if (IsStagePipelineStageBComplete())
+    {
+        return;
+    }
+
+    UE_LOG(LogPlanetaryCreation, Warning,
+        TEXT("[StageOrder] %s invoked before Stage B completion (Step=%lld Phase=%s)"),
+        Context,
+        static_cast<long long>(StagePipelineStepSerial),
+        PipelinePhaseToString(StagePipelinePhase));
+}
+
 void UTectonicSimulationService::SetSkipCPUAmplification(bool bInSkip)
 {
+    if (Parameters.bSkipCPUAmplification == bInSkip)
+    {
+        return;
+    }
+
     Parameters.bSkipCPUAmplification = bInSkip;
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ParametersDirty, TEXT("SetSkipCPUAmplification"));
 }
 
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
@@ -1663,12 +1943,25 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
     }
 
     Parameters = NewParams;
+    HeightmapPaletteMode = Parameters.HeightmapPaletteMode;
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ParametersDirty, TEXT("SetParameters"));
     const auto IsHeightmapMode = [](ETectonicVisualizationMode Mode)
     {
         return Mode == ETectonicVisualizationMode::Elevation
             || Mode == ETectonicVisualizationMode::Amplified
             || Mode == ETectonicVisualizationMode::AmplificationBlend;
     };
+
+    if (bForceHydraulicErosionDisabled)
+    {
+        if (!bLoggedHydraulicDisableNotice)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[StageB][Plan] Hydraulic erosion temporarily disabled (STG-04) until STG-08 validation completes."));
+            bLoggedHydraulicDisableNotice = true;
+        }
+        Parameters.bEnableHydraulicErosion = false;
+    }
 
     Parameters.bEnableHeightmapVisualization = IsHeightmapMode(Parameters.VisualizationMode);
 
@@ -1711,6 +2004,8 @@ void UTectonicSimulationService::SetParameters(const FTectonicSimulationParamete
     }
 #endif
 
+    Parameters.RidgeBoundaryInfluenceRadians = FMath::Clamp(Parameters.RidgeBoundaryInfluenceRadians, 0.0, PI);
+
     ResetSimulation();
 }
 
@@ -1723,6 +2018,35 @@ void UTectonicSimulationService::SetHeightmapVisualizationEnabled(bool bEnabled)
     }
 
     SetVisualizationMode(TargetMode);
+}
+
+void UTectonicSimulationService::SetHeightmapPaletteMode(EHeightmapPaletteMode Mode)
+{
+    if (HeightmapPaletteMode == Mode)
+    {
+        return;
+    }
+
+    HeightmapPaletteMode = Mode;
+    Parameters.HeightmapPaletteMode = Mode;
+
+    const TCHAR* ModeLabel = (Mode == EHeightmapPaletteMode::NormalizedRange)
+        ? TEXT("Normalized (min to max)")
+        : TEXT("Absolute hypsometric");
+
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Visualization] Heightmap palette set to %s"), ModeLabel);
+
+#if WITH_EDITOR
+    if (FTectonicSimulationController* Controller = FTectonicSimulationController::GetActiveController())
+    {
+        Controller->RefreshPreviewColors();
+    }
+#endif
+}
+
+EHeightmapPaletteMode UTectonicSimulationService::GetHeightmapPaletteMode() const
+{
+    return HeightmapPaletteMode;
 }
 
 void UTectonicSimulationService::SetVisualizationMode(ETectonicVisualizationMode Mode)
@@ -1779,6 +2103,7 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
 
     // Update parameter
     Parameters.RenderSubdivisionLevel = NewLevel;
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::LODChange, TEXT("SetRenderSubdivisionLevel"));
 
     // Regenerate only the render mesh at new subdivision level
     GenerateRenderMesh();
@@ -1858,6 +2183,11 @@ bool UTectonicSimulationService::ShouldUseGPUHydraulic() const
 bool UTectonicSimulationService::ApplyHydraulicErosionGPU(double /*DeltaTimeMy*/)
 {
 #if WITH_EDITOR
+    if (!IsStagePipelineStageBComplete())
+    {
+        WarnIfStageBInvokedOutOfOrder(TEXT("ApplyHydraulicErosionGPU"));
+        return false;
+    }
     // GPU path not yet implemented; fall back to CPU.
     return false;
 #else
@@ -4152,6 +4482,8 @@ void UTectonicSimulationService::RestoreRidgeCacheFromSnapshot(const FSimulation
         LastRidgeMissingTangentCount = 0;
         LastRidgePoorAlignmentCount = 0;
         LastRidgeGradientFallbackCount = 0;
+        LastRidgePlateFallbackCount = 0;
+        LastRidgeMotionFallbackCount = 0;
         return;
     }
 
@@ -4182,6 +4514,8 @@ void UTectonicSimulationService::RestoreRidgeCacheFromSnapshot(const FSimulation
     LastRidgeMissingTangentCount = 0;
     LastRidgePoorAlignmentCount = 0;
     LastRidgeGradientFallbackCount = 0;
+    LastRidgePlateFallbackCount = 0;
+    LastRidgeMotionFallbackCount = 0;
 }
 
 bool UTectonicSimulationService::Undo()
@@ -6261,6 +6595,7 @@ bool UTectonicSimulationService::RefreshRidgeDirectionsIfNeeded()
 }
 
 
+
 void UTectonicSimulationService::ComputeRidgeDirections()
 {
     // Paper Section 5: "using the recorded parameters r_c, i.e. the local direction parallel to the ridge"
@@ -6271,6 +6606,7 @@ void UTectonicSimulationService::ComputeRidgeDirections()
     if (VertexCount <= 0)
     {
         VertexRidgeDirections.Reset();
+        VertexRidgeTangents.Reset();
         RidgeDirectionDirtyMask.Reset();
         RidgeDirectionDirtyCount = 0;
         RidgeDirectionFloatSoA.DirX.Reset();
@@ -6292,6 +6628,15 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         for (int32 Index = 0; Index < VertexCount; ++Index)
         {
             VertexRidgeDirections[Index] = FVector3d::ZAxisVector;
+        }
+    }
+
+    if (VertexRidgeTangents.Num() != VertexCount)
+    {
+        VertexRidgeTangents.SetNum(VertexCount);
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            VertexRidgeTangents[Index] = FVector3f::ZeroVector;
         }
     }
 
@@ -6339,193 +6684,53 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         BuildRenderVertexBoundaryCache();
     }
 
+    TMap<int32, FVector3d> PlateBoundaryFallbackTangents;
+    if (RenderVertexBoundaryCache.Num() == VertexCount)
+    {
+        for (int32 CacheIdx = 0; CacheIdx < VertexCount; ++CacheIdx)
+        {
+            const FRenderVertexBoundaryInfo& Info = RenderVertexBoundaryCache[CacheIdx];
+            if (!Info.bHasBoundary || !Info.bIsDivergent)
+            {
+                continue;
+            }
+
+            if (Info.SourcePlateID == INDEX_NONE)
+            {
+                continue;
+            }
+
+            if (Info.BoundaryTangent.IsNearlyZero())
+            {
+                continue;
+            }
+
+            FVector3d& Sum = PlateBoundaryFallbackTangents.FindOrAdd(Info.SourcePlateID);
+            Sum += Info.BoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+        }
+
+        for (TPair<int32, FVector3d>& Pair : PlateBoundaryFallbackTangents)
+        {
+            Pair.Value = Pair.Value.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+        }
+    }
+
     int32 UpdatedVertices = 0;
     int32 RidgeCacheHitsLocal = 0;
     int32 RidgeMissingTangentLocal = 0;
     int32 RidgePoorAlignmentLocal = 0;
     int32 RidgeGradientFallbackLocal = 0;
+    int32 RidgePlateFallbackLocal = 0;
+    int32 RidgeMotionFallbackLocal = 0;
+    int32 RidgeCacheAvailableLocal = 0;
+    int32 DivergentBoundaryVertexCount = 0;
+    int32 DivergentBoundaryValidTangents = 0;
 #if UE_BUILD_DEVELOPMENT
     int32 RidgeDiagLogged = 0;
 #endif
 
-    const TArray<FVector3d>& SharedVerts = SharedVertices;
-
-    auto ComputeNearestBoundaryTangent = [&](const FVector3d& VertexNormal, int32 PlateID, double& OutDistance) -> FVector3d
-    {
-        OutDistance = TNumericLimits<double>::Max();
-
-        auto FetchBoundaryVertex = [&](int32 SharedIndex, FVector3d& OutUnit) -> bool
-        {
-            if (SharedVerts.IsValidIndex(SharedIndex))
-            {
-                OutUnit = SharedVerts[SharedIndex].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
-                return true;
-            }
-
-            if (RenderVertices.IsValidIndex(SharedIndex))
-            {
-                OutUnit = RenderVertices[SharedIndex].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
-                return true;
-            }
-
-            return false;
-        };
-
-        auto AccumulateBoundary = [&](const FPlateBoundary& Boundary, double& InOutClosestDistance, FVector3d& InOutWeightedTangent, double& InOutWeightSum)
-        {
-            if (Boundary.BoundaryType != EBoundaryType::Divergent)
-            {
-                return;
-            }
-
-            const TArray<int32>& SharedEdge = Boundary.SharedEdgeVertices;
-            const int32 EdgeCount = SharedEdge.Num();
-            if (EdgeCount < 2)
-            {
-                return;
-            }
-
-            FVector3d BoundaryWeighted = FVector3d::ZeroVector;
-            double BoundaryWeightSum = 0.0;
-            double BoundaryClosest = InOutClosestDistance;
-
-            for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount; ++EdgeIdx)
-            {
-                const int32 V0Idx = SharedEdge[EdgeIdx];
-                const int32 V1Idx = SharedEdge[(EdgeIdx + 1) % EdgeCount];
-
-                FVector3d P0, P1;
-                if (!FetchBoundaryVertex(V0Idx, P0) || !FetchBoundaryVertex(V1Idx, P1))
-                {
-                    continue;
-                }
-
-                if ((P1 - P0).IsNearlyZero())
-                {
-                    continue;
-                }
-
-                FVector3d EdgeVector = P1 - P0;
-                EdgeVector -= (EdgeVector | VertexNormal) * VertexNormal;
-                if (!EdgeVector.Normalize())
-                {
-                    continue;
-                }
-
-                FVector3d SegmentMid = (P0 + P1).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, VertexNormal);
-                if (SegmentMid.IsNearlyZero())
-                {
-                    SegmentMid = P0;
-                }
-
-                double AngularDistance = FMath::Acos(FMath::Clamp(VertexNormal | SegmentMid, -1.0, 1.0));
-                if (!FMath::IsFinite(AngularDistance))
-                {
-                    AngularDistance = PI;
-                }
-
-                BoundaryClosest = FMath::Min(BoundaryClosest, AngularDistance);
-
-                const double Weight = 1.0 / FMath::Max(AngularDistance, 1e-3);
-                BoundaryWeighted += EdgeVector * Weight;
-                BoundaryWeightSum += Weight;
-            }
-
-            if (BoundaryWeightSum > 0.0)
-            {
-                const FVector3d BoundaryTangent = (BoundaryWeighted / BoundaryWeightSum).GetSafeNormal();
-                if (!BoundaryTangent.IsNearlyZero())
-                {
-                    InOutClosestDistance = FMath::Min(InOutClosestDistance, BoundaryClosest);
-                    InOutWeightedTangent += BoundaryTangent * BoundaryWeightSum;
-                    InOutWeightSum += BoundaryWeightSum;
-                }
-            }
-        };
-
-        FVector3d WeightedTangent = FVector3d::ZeroVector;
-        double TotalWeight = 0.0;
-        double ClosestDistance = TNumericLimits<double>::Max();
-        bool bFoundBoundary = false;
-
-        const FPlateBoundarySummary* Summary = GetPlateBoundarySummary(PlateID);
-        if (Summary)
-        {
-            for (const FPlateBoundarySummaryEntry& Entry : Summary->Boundaries)
-            {
-                if (Entry.BoundaryType != EBoundaryType::Divergent)
-                {
-                    continue;
-                }
-
-                const int32 OtherPlateID = Entry.OtherPlateID;
-                const TPair<int32, int32> BoundaryKey = (PlateID < OtherPlateID)
-                    ? TPair<int32, int32>(PlateID, OtherPlateID)
-                    : TPair<int32, int32>(OtherPlateID, PlateID);
-
-                if (const FPlateBoundary* Boundary = Boundaries.Find(BoundaryKey))
-                {
-                    bFoundBoundary = true;
-                    AccumulateBoundary(*Boundary, ClosestDistance, WeightedTangent, TotalWeight);
-                }
-            }
-        }
-        else
-        {
-            TArray<TPair<int32, int32>> SortedKeys;
-            SortedKeys.Reserve(Boundaries.Num());
-            for (const auto& BoundaryPair : Boundaries)
-            {
-                const TPair<int32, int32>& BoundaryKey = BoundaryPair.Key;
-                if (BoundaryKey.Key != PlateID && BoundaryKey.Value != PlateID)
-                {
-                    continue;
-                }
-                SortedKeys.Add(BoundaryKey);
-            }
-
-            SortedKeys.Sort([](const TPair<int32, int32>& A, const TPair<int32, int32>& B)
-            {
-                if (A.Key != B.Key)
-                {
-                    return A.Key < B.Key;
-                }
-                return A.Value < B.Value;
-            });
-
-            for (const TPair<int32, int32>& BoundaryKey : SortedKeys)
-            {
-                const FPlateBoundary* BoundaryPtr = Boundaries.Find(BoundaryKey);
-                if (!BoundaryPtr)
-                {
-                    continue;
-                }
-
-                bFoundBoundary = true;
-                AccumulateBoundary(*BoundaryPtr, ClosestDistance, WeightedTangent, TotalWeight);
-            }
-        }
-
-        if (TotalWeight > 0.0 && !WeightedTangent.IsNearlyZero())
-        {
-            OutDistance = ClosestDistance;
-            return WeightedTangent.GetSafeNormal();
-        }
-
-        OutDistance = ClosestDistance;
-
-#if UE_BUILD_DEVELOPMENT
-        if (bFoundBoundary)
-        {
-            UE_LOG(LogPlanetaryCreation, VeryVerbose,
-                TEXT("[RidgeDiag] Plate %d boundary tangent unavailable after summary pass (weight=%.6f)"),
-                PlateID,
-                TotalWeight);
-        }
-#endif
-
-        return FVector3d::ZeroVector;
-    };
+    const double InfluenceRadians = FMath::Max(Parameters.RidgeBoundaryInfluenceRadians, 0.0);
+    const bool bUseDistanceGate = InfluenceRadians > UE_DOUBLE_SMALL_NUMBER;
 
     for (int32 VertexIdx : DirtyVertices)
     {
@@ -6558,53 +6763,53 @@ void UTectonicSimulationService::ComputeRidgeDirections()
             RidgeSoA.DirX[VertexIdx] = static_cast<float>(SafeDir.X);
             RidgeSoA.DirY[VertexIdx] = static_cast<float>(SafeDir.Y);
             RidgeSoA.DirZ[VertexIdx] = static_cast<float>(SafeDir.Z);
+            if (VertexRidgeTangents.IsValidIndex(VertexIdx))
+            {
+                VertexRidgeTangents[VertexIdx] = FVector3f::ZeroVector;
+            }
             ++UpdatedVertices;
             continue;
         }
 
         const FVector3d VertexNormal = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        const bool bIsYoungCrust = VertexCrustAge.IsValidIndex(VertexIdx) && VertexCrustAge[VertexIdx] <= 15.0;
 
         bool bUsedBoundaryCache = false;
         bool bUsedGradient = false;
+        bool bAppliedPlateFallback = false;
+        bool bAppliedMotionFallback = false;
 
         double BoundaryDistance = TNumericLimits<double>::Max();
         FVector3d SelectedBoundaryTangent = FVector3d::ZeroVector;
 
+        bool bCacheValid = false;
+        bool bCacheWithinInfluence = false;
+        bool bIsDivergentBoundaryCandidate = false;
+
         if (RenderVertexBoundaryCache.IsValidIndex(VertexIdx))
         {
             const FRenderVertexBoundaryInfo& CacheInfo = RenderVertexBoundaryCache[VertexIdx];
-            const bool bCacheMatchesPlate =
-                CacheInfo.bHasBoundary &&
-                CacheInfo.bIsDivergent &&
-                CacheInfo.SourcePlateID == Plate.PlateID &&
-                !CacheInfo.BoundaryTangent.IsNearlyZero();
-
-            if (bCacheMatchesPlate)
+            if (CacheInfo.bHasBoundary && CacheInfo.bIsDivergent && CacheInfo.SourcePlateID == Plate.PlateID)
             {
-                SelectedBoundaryTangent = CacheInfo.BoundaryTangent;
-                if (CacheInfo.DistanceRadians < TNumericLimits<float>::Max())
+                bIsDivergentBoundaryCandidate = true;
+
+                if (!CacheInfo.BoundaryTangent.IsNearlyZero())
                 {
-                    BoundaryDistance = static_cast<double>(CacheInfo.DistanceRadians);
+                    bCacheValid = true;
+                    ++RidgeCacheAvailableLocal;
+
+                    BoundaryDistance = FMath::Max(static_cast<double>(CacheInfo.DistanceRadians), 0.0);
+                    SelectedBoundaryTangent = CacheInfo.BoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+
+                    bCacheWithinInfluence = !bUseDistanceGate || BoundaryDistance <= InfluenceRadians;
+                    if (bCacheWithinInfluence && !SelectedBoundaryTangent.IsNearlyZero())
+                    {
+                        ResultDirection = SelectedBoundaryTangent;
+                        bUsedBoundaryCache = true;
+                        ++RidgeCacheHitsLocal;
+                    }
                 }
-                bUsedBoundaryCache = true;
-                ++RidgeCacheHitsLocal;
             }
-        }
-
-        if (!bUsedBoundaryCache)
-        {
-            SelectedBoundaryTangent = ComputeNearestBoundaryTangent(VertexNormal, Plate.PlateID, BoundaryDistance);
-            if (!SelectedBoundaryTangent.IsNearlyZero())
-            {
-                bUsedBoundaryCache = true;
-            }
-        }
-
-        const bool bBoundaryWithinInfluence = bUsedBoundaryCache && !SelectedBoundaryTangent.IsNearlyZero();
-
-        if (bBoundaryWithinInfluence)
-        {
-            ResultDirection = SelectedBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
         }
 
         FVector3d AgeGradient = FVector3d::ZeroVector;
@@ -6662,10 +6867,55 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
         if (!bUsedBoundaryCache && !bUsedGradient)
         {
-            ResultDirection = FVector3d::CrossProduct(VertexNormal, FVector3d::UpVector).GetSafeNormal();
-            if (ResultDirection.IsNearlyZero())
+            if (bIsYoungCrust)
             {
-                ResultDirection = FVector3d::ZAxisVector;
+                if (const FVector3d* PlateFallback = PlateBoundaryFallbackTangents.Find(Plate.PlateID))
+                {
+                    if (PlateFallback && !PlateFallback->IsNearlyZero())
+                    {
+                        const FVector3d PlateDir = PlateFallback->GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+                        if (!PlateDir.IsNearlyZero())
+                        {
+                            ResultDirection = PlateDir;
+                            bAppliedPlateFallback = true;
+                            ++RidgePlateFallbackLocal;
+                        }
+                    }
+                }
+
+                if (!bAppliedPlateFallback)
+                {
+                    const FVector3d PlateAxis = Plate.EulerPoleAxis.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+                    FVector3d PlateMotion = FVector3d::CrossProduct(PlateAxis, VertexPosition).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+                    if (!PlateMotion.IsNearlyZero())
+                    {
+                        FVector3d MotionDir = FVector3d::CrossProduct(VertexNormal, PlateMotion).GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+                        if (!MotionDir.IsNearlyZero())
+                        {
+                            ResultDirection = MotionDir;
+                            bAppliedMotionFallback = true;
+                            ++RidgeMotionFallbackLocal;
+                        }
+                    }
+                }
+            }
+
+            if (!bAppliedPlateFallback && !bAppliedMotionFallback)
+            {
+                ResultDirection = FVector3d::CrossProduct(VertexNormal, FVector3d::UpVector).GetSafeNormal();
+                if (ResultDirection.IsNearlyZero())
+                {
+                    ResultDirection = FVector3d::ZAxisVector;
+                }
+            }
+        }
+
+        if (bIsDivergentBoundaryCandidate)
+        {
+            ++DivergentBoundaryVertexCount;
+            if (bCacheValid)
+            {
+                ++DivergentBoundaryValidTangents;
             }
         }
 
@@ -6676,61 +6926,124 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         RidgeSoA.DirY[VertexIdx] = static_cast<float>(SafeDir.Y);
         RidgeSoA.DirZ[VertexIdx] = static_cast<float>(SafeDir.Z);
 
+        FVector3f TangentToStore = FVector3f::ZeroVector;
+        if (bCacheValid)
+        {
+            TangentToStore = FVector3f(
+                static_cast<float>(SelectedBoundaryTangent.X),
+                static_cast<float>(SelectedBoundaryTangent.Y),
+                static_cast<float>(SelectedBoundaryTangent.Z));
+        }
+        else if (bUsedGradient)
+        {
+            TangentToStore = FVector3f(
+                static_cast<float>(SafeDir.X),
+                static_cast<float>(SafeDir.Y),
+                static_cast<float>(SafeDir.Z));
+        }
+        else if (bAppliedPlateFallback || bAppliedMotionFallback)
+        {
+            TangentToStore = FVector3f(
+                static_cast<float>(SafeDir.X),
+                static_cast<float>(SafeDir.Y),
+                static_cast<float>(SafeDir.Z));
+        }
+
+        if (VertexRidgeTangents.IsValidIndex(VertexIdx))
+        {
+            VertexRidgeTangents[VertexIdx] = TangentToStore;
+        }
+
         ++UpdatedVertices;
 
         const double DirLength = ResultDirection.Length();
+        const bool bUsedFallback = bAppliedPlateFallback || bAppliedMotionFallback;
+
         if (VertexCrustAge.IsValidIndex(VertexIdx) && VertexCrustAge[VertexIdx] < 15.0)
         {
-            if (bBoundaryWithinInfluence && SelectedBoundaryTangent.IsNearlyZero())
+            if (!bCacheValid && !bUsedGradient && !bUsedFallback)
             {
                 ++RidgeMissingTangentLocal;
 #if UE_BUILD_DEVELOPMENT
                 if (RidgeDiagLogged < 50)
                 {
                     UE_LOG(LogPlanetaryCreation, Warning,
-                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My missing cache tangent (dist=%.3f rad)"),
+                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My missing cache tangent"),
                         VertexIdx,
                         Plate.PlateID,
-                        VertexCrustAge[VertexIdx],
-                        BoundaryDistance);
+                        VertexCrustAge[VertexIdx]);
                     ++RidgeDiagLogged;
                 }
 #endif
             }
-            else if (bUsedBoundaryCache)
+            else if (bCacheWithinInfluence)
             {
-                const double Alignment = FMath::Abs(ResultDirection | SelectedBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector));
-                if (DirLength < 0.95 || Alignment < 0.95)
+                if (!bUsedBoundaryCache)
                 {
-                    ++RidgePoorAlignmentLocal;
+                    ++RidgeMissingTangentLocal;
 #if UE_BUILD_DEVELOPMENT
                     if (RidgeDiagLogged < 50)
                     {
                         UE_LOG(LogPlanetaryCreation, Warning,
-                            TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My |Dir|=%.3f Alignment=%.1f%% (dist=%.3f rad)"),
+                            TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My cache tangent suppressed (dist=%.3f rad)"),
                             VertexIdx,
                             Plate.PlateID,
                             VertexCrustAge[VertexIdx],
-                            DirLength,
-                            Alignment * 100.0,
                             BoundaryDistance);
-                        UE_LOG(LogPlanetaryCreation, Warning,
-                            TEXT("    ResultDir=(%.3f, %.3f, %.3f) CacheTan=(%.3f, %.3f, %.3f)"),
-                            ResultDirection.X, ResultDirection.Y, ResultDirection.Z,
-                            SelectedBoundaryTangent.X, SelectedBoundaryTangent.Y, SelectedBoundaryTangent.Z);
                         ++RidgeDiagLogged;
                     }
 #endif
                 }
+                else
+                {
+                    const double Alignment = FMath::Abs(ResultDirection | SelectedBoundaryTangent);
+                    if (DirLength < 0.95 || Alignment < 0.95)
+                    {
+                        ++RidgePoorAlignmentLocal;
+#if UE_BUILD_DEVELOPMENT
+                        if (RidgeDiagLogged < 50)
+                        {
+                            UE_LOG(LogPlanetaryCreation, Warning,
+                                TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My |Dir|=%.3f Alignment=%.1f%% (dist=%.3f rad)"),
+                                VertexIdx,
+                                Plate.PlateID,
+                                VertexCrustAge[VertexIdx],
+                                DirLength,
+                                Alignment * 100.0,
+                                BoundaryDistance);
+                            UE_LOG(LogPlanetaryCreation, Warning,
+                                TEXT("    ResultDir=(%.3f, %.3f, %.3f) CacheTan=(%.3f, %.3f, %.3f)"),
+                                ResultDirection.X, ResultDirection.Y, ResultDirection.Z,
+                                SelectedBoundaryTangent.X, SelectedBoundaryTangent.Y, SelectedBoundaryTangent.Z);
+                            ++RidgeDiagLogged;
+                        }
+#endif
+                    }
+                }
             }
-            else if (bBoundaryWithinInfluence && bUsedGradient)
+            else if (!bCacheValid && bUsedFallback)
+            {
+#if UE_BUILD_DEVELOPMENT
+                if (RidgeDiagLogged < 50)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My fallback via %s"),
+                        VertexIdx,
+                        Plate.PlateID,
+                        VertexCrustAge[VertexIdx],
+                        bAppliedPlateFallback ? TEXT("PlateAverage") : TEXT("PlateMotion"));
+                    ++RidgeDiagLogged;
+                }
+#endif
+            }
+            else if (bCacheValid && bUsedGradient)
             {
                 ++RidgeGradientFallbackLocal;
 #if UE_BUILD_DEVELOPMENT
                 if (RidgeDiagLogged < 50)
                 {
                     UE_LOG(LogPlanetaryCreation, Warning,
-                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My fallback to gradient (|Grad|=%.3f, dist=%.3f rad)"),
+                        TEXT("[RidgeDiag] Vertex %d Plate=%d Age=%.2f My gradient fallback (|Grad|=%.3f, dist=%.3f rad)"),
                         VertexIdx,
                         Plate.PlateID,
                         VertexCrustAge[VertexIdx],
@@ -6763,6 +7076,14 @@ void UTectonicSimulationService::ComputeRidgeDirections()
     LastRidgeMissingTangentCount = RidgeMissingTangentLocal;
     LastRidgePoorAlignmentCount = RidgePoorAlignmentLocal;
     LastRidgeGradientFallbackCount = RidgeGradientFallbackLocal;
+    LastRidgePlateFallbackCount = RidgePlateFallbackLocal;
+    LastRidgeMotionFallbackCount = RidgeMotionFallbackLocal;
+    LastRidgeOceanicVertexCount = DivergentBoundaryVertexCount;
+    LastRidgeValidTangentCount = DivergentBoundaryValidTangents;
+    const double TangentCoveragePct = DivergentBoundaryVertexCount > 0
+        ? (static_cast<double>(DivergentBoundaryValidTangents) / static_cast<double>(DivergentBoundaryVertexCount)) * 100.0
+        : 100.0;
+    LastRidgeTangentCoveragePercent = TangentCoveragePct;
 
     if (UpdatedVertices > 0)
     {
@@ -6774,17 +7095,52 @@ void UTectonicSimulationService::ComputeRidgeDirections()
     }
 
 #if UE_BUILD_DEVELOPMENT
-    if (RidgeCacheHitsLocal > 0 || RidgeMissingTangentLocal > 0 || RidgePoorAlignmentLocal > 0 || RidgeGradientFallbackLocal > 0)
+    if (DirtyVertices.Num() > 0)
     {
-        UE_LOG(LogPlanetaryCreation, Warning,
-            TEXT("[RidgeDiag] Summary: CacheHits=%d Missing=%d PoorAlignment=%d GradientFallback=%d"),
+        const double DirtyTotal = static_cast<double>(DirtyVertices.Num());
+        const double HitPct = DirtyTotal > 0.0 ? (static_cast<double>(RidgeCacheHitsLocal) / DirtyTotal) * 100.0 : 0.0;
+        const double MissingPct = DirtyTotal > 0.0 ? (static_cast<double>(RidgeMissingTangentLocal) / DirtyTotal) * 100.0 : 0.0;
+        const double GradientFallbackPct = DirtyTotal > 0.0 ? (static_cast<double>(RidgeGradientFallbackLocal) / DirtyTotal) * 100.0 : 0.0;
+        const double PlateFallbackPct = DirtyTotal > 0.0 ? (static_cast<double>(RidgePlateFallbackLocal) / DirtyTotal) * 100.0 : 0.0;
+        const double MotionFallbackPct = DirtyTotal > 0.0 ? (static_cast<double>(RidgeMotionFallbackLocal) / DirtyTotal) * 100.0 : 0.0;
+        const double PoorPct = RidgeCacheHitsLocal > 0 ? (static_cast<double>(RidgePoorAlignmentLocal) / static_cast<double>(RidgeCacheHitsLocal)) * 100.0 : 0.0;
+
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[RidgeDiag] Summary: Dirty=%d CacheAvail=%d CacheHits=%d (%.1f%%) Missing=%d (%.1f%%) GradientFallback=%d (%.1f%%) PlateFallback=%d (%.1f%%) MotionFallback=%d (%.1f%%) PoorAlign=%d (%.1f%% of hits) Influence=%.2f°"),
+            DirtyVertices.Num(),
+            RidgeCacheAvailableLocal,
             RidgeCacheHitsLocal,
+            HitPct,
             RidgeMissingTangentLocal,
+            MissingPct,
+            RidgeGradientFallbackLocal,
+            GradientFallbackPct,
+            RidgePlateFallbackLocal,
+            PlateFallbackPct,
+            RidgeMotionFallbackLocal,
+            MotionFallbackPct,
             RidgePoorAlignmentLocal,
-            RidgeGradientFallbackLocal);
+            PoorPct,
+            FMath::RadiansToDegrees(InfluenceRadians));
+
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[RidgeDiag] TangentCoverage: Divergent=%d Valid=%d (%.1f%%) Target=99.0%%"),
+            DivergentBoundaryVertexCount,
+            DivergentBoundaryValidTangents,
+            TangentCoveragePct);
+
+        if (TangentCoveragePct < 99.0)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[RidgeDiag] Tangent coverage below 99%% target (%.1f%%). Divergent=%d Missing=%d"),
+                TangentCoveragePct,
+                DivergentBoundaryVertexCount,
+                DivergentBoundaryVertexCount - DivergentBoundaryValidTangents);
+        }
     }
 #endif
 }
+
 
 void UTectonicSimulationService::SetHighlightSeaLevel(bool bEnabled)
 {
@@ -6858,6 +7214,15 @@ void UTectonicSimulationService::EnsureStageBPrimed()
         bResizedRidgeDirections = true;
     }
 
+    if (VertexRidgeTangents.Num() != VertexCount)
+    {
+        VertexRidgeTangents.SetNum(VertexCount);
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            VertexRidgeTangents[Index] = FVector3f::ZeroVector;
+        }
+    }
+
     if (bResizedRidgeDirections)
     {
         MarkAllRidgeDirectionsDirty();
@@ -6867,6 +7232,7 @@ void UTectonicSimulationService::EnsureStageBPrimed()
 void UTectonicSimulationService::RebuildStageBForCurrentLOD()
 {
     TRACE_CPUPROFILER_EVENT_SCOPE(RebuildStageBForCurrentLOD);
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::PendingCPUAmplification, TEXT("RebuildStageBForCurrentLOD.Begin"));
 
     const int32 ExpectedVertexCount = RenderVertices.Num();
 
@@ -6884,19 +7250,17 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
     const bool bMeetsAmplificationLOD = Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
     const bool bShouldRunOceanic = bMeetsAmplificationLOD && Parameters.bEnableOceanicAmplification;
     const bool bShouldRunContinental = bMeetsAmplificationLOD && Parameters.bEnableContinentalAmplification;
-
-    const bool bUseGPU = ShouldUseGPUAmplification() && Parameters.bSkipCPUAmplification;
+    const bool bSkipCPUAmplification = Parameters.bSkipCPUAmplification;
+    const bool bGpuAmplificationAvailable = ShouldUseGPUAmplification();
+    const bool bRunGPUAmplification = bSkipCPUAmplification && bGpuAmplificationAvailable;
+    bLastOceanicForcedCpuFallback = false;
 
     if (bShouldRunOceanic)
     {
         MarkAllRidgeDirectionsDirty();
         RefreshRidgeDirectionsIfNeeded();
 
-        if (!Parameters.bSkipCPUAmplification)
-        {
-            ApplyOceanicAmplification();
-        }
-        else if (bUseGPU)
+        if (bRunGPUAmplification)
         {
 #if WITH_EDITOR
             InitializeGPUExemplarResources();
@@ -6906,17 +7270,33 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
             }
 #endif
         }
+        else
+        {
+#if WITH_EDITOR
+            static int32 OceanicFallbackLogCount = 0;
+            if (bSkipCPUAmplification && !bGpuAmplificationAvailable && OceanicFallbackLogCount < 3)
+            {
+                const int32 UseGPUValue = CVarPlanetaryCreationUseGPUAmplification.GetValueOnAnyThread();
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][Fallback] Oceanic CPU amplification forced (SkipCPU=1 | UseGPUAmplification=%d | LOD=%d). Running CPU path to keep baseline parity."),
+                    UseGPUValue,
+                    Parameters.RenderSubdivisionLevel);
+                ++OceanicFallbackLogCount;
+            }
+#endif
+            if (bSkipCPUAmplification && !bGpuAmplificationAvailable)
+            {
+                bLastOceanicForcedCpuFallback = true;
+            }
+            ApplyOceanicAmplification();
+        }
     }
 
     if (bShouldRunContinental)
     {
         RefreshContinentalAmplificationCache();
 
-        if (!Parameters.bSkipCPUAmplification)
-        {
-            ApplyContinentalAmplification();
-        }
-        else if (bUseGPU)
+        if (bRunGPUAmplification)
         {
 #if WITH_EDITOR
             InitializeGPUExemplarResources();
@@ -6926,7 +7306,32 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
             }
 #endif
         }
+        else
+        {
+#if WITH_EDITOR
+            static int32 ContinentalFallbackLogCount = 0;
+            if (bSkipCPUAmplification && !bGpuAmplificationAvailable && ContinentalFallbackLogCount < 3)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][Fallback] Continental CPU amplification forced (SkipCPU=1 | UseGPUAmplification=%d | LOD=%d)."),
+                    CVarPlanetaryCreationUseGPUAmplification.GetValueOnAnyThread(),
+                    Parameters.RenderSubdivisionLevel);
+                ++ContinentalFallbackLogCount;
+            }
+#endif
+            ApplyContinentalAmplification();
+        }
     }
+    StagePipelinePhase = EStagePipelinePhase::StageBComplete;
+    StagePipelineStepSerial = TotalStepsSimulated;
+    TryMarkStageBReady(TEXT("RebuildStageBForCurrentLOD.Complete"));
+}
+
+void UTectonicSimulationService::ForceStageBAmplificationRebuild(const TCHAR* Context)
+{
+    const TCHAR* LocalContext = (Context && *Context) ? Context : TEXT("ForceStageBAmplificationRebuild");
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ExternalReset, LocalContext);
+    RebuildStageBForCurrentLOD();
 }
 
 void UTectonicSimulationService::DiscardOutdatedStageBGPUJobs(int32 ExpectedVertexCount)
@@ -7023,6 +7428,176 @@ void UTectonicSimulationService::DiscardOutdatedStageBGPUJobs(int32 ExpectedVert
 #else
     (void)ExpectedVertexCount;
 #endif
+}
+
+bool UTectonicSimulationService::ShouldUseTemporaryIsotropicStageB() const
+{
+    const bool bAnyStageBEnabled = Parameters.bEnableOceanicAmplification || Parameters.bEnableContinentalAmplification;
+    if (!bUseIsotropicStageBSpike || !bAnyStageBEnabled)
+    {
+        return false;
+    }
+
+    if (Parameters.bSkipCPUAmplification)
+    {
+        return false;
+    }
+
+    return Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
+}
+
+void UTectonicSimulationService::ApplyTemporaryIsotropicStageBAmplification(double& OutOceanicCpuSeconds, bool& OutSurfaceDataChanged)
+{
+    TRACE_CPUPROFILER_EVENT_SCOPE(StageBIsotropicSpike);
+
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexAmplifiedElevation.Num() != VertexCount || VertexElevationValues.Num() != VertexCount)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[StageB][Spike] Stage B buffers not primed (Amplified=%d Render=%d Elevation=%d). Skipping temporary isotropic amplification."),
+            VertexAmplifiedElevation.Num(),
+            VertexCount,
+            VertexElevationValues.Num());
+        return;
+    }
+
+    if (!bLoggedIsotropicStageBNotice)
+    {
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[StageB][Spike] Applying temporary isotropic amplification (STG-00) with noise × age/ridge falloff. Hydraulic erosion remains disabled until STG-08."));
+        bLoggedIsotropicStageBNotice = true;
+    }
+
+    auto FindPlateByID = [this](int32 LookupPlateID) -> const FTectonicPlate*
+    {
+        if (LookupPlateID == INDEX_NONE)
+        {
+            return nullptr;
+        }
+
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.PlateID == LookupPlateID)
+            {
+                return &Plate;
+            }
+        }
+
+        return nullptr;
+    };
+
+    const double BlockStart = FPlatformTime::Seconds();
+    const double BaseAmplitude = Parameters.OceanicFaultAmplitude * 0.6;
+    const double BaseFrequency = FMath::Max(Parameters.OceanicFaultFrequency, 0.005);
+    const bool bHasAge = VertexCrustAge.Num() == VertexCount;
+    const bool bHasBoundaryInfo = RenderVertexBoundaryCache.Num() == VertexCount;
+    const double AgeFalloff = FMath::Max(Parameters.OceanicAgeFalloff, 0.0005);
+    const double InfluenceRadians = FMath::DegreesToRadians(8.0);
+
+    static const FVector NoiseOffsets[3] =
+    {
+        FVector(0.0f, 0.0f, 0.0f),
+        FVector(17.137f, 29.911f, 11.873f),
+        FVector(41.193f, 7.317f, 23.557f)
+    };
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const double BaseElevation = VertexElevationValues[VertexIdx];
+        double AmplifiedElevation = BaseElevation;
+
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        const FTectonicPlate* PlatePtr = FindPlateByID(PlateID);
+        const bool bIsOceanic = PlatePtr && PlatePtr->CrustType == ECrustType::Oceanic;
+        const FVector3d UnitPosition = RenderVertices[VertexIdx].GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        const FVector UnitPositionF(static_cast<float>(UnitPosition.X), static_cast<float>(UnitPosition.Y), static_cast<float>(UnitPosition.Z));
+
+        if (bIsOceanic)
+        {
+            const double AgeMy = bHasAge ? FMath::Max(VertexCrustAge[VertexIdx], 0.0) : 0.0;
+            const double AgeFactor = FMath::Exp(-AgeMy * AgeFalloff);
+
+            double RidgeFactor = 0.35;
+            if (bHasBoundaryInfo)
+            {
+                const FRenderVertexBoundaryInfo& BoundaryInfo = RenderVertexBoundaryCache[VertexIdx];
+                if (BoundaryInfo.bHasBoundary && BoundaryInfo.bIsDivergent)
+                {
+                    const double DistanceRad = FMath::Max(static_cast<double>(BoundaryInfo.DistanceRadians), 0.0);
+                    const double Influence = FMath::Max(InfluenceRadians, UE_DOUBLE_SMALL_NUMBER);
+                    RidgeFactor = FMath::Exp(-DistanceRad / Influence);
+                }
+                else if (BoundaryInfo.bHasBoundary)
+                {
+                    RidgeFactor = 0.15;
+                }
+            }
+
+            double FbmValue = 0.0;
+            double WeightSum = 0.0;
+            double OctaveFrequency = BaseFrequency;
+            double OctaveAmplitude = 1.0;
+
+            for (int32 Octave = 0; Octave < 3; ++Octave)
+            {
+                const FVector SamplePoint = UnitPositionF * static_cast<float>(OctaveFrequency * 600.0) + NoiseOffsets[Octave];
+                const double NoiseSample = FMath::PerlinNoise3D(SamplePoint);
+                FbmValue += NoiseSample * OctaveAmplitude;
+                WeightSum += OctaveAmplitude;
+
+                OctaveFrequency *= 2.0;
+                OctaveAmplitude *= 0.5;
+            }
+
+            const double NormalizedNoise = (WeightSum > UE_DOUBLE_SMALL_NUMBER) ? (FbmValue / WeightSum) : 0.0;
+            const double SpikeAmplitude = BaseAmplitude * AgeFactor * RidgeFactor;
+            AmplifiedElevation = BaseElevation + (SpikeAmplitude * NormalizedNoise);
+        }
+        else
+        {
+            const FVector SamplePoint = UnitPositionF * 120.0f + NoiseOffsets[1];
+            const double NoiseSample = FMath::PerlinNoise3D(SamplePoint);
+            AmplifiedElevation = BaseElevation + (NoiseSample * 20.0);
+        }
+
+        if (!FMath::IsFinite(AmplifiedElevation))
+        {
+            AmplifiedElevation = BaseElevation;
+        }
+
+        VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;
+    }
+
+    SurfaceDataVersion++;
+    BumpOceanicAmplificationSerial();
+
+    OutSurfaceDataChanged = true;
+    OutOceanicCpuSeconds += FPlatformTime::Seconds() - BlockStart;
+}
+
+void UTectonicSimulationService::EmitStageBValidationPlanTelemetry(int32 RenderVertexCount)
+{
+    if (bStageBValidationPlanLogged)
+    {
+        return;
+    }
+
+    const double VertexCountDouble = FMath::Max(static_cast<double>(RenderVertexCount), 0.0);
+    const double MissingPercent = (VertexCountDouble > 0.0)
+        ? (static_cast<double>(LastRidgeMissingTangentCount) / VertexCountDouble) * 100.0
+        : 0.0;
+    const double PoorAlignPercent = (VertexCountDouble > 0.0)
+        ? (static_cast<double>(LastRidgePoorAlignmentCount) / VertexCountDouble) * 100.0
+        : 0.0;
+
+    UE_LOG(LogPlanetaryCreation, Log,
+        TEXT("[StageB][ValidationPlan] STG-05 ridge tangents missing=%d (%.2f%%) poorAlign=%d (%.2f%%); STG-06 fold/orogeny counts pending instrumentation; STG-07 anisotropic Day5 PNG checkpoint will use ExportHeightmapVisualization."),
+        LastRidgeMissingTangentCount,
+        MissingPercent,
+        LastRidgePoorAlignmentCount,
+        PoorAlignPercent);
+
+    bStageBValidationPlanLogged = true;
 }
 
 void UTectonicSimulationService::ApplyOceanicAmplification()
@@ -7341,6 +7916,8 @@ void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferRe
     Job.NumBytes = VertexCount * sizeof(float);
     Job.DispatchFence.BeginFence();
     Job.Snapshot = MoveTemp(Snapshot);
+    Job.JobId = NextOceanicGPUJobId++;
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::PendingGPUReadback, TEXT("EnqueueOceanicGPUJob"));
 }
 
 void UTectonicSimulationService::EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount, FContinentalAmplificationSnapshot&& Snapshot)
@@ -7357,6 +7934,7 @@ void UTectonicSimulationService::EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBuff
     Job.DispatchFence.BeginFence();
     Job.Snapshot = MoveTemp(Snapshot);
     Job.JobId = NextContinentalGPUJobId++;
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::PendingGPUReadback, TEXT("EnqueueContinentalGPUJob"));
 }
 
 #if WITH_EDITOR
@@ -7438,6 +8016,11 @@ TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> UTectonicSimulationServic
     return NewReadback;
 }
 
+uint64 UTectonicSimulationService::AllocateOceanicSnapshotId()
+{
+    return NextOceanicSnapshotId++;
+}
+
 bool UTectonicSimulationService::IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const
 {
     if (!Readback.IsValid())
@@ -7495,6 +8078,51 @@ bool UTectonicSimulationService::EnsureLatestOceanicSnapshotApplied()
         return false;
     }
 
+    const FTectonicSimulationParameters CurrentParams = GetParameters();
+    const bool bParameterMismatch = FMemory::Memcmp(&Snapshot.Parameters, &CurrentParams, sizeof(FTectonicSimulationParameters)) != 0;
+    const int32 CurrentLOD = CurrentParams.RenderSubdivisionLevel;
+    const int32 CurrentTopologyVersion = GetTopologyVersion();
+    const int32 CurrentSurfaceVersion = GetSurfaceDataVersion();
+
+    const bool bMetadataMatch =
+        Snapshot.RenderLOD == CurrentLOD &&
+        Snapshot.TopologyVersion == CurrentTopologyVersion &&
+        Snapshot.SurfaceVersion == CurrentSurfaceVersion;
+
+    if (!bMetadataMatch)
+    {
+        LatestJob.bCpuReplayApplied = true;
+        return false;
+    }
+
+    uint32 CurrentHash = 0;
+    const bool bHashComputed = ComputeCurrentOceanicInputHash(*this, Snapshot, CurrentHash);
+    const bool bHashMatch = bHashComputed && Snapshot.InputHash == CurrentHash;
+    if (!bHashComputed)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[StageB][GPU] Oceanic snapshot hash unavailable during pre-readback apply (JobId=%llu SnapshotId=%llu). Proceeding with snapshot."),
+            LatestJob.JobId,
+            Snapshot.SnapshotId);
+    }
+    else if (!bHashMatch)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[StageB][GPU] Oceanic snapshot hash mismatch during pre-readback apply (JobId=%llu SnapshotId=%llu Snapshot=0x%08x Current=0x%08x). Proceeding with snapshot."),
+            LatestJob.JobId,
+            Snapshot.SnapshotId,
+            Snapshot.InputHash,
+            CurrentHash);
+    }
+
+    if (bParameterMismatch)
+    {
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[StageB][GPU] Parameter drift detected pre-readback (JobId=%llu SnapshotId=%llu). Applying snapshot parameters."),
+            LatestJob.JobId,
+            Snapshot.SnapshotId);
+    }
+
     const int32 NumVertices = Snapshot.VertexCount;
     TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
     Amplified.SetNum(NumVertices);
@@ -7514,12 +8142,17 @@ bool UTectonicSimulationService::EnsureLatestOceanicSnapshotApplied()
 
     BumpOceanicAmplificationSerial();
     LatestJob.Snapshot.DataSerial = GetOceanicAmplificationDataSerial();
-    uint32 LiveHash = 0;
-    if (!ComputeCurrentOceanicInputHash(*this, LatestJob.Snapshot, LiveHash))
+    if (bHashComputed)
     {
-        LiveHash = HashOceanicSnapshot(LatestJob.Snapshot);
+        LatestJob.Snapshot.InputHash = CurrentHash;
     }
-    LatestJob.Snapshot.Hash = LiveHash;
+
+    UE_LOG(LogPlanetaryCreation, Log,
+        TEXT("[StageB][GPU] Applied oceanic snapshot while awaiting readback (JobId=%llu SnapshotId=%llu Hash=0x%08x)"),
+        LatestJob.JobId,
+        Snapshot.SnapshotId,
+        CurrentHash);
+
     return true;
 }
 #endif
@@ -7539,9 +8172,13 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
 {
     double AccumulatedSeconds = 0.0;
     static int32 ContinentalGPUCorrectionLogs = 0;
+    static int32 OceanicBaselineReuseLogCount = 0;
+    static int32 OceanicMaskMismatchLogCount = 0;
 #if UE_BUILD_DEVELOPMENT
     static int32 OceanicDebugComparisonCount = 0;
 #endif
+    int32 LocalBaselineReuseCount = 0;
+    int32 LocalMaskMismatchCount = 0;
 
     for (int32 JobIndex = PendingOceanicGPUJobs.Num() - 1; JobIndex >= 0; --JobIndex)
     {
@@ -7618,39 +8255,107 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
         }
 
         const FOceanicAmplificationSnapshot& Snapshot = Job.Snapshot;
-        const bool bSnapshotConsistent = Snapshot.IsConsistent() &&
-            Snapshot.VertexCount == NumFloats &&
-            Snapshot.DataSerial == GetOceanicAmplificationDataSerial();
+        const bool bSnapshotUsable = Snapshot.IsConsistent() && Snapshot.VertexCount == NumFloats;
+        const FTectonicSimulationParameters CurrentParams = GetParameters();
+        const int32 CurrentLOD = CurrentParams.RenderSubdivisionLevel;
+        const int32 CurrentTopologyVersion = GetTopologyVersion();
+        const int32 CurrentSurfaceVersion = GetSurfaceDataVersion();
+        const bool bParameterMismatch = FMemory::Memcmp(&Snapshot.Parameters, &CurrentParams, sizeof(FTectonicSimulationParameters)) != 0;
+        const bool bMetadataMatch = bSnapshotUsable &&
+            Snapshot.RenderLOD == CurrentLOD &&
+            Snapshot.TopologyVersion == CurrentTopologyVersion &&
+            Snapshot.SurfaceVersion == CurrentSurfaceVersion;
 
-        bool bUseSnapshot = bSnapshotConsistent;
+        uint32 CurrentHash = 0;
+        const bool bHashComputed = bMetadataMatch && ComputeCurrentOceanicInputHash(*this, Snapshot, CurrentHash);
+        const bool bHashMatch = bHashComputed && (CurrentHash == Snapshot.InputHash);
+
+        const bool bUseSnapshot = bSnapshotUsable && bMetadataMatch;
         if (bUseSnapshot)
         {
-            uint32 CurrentHash = 0;
-            if (!ComputeCurrentOceanicInputHash(*this, Snapshot, CurrentHash) || CurrentHash != Snapshot.Hash)
+            if (!bHashComputed)
             {
                 UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[StageB][GPU] Oceanic snapshot hash mismatch for JobId %llu (expected 0x%08x, got 0x%08x). Falling back to live CPU recompute."),
+                    TEXT("[StageB][GPU] Oceanic snapshot hash unavailable for JobId=%llu SnapshotId=%llu. Applying snapshot to preserve GPU parity."),
                     Job.JobId,
-                    Snapshot.Hash,
+                    Snapshot.SnapshotId);
+            }
+            else if (!bHashMatch)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][GPU] Oceanic snapshot hash mismatch for JobId=%llu SnapshotId=%llu (Snapshot=0x%08x Current=0x%08x). Applying snapshot to maintain GPU parity."),
+                    Job.JobId,
+                    Snapshot.SnapshotId,
+                    Snapshot.InputHash,
                     CurrentHash);
-                bUseSnapshot = false;
+            }
+
+            if (bParameterMismatch)
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[StageB][GPU] Parameter drift detected post-dispatch (JobId=%llu SnapshotId=%llu). Applying snapshot parameters."),
+                    Job.JobId,
+                    Snapshot.SnapshotId);
+            }
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[StageB][GPU] Accepted oceanic snapshot (JobId=%llu SnapshotId=%llu LOD=%d Hash=0x%08x)"),
+                Job.JobId,
+                Snapshot.SnapshotId,
+                Snapshot.RenderLOD,
+                Snapshot.InputHash);
+            if (bHashComputed)
+            {
+                Job.Snapshot.InputHash = CurrentHash;
             }
         }
         else
         {
-            UE_LOG(LogPlanetaryCreation, Verbose,
-                TEXT("[StageB][GPU] Oceanic snapshot inconsistent for JobId %llu. Falling back to live CPU recompute."),
-                Job.JobId);
+            if (!bSnapshotUsable)
+            {
+                UE_LOG(LogPlanetaryCreation, Verbose,
+                    TEXT("[StageB][GPU] Oceanic snapshot unusable for JobId %llu (SnapshotId=%llu VertexCount=%d Consistent=%d). Using CPU parity."),
+                    Job.JobId,
+                    Snapshot.SnapshotId,
+                    Snapshot.VertexCount,
+                    Snapshot.IsConsistent() ? 1 : 0);
+            }
+            else if (!bMetadataMatch)
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[StageB][GPU] Dropping oceanic snapshot (JobId=%llu SnapshotId=%llu) metadata mismatch. Snapshot[Lod=%d Topo=%d Surface=%d] Current[Lod=%d Topo=%d Surface=%d]."),
+                    Job.JobId,
+                    Snapshot.SnapshotId,
+                    Snapshot.RenderLOD,
+                    Snapshot.TopologyVersion,
+                    Snapshot.SurfaceVersion,
+                    CurrentLOD,
+                    CurrentTopologyVersion,
+                    CurrentSurfaceVersion);
+            }
+            else if (!bHashComputed)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][GPU] Unable to compute oceanic input hash for JobId=%llu SnapshotId=%llu due to data inconsistency. Falling back to CPU parity."),
+                    Job.JobId,
+                    Snapshot.SnapshotId);
+            }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][GPU] Oceanic snapshot rejected (JobId=%llu SnapshotId=%llu) after metadata mismatch detected."),
+                    Job.JobId,
+                    Snapshot.SnapshotId);
+            }
         }
 
-        const bool bSnapshotUsable = Snapshot.IsConsistent() && Snapshot.VertexCount == NumFloats;
         const FString ProjectContentDir = FPaths::ProjectContentDir();
 
         if (!bUseSnapshot && bSnapshotUsable)
         {
             UE_LOG(LogPlanetaryCreation, Verbose,
-                TEXT("[StageB][GPU] Oceanic snapshot mismatch for JobId %llu. Replaying snapshot on CPU to preserve parity."),
-                Job.JobId);
+                TEXT("[StageB][GPU] Oceanic snapshot mismatch for JobId %llu (SnapshotId=%llu). Replaying snapshot on CPU to preserve parity."),
+                Job.JobId,
+                Snapshot.SnapshotId);
         }
 
         if (!bUseSnapshot && !bSnapshotUsable)
@@ -7741,12 +8446,47 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                 ? ActiveSnapshot->OceanicMask[Index] != 0u
                 : (PlateId != INDEX_NONE && Plates.IsValidIndex(PlateId) && Plates[PlateId].CrustType == ECrustType::Oceanic);
 
+            if (!bOceanic)
+            {
+                Amplified[Index] = Baseline;
+                ++LocalBaselineReuseCount;
+
+                const bool bPlateOceanic = PlateId != INDEX_NONE && Plates.IsValidIndex(PlateId) && Plates[PlateId].CrustType == ECrustType::Oceanic;
+                const double DeltaBaseline = FMath::Abs(GPUValue - Baseline);
+                if (bPlateOceanic)
+                {
+                    ++LocalMaskMismatchCount;
+                    if (OceanicMaskMismatchLogCount < 5)
+                    {
+                        const double AgeValue = ActiveSnapshot && ActiveSnapshot->CrustAge.IsValidIndex(Index)
+                            ? static_cast<double>(ActiveSnapshot->CrustAge[Index])
+                            : (VertexCrustAge.IsValidIndex(Index) ? VertexCrustAge[Index] : 0.0);
+
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("[StageB][BaselineReuse] Vertex %d Plate=%d Age=%.2f My reused baseline because oceanic mask=0 (GPU=%.3f Base=%.3f Delta=%.3f)"),
+                            Index,
+                            PlateId,
+                            AgeValue,
+                            GPUValue,
+                            Baseline,
+                            DeltaBaseline);
+                        ++OceanicMaskMismatchLogCount;
+                    }
+                }
+                else if (DeltaBaseline > 1.0 && ContinentalGPUCorrectionLogs < 5)
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB][GPU] Non-oceanic vertex %d received GPU override (Diff %.3f m)"), Index, DeltaBaseline);
+                    ++ContinentalGPUCorrectionLogs;
+                }
+                continue;
+            }
+
             double CpuValue = Baseline;
-            if (bOceanic && ActiveSnapshot)
+            if (ActiveSnapshot)
             {
                 CpuValue = EvaluateOceanicSnapshotVertex(*ActiveSnapshot, Index, ProjectContentDir, Plates, Boundaries);
             }
-            else if (bOceanic)
+            else
             {
                 const FVector3d& Position = RenderVertices.IsValidIndex(Index) ? RenderVertices[Index] : FVector3d::ZeroVector;
                 const FVector3d& RidgeDir = VertexRidgeDirections.IsValidIndex(Index) ? VertexRidgeDirections[Index] : FVector3d::ZAxisVector;
@@ -7785,18 +8525,26 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                 ++OceanicDebugComparisonCount;
             }
 #endif
-
-            if (!bOceanic && FMath::Abs(GPUValue - Baseline) > 1.0 && ContinentalGPUCorrectionLogs < 5)
-            {
-                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB][GPU] Non-oceanic vertex %d received GPU override (Diff %.3f m)"), Index, FMath::Abs(GPUValue - Baseline));
-                ContinentalGPUCorrectionLogs++;
-            }
         }
 
         PendingOceanicGPUJobs.RemoveAt(JobIndex);
         BumpOceanicAmplificationSerial();
         continue;
     }
+
+    if (LocalBaselineReuseCount > 0 && OceanicBaselineReuseLogCount < 3)
+    {
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[StageB][BaselineReuse] Reused baseline for %d vertices this pass (MaskMismatch=%d)."),
+            LocalBaselineReuseCount,
+            LocalMaskMismatchCount);
+        ++OceanicBaselineReuseLogCount;
+    }
+
+    LastOceanicBaselineReuseCount = LocalBaselineReuseCount;
+    LastOceanicMaskMismatchCount = LocalMaskMismatchCount;
+
+    TryMarkStageBReady(TEXT("ProcessPendingOceanicGPUReadbacks"));
 
     if (OutReadbackSeconds)
     {
@@ -8184,6 +8932,8 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
         BumpOceanicAmplificationSerial();
     }
 
+    TryMarkStageBReady(TEXT("ProcessPendingContinentalGPUReadbacks"));
+
     if (bAppliedAnyJob)
     {
         bContinentalGPUResultWasApplied = true;
@@ -8207,6 +8957,16 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
     (void)OutReadbackSeconds;
 }
 #endif
+
+void UTectonicSimulationService::InvalidateOceanicAmplificationFloatInputs()
+{
+    OceanicAmplificationFloatInputs.BaselineElevation.Reset();
+    OceanicAmplificationFloatInputs.CrustAge.Reset();
+    OceanicAmplificationFloatInputs.RidgeDirections.Reset();
+    OceanicAmplificationFloatInputs.RenderPositions.Reset();
+    OceanicAmplificationFloatInputs.OceanicMask.Reset();
+    OceanicAmplificationFloatInputs.CachedDataSerial = 0;
+}
 
 void UTectonicSimulationService::RefreshRenderVertexFloatSoA() const
 {
@@ -8235,11 +8995,11 @@ void UTectonicSimulationService::RefreshRenderVertexFloatSoA() const
     Cache.NormalZ.SetNum(VertexCount);
     Cache.TangentX.SetNum(VertexCount);
     Cache.TangentY.SetNum(VertexCount);
-    Cache.TangentZ.SetNum(VertexCount);
+        Cache.TangentZ.SetNum(VertexCount);
 
-    for (int32 Index = 0; Index < VertexCount; ++Index)
-    {
-        const FVector3d& Vertex = RenderVertices[Index];
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            const FVector3d& Vertex = RenderVertices[Index];
         Cache.PositionX[Index] = static_cast<float>(Vertex.X);
         Cache.PositionY[Index] = static_cast<float>(Vertex.Y);
         Cache.PositionZ[Index] = static_cast<float>(Vertex.Z);
@@ -8879,7 +9639,7 @@ void UTectonicSimulationService::RefreshHydraulicGPUInputs() const
 void UTectonicSimulationService::BumpOceanicAmplificationSerial()
 {
     ++OceanicAmplificationDataSerial;
-    OceanicAmplificationFloatInputs.CachedDataSerial = 0;
+    InvalidateOceanicAmplificationFloatInputs();
     ContinentalAmplificationGPUInputs.CachedDataSerial = 0;
     ContinentalAmplificationCacheSerial = 0;
 }

@@ -3,6 +3,7 @@
 #include "TectonicSimulationController.h"
 #include "PlanetaryCreationLogging.h"
 #include "RHI.h"
+#include "Tests/PlanetaryCreationAutomationGPU.h"
 
 /**
  * Milestone 6 GPU Preview Diagnostic Test
@@ -22,9 +23,21 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FGPUPreviewDiagnosticTest::RunTest(const FString& Parameters)
 {
+    using namespace PlanetaryCreation::Automation;
+    if (!ShouldRunGPUAmplificationAutomation(*this, TEXT("GPU.PreviewDiagnostic")))
+    {
+        return true;
+    }
+
     if (!GDynamicRHI || FCString::Stricmp(GDynamicRHI->GetName(), TEXT("NullDrv")) == 0)
     {
         AddInfo(TEXT("Skipping GPU preview diagnostic test (NullRHI detected)."));
+        return true;
+    }
+
+    FScopedStageBThrottleGuard StageBThrottleGuard(*this, 50.0f);
+    if (StageBThrottleGuard.ShouldSkipTest())
+    {
         return true;
     }
 

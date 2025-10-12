@@ -8,6 +8,7 @@
 
 #include "TectonicSimulationController.h"
 #include "TectonicSimulationService.h"
+#include "Tests/PlanetaryCreationAutomationGPU.h"
 
 namespace StageBVisualization
 {
@@ -124,9 +125,21 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStageBVisualizationCaptureTest,
 bool FStageBVisualizationCaptureTest::RunTest(const FString& Parameters)
 {
 #if WITH_EDITOR
+    using namespace PlanetaryCreation::Automation;
+    if (!ShouldRunGPUAmplificationAutomation(*this, TEXT("StageBScreenshots")))
+    {
+        return true;
+    }
+
     if (!GDynamicRHI || FCString::Stricmp(GDynamicRHI->GetName(), TEXT("NullDrv")) == 0)
     {
-        AddWarning(TEXT("Skipping Stage B screenshot capture on NullRHI."));
+       AddWarning(TEXT("Skipping Stage B screenshot capture on NullRHI."));
+       return true;
+    }
+
+    FScopedStageBThrottleGuard StageBThrottleGuard(*this, 50.0f);
+    if (StageBThrottleGuard.ShouldSkipTest())
+    {
         return true;
     }
 

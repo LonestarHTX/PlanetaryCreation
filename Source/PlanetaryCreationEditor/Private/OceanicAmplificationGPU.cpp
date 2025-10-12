@@ -12,6 +12,8 @@
 #include "RHI.h"
 #include "RHICommandList.h"
 #include "RHIResources.h"
+#include "RHIShaderPlatform.h"
+#include "DataDrivenShaderPlatformInfo.h"
 #include "ShaderParameterStruct.h"
 #include "ShaderParameterUtils.h"
 #include "VectorTypes.h"
@@ -46,7 +48,6 @@ namespace PlanetaryCreation::GPU
             Hash = HashSnapshotMemory(Hash, Snapshot.OceanicMask.GetData(), Snapshot.OceanicMask.Num() * sizeof(uint32));
             Hash = HashSnapshotMemory(Hash, Snapshot.PlateAssignments.GetData(), Snapshot.PlateAssignments.Num() * sizeof(int32));
             Hash = HashSnapshotMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
-            Hash = HashSnapshotMemory(Hash, &Snapshot.DataSerial, sizeof(uint64));
             Hash = HashSnapshotMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
             return Hash;
         }
@@ -72,7 +73,8 @@ namespace PlanetaryCreation::GPU
 
             static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
             {
-                return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+                const ERHIFeatureLevel::Type MaxFeatureLevel = FDataDrivenShaderPlatformInfo::GetMaxFeatureLevel(Parameters.Platform);
+                return MaxFeatureLevel == ERHIFeatureLevel::SM5 || MaxFeatureLevel == ERHIFeatureLevel::SM6;
             }
         };
 
@@ -101,7 +103,8 @@ namespace PlanetaryCreation::GPU
 
             static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
             {
-                return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+                const ERHIFeatureLevel::Type MaxFeatureLevel = FDataDrivenShaderPlatformInfo::GetMaxFeatureLevel(Parameters.Platform);
+                return MaxFeatureLevel == ERHIFeatureLevel::SM5 || MaxFeatureLevel == ERHIFeatureLevel::SM6;
             }
         };
 
@@ -130,7 +133,8 @@ namespace PlanetaryCreation::GPU
 
             static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
             {
-                return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+                const ERHIFeatureLevel::Type MaxFeatureLevel = FDataDrivenShaderPlatformInfo::GetMaxFeatureLevel(Parameters.Platform);
+                return MaxFeatureLevel == ERHIFeatureLevel::SM5 || MaxFeatureLevel == ERHIFeatureLevel::SM6;
             }
         };
 
@@ -138,7 +142,8 @@ namespace PlanetaryCreation::GPU
 
         static bool SupportsGPUAmplification()
         {
-            return IsFeatureLevelSupported(GMaxRHIShaderPlatform, ERHIFeatureLevel::SM5);
+            const ERHIFeatureLevel::Type MaxFeatureLevel = FDataDrivenShaderPlatformInfo::GetMaxFeatureLevel(GMaxRHIShaderPlatform);
+            return MaxFeatureLevel == ERHIFeatureLevel::SM5 || MaxFeatureLevel == ERHIFeatureLevel::SM6;
         }
 
         static void ComputeSeamCoverageMetrics(const TArray<FVector3f>& Positions, int32 TextureWidth, int32& OutLeftCoverage, int32& OutRightCoverage, int32& OutMirroredCoverage)
@@ -261,6 +266,10 @@ namespace PlanetaryCreation::GPU
         FOceanicAmplificationSnapshot Snapshot;
         Snapshot.VertexCount = VertexCount;
         Snapshot.Parameters = SimParams;
+        Snapshot.RenderLOD = SimParams.RenderSubdivisionLevel;
+        Snapshot.TopologyVersion = Service.GetTopologyVersion();
+        Snapshot.SurfaceVersion = Service.GetSurfaceDataVersion();
+        Snapshot.SnapshotId = Service.AllocateOceanicSnapshotId();
         Snapshot.DataSerial = Service.GetOceanicAmplificationDataSerial();
         Snapshot.BaselineElevation = BaselineFloat;
         Snapshot.RidgeDirections = RidgeDirFloat;
@@ -268,10 +277,10 @@ namespace PlanetaryCreation::GPU
         Snapshot.RenderPositions = PositionFloat;
         Snapshot.OceanicMask = OceanicMask;
         Snapshot.PlateAssignments = PlateAssignments;
-        Snapshot.Hash = HashOceanicSnapshot(Snapshot);
-        if (!Snapshot.Hash)
+        Snapshot.InputHash = HashOceanicSnapshot(Snapshot);
+        if (!Snapshot.InputHash)
         {
-            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Snapshot hash is zero; validation safeguards may be limited this run."));
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[OceanicGPU] Snapshot input hash is zero; validation safeguards may be limited this run."));
         }
 
         const TArray<float>* BaselineArray = BaselineFloatPtr;

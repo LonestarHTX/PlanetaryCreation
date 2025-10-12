@@ -5,6 +5,7 @@
 #include "Misc/AutomationTest.h"
 #include "TectonicSimulationService.h"
 #include "HAL/IConsoleManager.h"
+#include "Tests/PlanetaryCreationAutomationGPU.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGPUContinentalAmplificationTest,
     "PlanetaryCreation.Milestone6.GPU.ContinentalParity",
@@ -12,6 +13,18 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGPUContinentalAmplificationTest,
 
 bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
 {
+    using namespace PlanetaryCreation::Automation;
+    if (!ShouldRunGPUAmplificationAutomation(*this, TEXT("GPU.ContinentalParity")))
+    {
+        return true;
+    }
+
+    FScopedStageBThrottleGuard StageBThrottleGuard(*this, 50.0f);
+    if (StageBThrottleGuard.ShouldSkipTest())
+    {
+        return true;
+    }
+
     UTectonicSimulationService* Service = GEditor->GetEditorSubsystem<UTectonicSimulationService>();
     TestNotNull(TEXT("TectonicSimulationService must exist"), Service);
     if (!Service)

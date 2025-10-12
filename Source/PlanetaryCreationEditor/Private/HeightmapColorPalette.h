@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+enum class EHeightmapPaletteMode : uint8;
+
 namespace PlanetaryCreation::Heightmap
 {
 
@@ -58,52 +60,173 @@ static const FHypsometricStop HypsometricGradient[] = {
     { 6000.0,  FLinearColor(0.549f, 0.039f, 0.039f) }   // Blood red RGB(140, 10, 10)
 };
 
-/**
- * Convert an absolute elevation value (in meters) to a hypsometric tint color.
- * Uses absolute elevation breakpoints rather than normalization so that
- * mountains always appear red and oceans always appear blue.
- */
-inline FColor MakeElevationColor(double ElevationMeters)
+struct FNormalizedStop
 {
-    constexpr int32 StopCount = UE_ARRAY_COUNT(HypsometricGradient);
+    double Position01;
+    FLinearColor Color;
+};
 
-    // Clamp to gradient range
-    if (ElevationMeters <= HypsometricGradient[0].ElevationMeters)
-    {
-        return HypsometricGradient[0].Color.ToFColor(false);
-    }
-    if (ElevationMeters >= HypsometricGradient[StopCount - 1].ElevationMeters)
-    {
-        return HypsometricGradient[StopCount - 1].Color.ToFColor(false);
-    }
+static const FNormalizedStop NormalizedGradient[] = {
+    { 0.0,  FLinearColor(0.000f, 0.059f, 0.196f) }, // Deep blue
+    { 0.25, FLinearColor(0.078f, 0.392f, 0.706f) }, // Mid ocean blue
+    { 0.50, FLinearColor(0.431f, 0.784f, 0.392f) }, // Coastal green
+    { 0.75, FLinearColor(0.863f, 0.784f, 0.235f) }, // Highlands yellow
+    { 1.0,  FLinearColor(0.706f, 0.078f, 0.078f) }  // Peak red
+};
 
-    // Find bracketing stops
-    for (int32 i = 0; i < StopCount - 1; ++i)
+namespace Detail
+{
+    inline FColor SampleHypsometric(double ElevationMeters)
     {
-        const double ElevLow = HypsometricGradient[i].ElevationMeters;
-        const double ElevHigh = HypsometricGradient[i + 1].ElevationMeters;
+        constexpr int32 StopCount = UE_ARRAY_COUNT(HypsometricGradient);
 
-        if (ElevationMeters >= ElevLow && ElevationMeters <= ElevHigh)
+        if (ElevationMeters <= HypsometricGradient[0].ElevationMeters)
         {
-            const double Range = ElevHigh - ElevLow;
-            const double Alpha = (Range > KINDA_SMALL_NUMBER)
-                ? (ElevationMeters - ElevLow) / Range
-                : 0.0;
-
-            // Use LINEAR RGB interpolation (not HSV) to preserve saturation
-            const FLinearColor Interpolated = FMath::Lerp(
-                HypsometricGradient[i].Color,
-                HypsometricGradient[i + 1].Color,
-                static_cast<float>(Alpha)
-            );
-
-            return Interpolated.ToFColor(false);
+            return HypsometricGradient[0].Color.ToFColor(false);
         }
+        if (ElevationMeters >= HypsometricGradient[StopCount - 1].ElevationMeters)
+        {
+            return HypsometricGradient[StopCount - 1].Color.ToFColor(false);
+        }
+
+        for (int32 Index = 0; Index < StopCount - 1; ++Index)
+        {
+            const double ElevLow = HypsometricGradient[Index].ElevationMeters;
+            const double ElevHigh = HypsometricGradient[Index + 1].ElevationMeters;
+
+            if (ElevationMeters >= ElevLow && ElevationMeters <= ElevHigh)
+            {
+                const double Range = ElevHigh - ElevLow;
+                const double Alpha = (Range > KINDA_SMALL_NUMBER)
+                    ? (ElevationMeters - ElevLow) / Range
+                    : 0.0;
+
+                const FLinearColor Interpolated = FMath::Lerp(
+                    HypsometricGradient[Index].Color,
+                    HypsometricGradient[Index + 1].Color,
+                    static_cast<float>(Alpha));
+
+                return Interpolated.ToFColor(false);
+            }
+        }
+
+        return FColor::Magenta;
     }
 
-    // Fallback (should never hit)
-    return FColor::Magenta;
-}
+    inline FColor SampleNormalized(double NormalizedValue)
+    {
+        constexpr int32 StopCount = UE_ARRAY_COUNT(NormalizedGradient);
+
+        const double Clamped = FMath::Clamp(NormalizedValue, 0.0, 1.0);
+
+        if (Clamped <= NormalizedGradient[0].Position01)
+        {
+            return NormalizedGradient[0].Color.ToFColor(false);
+        }
+        if (Clamped >= NormalizedGradient[StopCount - 1].Position01)
+        {
+            return NormalizedGradient[StopCount - 1].Color.ToFColor(false);
+        }
+
+        for (int32 Index = 0; Index < StopCount - 1; ++Index)
+        {
+            const double Low = NormalizedGradient[Index].Position01;
+            const double High = NormalizedGradient[Index + 1].Position01;
+
+            if (Clamped >= Low && Clamped <= High)
+            {
+                const double Range = High - Low;
+                const double Alpha = (Range > KINDA_SMALL_NUMBER)
+                    ? (Clamped - Low) / Range
+                    : 0.0;
+
+                const FLinearColor Interpolated = FMath::Lerp(
+                    NormalizedGradient[Index].Color,
+                    NormalizedGradient[Index + 1].Color,
+                    static_cast<float>(Alpha));
+
+                return Interpolated.ToFColor(false);
+            }
+        }
+
+        return FColor::Magenta;
+    }
+} // namespace Detail
+
+/**
+ * Palette wrapper shared by editor visualization and exporters. Construct per-frame with
+ * the currently selected mode and elevation window, then call Sample() for each vertex/pixel.
+ */
+struct FHeightmapPalette
+{
+    FHeightmapPalette() = default;
+
+    FHeightmapPalette(EHeightmapPaletteMode InMode, double InMinElevation, double InMaxElevation)
+        : Mode(InMode)
+        , MinElevation(InMinElevation)
+        , MaxElevation(InMaxElevation)
+    {
+    }
+
+    static FHeightmapPalette Absolute()
+    {
+        return FHeightmapPalette(EHeightmapPaletteMode::AbsoluteHypsometric, 0.0, 0.0);
+    }
+
+    static FHeightmapPalette Absolute(double MinElevation, double MaxElevation)
+    {
+        return FHeightmapPalette(EHeightmapPaletteMode::AbsoluteHypsometric, MinElevation, MaxElevation);
+    }
+
+    static FHeightmapPalette Normalized(double MinElevation, double MaxElevation)
+    {
+        return FHeightmapPalette(EHeightmapPaletteMode::NormalizedRange, MinElevation, MaxElevation);
+    }
+
+    static FHeightmapPalette FromMode(EHeightmapPaletteMode InMode, double MinElevation, double MaxElevation)
+    {
+        if (InMode == EHeightmapPaletteMode::NormalizedRange)
+        {
+            return Normalized(MinElevation, MaxElevation);
+        }
+        return Absolute(MinElevation, MaxElevation);
+    }
+
+    FColor Sample(double ElevationMeters) const
+    {
+        if (UsesNormalizedSampling())
+        {
+            const double Normalized = (ElevationMeters - MinElevation) / GetRange();
+            return Detail::SampleNormalized(Normalized);
+        }
+
+        return Detail::SampleHypsometric(ElevationMeters);
+    }
+
+    bool UsesNormalizedSampling() const
+    {
+        return Mode == EHeightmapPaletteMode::NormalizedRange && CanSampleNormalized();
+    }
+
+    bool IsNormalizedRequested() const
+    {
+        return Mode == EHeightmapPaletteMode::NormalizedRange;
+    }
+
+    bool CanSampleNormalized() const
+    {
+        return GetRange() > KINDA_SMALL_NUMBER;
+    }
+
+    double GetMinElevation() const { return MinElevation; }
+    double GetMaxElevation() const { return MaxElevation; }
+    double GetRange() const { return MaxElevation - MinElevation; }
+    EHeightmapPaletteMode GetMode() const { return Mode; }
+
+private:
+    EHeightmapPaletteMode Mode = EHeightmapPaletteMode::AbsoluteHypsometric;
+    double MinElevation = 0.0;
+    double MaxElevation = 0.0;
+};
 
 } // namespace PlanetaryCreation::Heightmap
-

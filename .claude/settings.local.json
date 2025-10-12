@@ -57,7 +57,21 @@
       "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.StageBScreenshots; Quit\" -unattended -nop4 -nosplash -log)",
       "Bash(if [ -f /tmp/hypsometric_test.log ])",
       "Bash(then tail -50 /tmp/hypsometric_test.log)",
-      "Bash(else echo \"Log not created yet\")"
+      "Bash(else echo \"Log not created yet\")",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Heightmap.SampleInterpolation; Quit\" -unattended -nop4 -nosplash -log)",
+      "Bash(if [ -f /tmp/heightmap_test.log ])",
+      "Bash(then tail -100 /tmp/heightmap_test.log)",
+      "Read(//mnt/c/Users/Michael/Downloads/**)",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -ExecCmds=\"Automation List\" -unattended -nop4 -nosplash)",
+      "Bash(cmd.exe /c \"tasklist /FI \"\"IMAGENAME eq UnrealEditor-Cmd.exe\"\"\")",
+      "Bash(\"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe\" \"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject\" -SetCVar=\"r.PlanetaryCreation.StageBProfiling=1\" -ExecCmds=\"Automation RunTests PlanetaryCreation.Milestone6.HeightmapVisualization; Quit\" -unattended -nop4 -nosplash)",
+      "Bash(xargs:*)",
+      "Bash(rm:*)",
+      "Bash(cmd.exe /c 'tasklist /FI \"\"IMAGENAME eq UnrealEditor*\"\"')",
+      "Bash(cmd.exe /c 'powershell.exe -ExecutionPolicy Bypass -File \"\"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\Scripts\\RunStageBHeartbeat.ps1\"\" -ThrottleMs 50')",
+      "Bash(cmd.exe /c '\"\"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\Scripts\\RunStageBHeartbeat.cmd\"\"')",
+      "Bash(cmd.exe:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

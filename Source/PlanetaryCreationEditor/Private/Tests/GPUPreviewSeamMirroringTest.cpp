@@ -3,6 +3,7 @@
 #include "OceanicAmplificationGPU.h"
 #include "Editor.h"
 #include "RHI.h"
+#include "Tests/PlanetaryCreationAutomationGPU.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FGPUPreviewSeamMirroringTest,
@@ -11,9 +12,21 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FGPUPreviewSeamMirroringTest::RunTest(const FString& Parameters)
 {
+    using namespace PlanetaryCreation::Automation;
+    if (!ShouldRunGPUAmplificationAutomation(*this, TEXT("GPU.PreviewSeamMirroring")))
+    {
+        return true;
+    }
+
     if (!GDynamicRHI || FCString::Stricmp(GDynamicRHI->GetName(), TEXT("NullDrv")) == 0)
     {
         AddInfo(TEXT("Skipping GPU preview seam mirroring test (NullRHI detected)."));
+        return true;
+    }
+
+    FScopedStageBThrottleGuard StageBThrottleGuard(*this, 50.0f);
+    if (StageBThrottleGuard.ShouldSkipTest())
+    {
         return true;
     }
 

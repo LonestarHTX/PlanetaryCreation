@@ -11,6 +11,13 @@
 - `Docs/PlanningAgentPlan.md` tracks day-to-day follow-ups, watch items, and reminders for the planning agent.
 - Individual fix/feature docs (e.g., `Docs/ridge_cache_fix_plan.md`) hold the detailed investigations and implementation notes that inform the entries above.
 
+### 2025-10-10 Heightmap Export Overhaul Adjustments
+- **Stage B heartbeat diagnostic comes first.** Before agents resume, add `[StageBDiag]` logging inside `UTectonicSimulationService::AdvanceSteps` and confirm `Ready=1`, amplified counts match render vertices, and random samples are finite/non-zero. Halt downstream work if this fails.
+- **Day 1 pipeline proof:** Introduce `STG-00` (temporary isotropic amplification spike) alongside `ALG-03` (sampler-only exporter). The goal is visible terrain detail and end-to-end export validation before anisotropic kernels begin.
+- **Hydraulic erosion temporarily disabled:** As part of `STG-04`, gate post-amplification erosion off until Stage B alignment stabilises. Re-enable with conservative parameters in `STG-08`.
+- **Inline validation expectations:** `STG-05‒07` each ship with logging/PNG artifacts (ridge tangent population %, fold classification counts, Day 5 export) so issues surface immediately instead of waiting for QLT automation.
+- **VIS tasks are parallel polish:** Palette/API/doc work now lives in Phase 4 (Day 7+) and must not block shape or sampler delivery. Treat existing palette refactor as complete but defer additional VIS scope until critical path is green.
+
 ## Milestone Timeline
 
 ### Milestone 0 – Pre-Production Alignment (Week 0)

@@ -30,6 +30,12 @@ void UTectonicSimulationService::ApplyHydraulicErosion(double DeltaTimeMy)
         return;
     }
 
+    if (!IsStagePipelineStageBComplete())
+    {
+        WarnIfStageBInvokedOutOfOrder(TEXT("ApplyHydraulicErosion"));
+        return;
+    }
+
     if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
     {
         BuildRenderVertexAdjacency();

@@ -15,6 +15,15 @@ public:
 	/** Find the closest point to the query, returns the associated ID. */
 	int32 FindNearest(const FVector3d& Query, double& OutDistanceSq) const;
 
+	struct FMemoryUsage
+	{
+		int32 NodeCount = 0;
+		int64 NodeBytes = 0;
+	};
+
+	/** Estimate memory used by the KD-tree nodes. */
+	FMemoryUsage EstimateMemoryUsage() const;
+
 	/** Clear the tree. */
 	void Clear();
 

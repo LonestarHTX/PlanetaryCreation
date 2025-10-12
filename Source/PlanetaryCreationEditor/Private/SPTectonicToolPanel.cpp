@@ -8,6 +8,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SComboBox.h"
+#include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Input/SSpinBox.h"
 #include "Widgets/Input/SSlider.h"
 #include "Widgets/Layout/SBorder.h"
@@ -22,6 +23,18 @@ SPTectonicToolPanel::~SPTectonicToolPanel()
     if (PlaybackController)
     {
         PlaybackController->Shutdown();
+    }
+
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            if (StageBReadyDelegateHandle.IsValid())
+            {
+                Service->OnStageBAmplificationReadyChanged().Remove(StageBReadyDelegateHandle);
+                StageBReadyDelegateHandle = FDelegateHandle();
+            }
+        }
     }
 }
 
@@ -43,8 +56,12 @@ void SPTectonicToolPanel::Construct(const FArguments& InArgs)
         {
             CachedSeed = Service->GetParameters().Seed;
             CachedSubdivisionLevel = Service->GetParameters().RenderSubdivisionLevel;
+            CachedPaletteMode = Service->GetHeightmapPaletteMode();
         }
     }
+
+    RefreshStageBReadinessFromService();
+    BindStageBReadyDelegate();
 
     InitializeVisualizationOptions();
     RefreshSelectedVisualizationOption();
@@ -562,6 +579,30 @@ TSharedRef<SWidget> SPTectonicToolPanel::BuildStageBSection()
             .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapLegendLabel", "Legend: deep ocean → coastal shelf → alpine"))
             .WrapTextAt(340.0f)
             .ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 4.0f, 0.0f, 0.0f)
+        [
+            SNew(SCheckBox)
+            .IsChecked(this, &SPTectonicToolPanel::GetNormalizedPaletteState)
+            .IsEnabled(this, &SPTectonicToolPanel::IsNormalizedPaletteToggleEnabled)
+            .OnCheckStateChanged(this, &SPTectonicToolPanel::OnNormalizedPaletteChanged)
+            .Content()
+            [
+                SNew(STextBlock)
+                .Text(NSLOCTEXT("PlanetaryCreation", "HeightmapNormalizedPaletteLabel", "Use normalized palette"))
+                .ToolTipText(NSLOCTEXT("PlanetaryCreation", "HeightmapNormalizedPaletteTooltip", "Stretch elevations between the current minimum and maximum before applying colors. Requires Stage B amplification data."))
+            ]
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        [
+            SNew(STextBlock)
+            .Text(this, &SPTectonicToolPanel::GetPaletteStatusText)
+            .ColorAndOpacity(this, &SPTectonicToolPanel::GetPaletteStatusColor)
+            .Visibility(this, &SPTectonicToolPanel::GetPaletteStatusVisibility)
+            .WrapTextAt(340.0f)
         ]
         + SVerticalBox::Slot()
         .AutoHeight()
@@ -1202,6 +1243,54 @@ void SPTectonicToolPanel::OnGPUPreviewChanged(ECheckBoxState NewState)
     }
 }
 
+ECheckBoxState SPTectonicToolPanel::GetNormalizedPaletteState() const
+{
+    return (CachedPaletteMode == EHeightmapPaletteMode::NormalizedRange)
+        ? ECheckBoxState::Checked
+        : ECheckBoxState::Unchecked;
+}
+
+void SPTectonicToolPanel::OnNormalizedPaletteChanged(ECheckBoxState NewState)
+{
+    const bool bEnableNormalized = (NewState == ECheckBoxState::Checked);
+    CachedPaletteMode = bEnableNormalized
+        ? EHeightmapPaletteMode::NormalizedRange
+        : EHeightmapPaletteMode::AbsoluteHypsometric;
+
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            Service->SetHeightmapPaletteMode(CachedPaletteMode);
+        }
+    }
+}
+
+bool SPTectonicToolPanel::IsNormalizedPaletteToggleEnabled() const
+{
+    return bCachedStageBReady;
+}
+
+FText SPTectonicToolPanel::GetPaletteStatusText() const
+{
+    return CachedPaletteStatusText;
+}
+
+FSlateColor SPTectonicToolPanel::GetPaletteStatusColor() const
+{
+    if (bCachedStageBReady)
+    {
+        return FSlateColor(FLinearColor(0.6f, 0.6f, 0.6f));
+    }
+
+    return FSlateColor(FLinearColor(0.82f, 0.3f, 0.3f));
+}
+
+EVisibility SPTectonicToolPanel::GetPaletteStatusVisibility() const
+{
+    return CachedPaletteStatusText.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible;
+}
+
 ECheckBoxState SPTectonicToolPanel::GetPBRShadingState() const
 {
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
@@ -1445,6 +1534,7 @@ FReply SPTectonicToolPanel::HandlePrimeGPUStageBClicked()
             }
 
             UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB] GPU pipeline primed: oceanic+continental amplification enabled, CPU fallback active, GPU amplification cvar set."));
+            RefreshStageBReadinessFromService();
         }
     }
 
@@ -1692,6 +1782,8 @@ void SPTectonicToolPanel::Tick(const FGeometry& AllottedGeometry, const double I
 {
     SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 
+    RefreshCachedPaletteMode();
+
     // Update camera controller every frame
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
     {
@@ -1786,6 +1878,67 @@ FText SPTectonicToolPanel::GetCameraStatusText() const
     }
     return NSLOCTEXT("PlanetaryCreation", "CameraUnavailable", "Camera: n/a");
 }
+
+void SPTectonicToolPanel::RefreshStageBReadinessFromService()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            HandleStageBReadyChanged(Service->IsStageBAmplificationReady(), Service->GetStageBAmplificationNotReadyReason());
+        }
+    }
+}
+
+void SPTectonicToolPanel::HandleStageBReadyChanged(bool bReady, EStageBAmplificationReadyReason Reason)
+{
+    bCachedStageBReady = bReady;
+    CachedStageBReason = Reason;
+
+    if (bReady)
+    {
+        CachedPaletteStatusText = FText::GetEmpty();
+    }
+    else
+    {
+        const FText ReasonText = FText::FromString(PlanetaryCreation::StageB::GetReadyReasonDescription(Reason));
+        CachedPaletteStatusText = FText::Format(
+            NSLOCTEXT("PlanetaryCreation", "StageBNotReadyHeightmapPaletteStatusFmt", "Stage B pending: {0}"),
+            ReasonText);
+    }
+}
+
+void SPTectonicToolPanel::RefreshCachedPaletteMode()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            CachedPaletteMode = Service->GetHeightmapPaletteMode();
+        }
+    }
+}
+
+void SPTectonicToolPanel::BindStageBReadyDelegate()
+{
+    if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
+    {
+        if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+        {
+            if (StageBReadyDelegateHandle.IsValid())
+            {
+                Service->OnStageBAmplificationReadyChanged().Remove(StageBReadyDelegateHandle);
+                StageBReadyDelegateHandle = FDelegateHandle();
+            }
+
+            StageBReadyDelegateHandle = Service->OnStageBAmplificationReadyChanged()
+                .AddSP(this, &SPTectonicToolPanel::HandleStageBReadyChanged);
+
+            HandleStageBReadyChanged(Service->IsStageBAmplificationReady(), Service->GetStageBAmplificationNotReadyReason());
+        }
+    }
+}
+
 ECheckBoxState SPTectonicToolPanel::GetSeaLevelHighlightState() const
 {
     if (const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin())
