@@ -110,7 +110,14 @@ def main(argv) -> None:
 
     unreal.log(f"[HeightmapExport] palette mode: {target_mode.name}")
 
-    output = service.export_heightmap_visualization(args.width, args.height)
+    if hasattr(service, "set_allow_unsafe_heightmap_export"):
+        service.set_allow_unsafe_heightmap_export(args.force_large_export)
+
+    try:
+        output = service.export_heightmap_visualization(args.width, args.height)
+    finally:
+        if hasattr(service, "set_allow_unsafe_heightmap_export"):
+            service.set_allow_unsafe_heightmap_export(False)
     if not output:
         unreal.log_error("[HeightmapExport] Export failed; see log for details.")
         return

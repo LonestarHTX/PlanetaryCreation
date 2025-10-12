@@ -45,8 +45,12 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
     // Step simulation to generate terrain
     Service->AdvanceSteps(10); // 20 My
 
+    constexpr int32 SafeExportWidth = 512;
+    constexpr int32 SafeExportHeight = 256;
+
     // Export heightmap visualization
-    const FString OutputPath = Service->ExportHeightmapVisualization(2048, 1024);
+    static_assert(SafeExportWidth <= 512 && SafeExportHeight <= 256, "HeightmapVisualizationTest export dimensions must remain within the safe baseline");
+    const FString OutputPath = Service->ExportHeightmapVisualization(SafeExportWidth, SafeExportHeight);
 
     // Verify export succeeded
     TestTrue(TEXT("Heightmap export path is not empty"), !OutputPath.IsEmpty());
@@ -107,7 +111,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
     // Negative test: invalid dimensions should fail gracefully.
     {
         AddExpectedError(TEXT("Cannot export heightmap: Invalid dimensions"), EAutomationExpectedErrorFlags::Contains, 1);
-        const FString InvalidExport = Service->ExportHeightmapVisualization(0, 1024);
+        const FString InvalidExport = Service->ExportHeightmapVisualization(0, SafeExportHeight);
         TestTrue(TEXT("Export fails for invalid image width"), InvalidExport.IsEmpty());
     }
 
@@ -115,7 +119,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
     {
         AddExpectedError(TEXT("Image wrapper module forced offline"), EAutomationExpectedErrorFlags::Contains, 1);
         Service->SetHeightmapExportTestOverrides(true);
-        const FString ForcedFailure = Service->ExportHeightmapVisualization(1024, 512);
+        const FString ForcedFailure = Service->ExportHeightmapVisualization(SafeExportWidth, SafeExportHeight);
         TestTrue(TEXT("Export fails when module load is forced to fail"), ForcedFailure.IsEmpty());
         Service->SetHeightmapExportTestOverrides(false);
     }
@@ -130,7 +134,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
         PlatformFile.SetReadOnly(*LockedPath, true);
 
         AddExpectedError(TEXT("Failed to overwrite heightmap"), EAutomationExpectedErrorFlags::Contains, 1);
-        const FString LockedResult = Service->ExportHeightmapVisualization(2048, 1024);
+        const FString LockedResult = Service->ExportHeightmapVisualization(SafeExportWidth, SafeExportHeight);
         TestTrue(TEXT("Export fails when output file is read-only"), LockedResult.IsEmpty());
 
         PlatformFile.SetReadOnly(*LockedPath, false);
@@ -141,7 +145,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
     {
         Service->SetHeightmapExportTestOverrides(false, false, TEXT("Z:/NonExistent/PlanetaryCreation"));
         AddExpectedError(TEXT("Failed to create output directory"), EAutomationExpectedErrorFlags::Contains, 1);
-        const FString InvalidPathResult = Service->ExportHeightmapVisualization(1024, 512);
+        const FString InvalidPathResult = Service->ExportHeightmapVisualization(SafeExportWidth, SafeExportHeight);
         TestTrue(TEXT("Export fails when override directory cannot be created"), InvalidPathResult.IsEmpty());
         Service->SetHeightmapExportTestOverrides(false, false, FString());
     }

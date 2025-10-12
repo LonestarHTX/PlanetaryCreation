@@ -1596,6 +1596,8 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
     FString ExportHeightmapVisualization(int32 ImageWidth = 2048, int32 ImageHeight = 1024);
+    void SetAllowUnsafeHeightmapExport(bool bInAllowUnsafe);
+    bool IsUnsafeHeightmapExportAllowed() const { return bAllowUnsafeHeightmapExport; }
 
 private:
     void SetStageBAmplificationReady(bool bReady, EStageBAmplificationReadyReason Reason, const TCHAR* Context);
@@ -1864,6 +1866,8 @@ private:
     bool bForceHeightmapWriteFailure = false;
     FString HeightmapExportOverrideDirectory;
 #endif
+
+    bool bAllowUnsafeHeightmapExport = false;
 
     /** Mutable caches to avoid recomputing float mirrors on every call. */
     mutable FRenderVertexFloatSoA RenderVertexFloatSoA;

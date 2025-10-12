@@ -1,5 +1,14 @@
 # STG-Anchor Log
 
+## 2025-10-12 – NullRHI visualization crash postmortem
+- System reboot confirmed via Kernel-Power 41 at 2025-10-12 00:03:13; WER queued a LiveKernelEvent (type 144/USBXHCI) under `C:\ProgramData\Microsoft\Windows\WER\ReportQueue\Kernel_144_8c75dd1753c04dd3147cf98774a5b88243ae979_00000000_9291a537-9928-4081-a8d2-f4eb2ffc7923`, but access to the dump was denied (likely VBS/UAC). `C:\Windows\LiveKernelReports` remains locked down, so no fresher .dmp than `WATCHDOG-20251011-2149.dmp` / `2150.dmp` in `Saved/Logs/Crashes`.
+- `PlanetaryCreation-backup-2025.10.12-05.01.07.log:1384` shows the NullRHI rerun still drives Stage B CPU amplification (LOD 5, 10 ms per step) before the suite logs the GPU skip warnings; GPU passes stay disabled, but Stage B buffers are dirtied by the warm-up loops. Latest `PlanetaryCreation.log:1510` closes cleanly with `Automation Test Queue Empty`, so no fatal UE logs preceded the reboot.
+- Safe baseline heartbeat in `Saved/Logs/StageBHeartbeat-20251012-050743.log:1394` reconfirms Ready=1 with finite samples (Hydraulic 0 ms, PlateFallback 0 %) immediately after the crash window, so Stage B state was healthy once the editor relaunched.
+- Guardrail hypotheses: (a) NullRHI shouldn’t enqueue Stage B warm-up/export steps—add a preflight skip or split the suite so the visualization export never forces `ResetSimulation` under NullRHI; (b) force the automation wrapper to set `r.PlanetaryCreation.PaperDefaults=0` and `LOD=3` whenever `GDynamicRHI` is Null to keep CPU amplification light; (c) wire `UTectonicSimulationService::IsStageBAmplificationReady()` into the test and fail-fast if Stage B tries to reset while NullRHI is active.
+- Status | Crash reproduced only once; evidence points to Stage B CPU work running under NullRHI while Windows raised a USBXHCI LiveKernelEvent—no smoking-gun GPU usage found.
+- Blockers | Need elevated access to read the queued WER dump for a definitive root cause; automation still lacks a NullRHI guard.
+- Next | 1) Add NullRHI short-circuit to `FPlanetaryCreationHeightmapVisualizationTest`, 2) gate `ResetSimulation`/Stage B amplification when `GDynamicRHI->GetName()==Null` (log and skip instead), 3) rerun the suite after guardrails land and monitor WER/System logs for any remaining kernel events.
+
 ## 2025-10-12 – Ridge tangent cache coverage
 - Updated `UTectonicSimulationService::RefreshRidgeDirectionsIfNeeded` to back-fill `VertexRidgeTangents` from the divergent boundary cache and emit `[RidgeDiag] TangentCoverage`; heartbeat shows 100 % coverage.
 - Relaxed heightmap seam tolerances so `PlanetaryCreation.Heightmap.SampleInterpolation` no longer drops seam hits; automation run archived in `Saved/Logs/StageBHeartbeat-20251011-194740.log`.

@@ -14,8 +14,12 @@
 #include "HAL/PlatformTime.h"
 #include "Async/ParallelFor.h"
 
+#include "ProfilingDebugging/CpuProfilerTrace.h"
+#include "RHI.h"
+
 #include "HeightmapColorPalette.h"
 #include "HeightmapSampling.h"
+#include "Misc/ScopeExit.h"
 
 #include <limits>
 
@@ -23,6 +27,62 @@ namespace
 {
     constexpr double HeightmapSamplingBudgetMs = 200.0;
     constexpr double HeightmapExportTotalBudgetMs = 350.0;
+
+    constexpr uint64 HeightmapPNGExtraBytes = 8ull * 1024ull * 1024ull;         // 8 MiB cushion for encoder scratch
+    constexpr uint64 HeightmapPreflightSafetyHeadroomBytes = 512ull * 1024ull * 1024ull; // 512 MiB safety margin
+
+    constexpr double BytesToMiB(uint64 Bytes)
+    {
+        return static_cast<double>(Bytes) / (1024.0 * 1024.0);
+    }
+
+    struct FHeightmapPreflightInfo
+    {
+        uint64 PixelBytes = 0;
+        uint64 SamplerBytes = 0;
+        uint64 ScratchBytes = HeightmapPNGExtraBytes;
+        uint64 SafetyBytes = HeightmapPreflightSafetyHeadroomBytes;
+        uint64 RequiredBytes = 0;
+        uint64 AvailablePhysicalBytes = 0;
+        bool bPass = false;
+        FString Details;
+    };
+
+    static FHeightmapPreflightInfo PreflightHeightmapExport(int32 Width, int32 Height, const FHeightmapSampler::FMemoryStats& SamplerStats)
+    {
+        FHeightmapPreflightInfo Info;
+
+        const uint64 PixelCount = static_cast<uint64>(Width) * static_cast<uint64>(Height);
+        Info.PixelBytes = PixelCount * 4ull;
+
+        auto ToPositive = [](int64 Value) -> uint64
+        {
+            return Value > 0 ? static_cast<uint64>(Value) : 0ull;
+        };
+
+        Info.SamplerBytes =
+            ToPositive(SamplerStats.TriangleDataBytes) +
+            ToPositive(SamplerStats.TriangleDirectionsBytes) +
+            ToPositive(SamplerStats.TriangleIdsBytes) +
+            ToPositive(SamplerStats.KDTreeBytes) +
+            ToPositive(SamplerStats.SnapshotFloatBytes);
+
+        const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
+        Info.AvailablePhysicalBytes = MemoryStats.AvailablePhysical;
+        Info.RequiredBytes = Info.PixelBytes + Info.SamplerBytes + Info.ScratchBytes + Info.SafetyBytes;
+        Info.bPass = Info.RequiredBytes <= Info.AvailablePhysicalBytes;
+
+        Info.Details = FString::Printf(
+            TEXT("Need≈%.1f MiB (Pixels %.1f + Sampler %.1f + Scratch %.1f + Safety %.1f) Free≈%.1f MiB"),
+            BytesToMiB(Info.RequiredBytes),
+            BytesToMiB(Info.PixelBytes),
+            BytesToMiB(Info.SamplerBytes),
+            BytesToMiB(Info.ScratchBytes),
+            BytesToMiB(Info.SafetyBytes),
+            BytesToMiB(Info.AvailablePhysicalBytes));
+
+        return Info;
+    }
 }
 
 /**
@@ -101,6 +161,36 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
         return FString();
     }
 
+    const bool bNullRHIActive = (GDynamicRHI == nullptr) || (FCString::Stristr(GDynamicRHI->GetName(), TEXT("Null")) != nullptr);
+    const int64 PixelCount64 = static_cast<int64>(ImageWidth) * static_cast<int64>(ImageHeight);
+    constexpr int32 SafeBaselineWidth = 512;
+    constexpr int32 SafeBaselineHeight = 256;
+    constexpr int64 SafeBaselinePixels = static_cast<int64>(SafeBaselineWidth) * SafeBaselineHeight;
+
+    const bool bUnsafeOverride = bAllowUnsafeHeightmapExport;
+    ON_SCOPE_EXIT
+    {
+        bAllowUnsafeHeightmapExport = false;
+    };
+
+    if (!bUnsafeOverride)
+    {
+        if (ImageWidth > SafeBaselineWidth || ImageHeight > SafeBaselineHeight || PixelCount64 > SafeBaselinePixels)
+        {
+            UE_LOG(LogPlanetaryCreation, Error,
+                TEXT("[HeightmapExport][Safety] Dimensions %dx%d exceed safe baseline %dx%d (use --force-large-export on dedicated hardware)."),
+                ImageWidth, ImageHeight, SafeBaselineWidth, SafeBaselineHeight);
+            return FString();
+        }
+    }
+    else if (bNullRHIActive && PixelCount64 > SafeBaselinePixels)
+    {
+        UE_LOG(LogPlanetaryCreation, Error,
+            TEXT("[HeightmapExport][Safety] NullRHI export %dx%d exceeds safe pixel budget %lld; run with a real RHI or reduce dimensions."),
+            ImageWidth, ImageHeight, SafeBaselinePixels);
+        return FString();
+    }
+
     if (RenderVertices.Num() == 0)
     {
         UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: No render data available"));
@@ -112,6 +202,15 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     {
         UE_LOG(LogPlanetaryCreation, Error, TEXT("Cannot export heightmap: Image wrapper module forced offline (test override)"));
         return FString();
+    }
+#endif
+
+#if !UE_BUILD_SHIPPING
+    if (GDynamicRHI != nullptr)
+    {
+        const TCHAR* const RHIName = GDynamicRHI->GetName();
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[HeightmapExport][RHI] %s"), RHIName);
+        ensureMsgf(FCString::Stristr(RHIName, TEXT("Null")) != nullptr, TEXT("Heightmap export expected NullRHI; got %s"), RHIName);
     }
 #endif
 
@@ -155,9 +254,9 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
         return FString();
     }
 
+    const FHeightmapSampler::FMemoryStats SamplerMemoryStats = Sampler.GetMemoryStats();
 #if !UE_BUILD_SHIPPING
     {
-        const FHeightmapSampler::FMemoryStats SamplerMemoryStats = Sampler.GetMemoryStats();
         UE_LOG(LogPlanetaryCreation, Log,
             TEXT("[HeightmapExport][SamplerMemory] Vertices=%d Triangles=%d UsingAmplified=%s SnapshotFloat=%s TriangleData=%.2f MB[FDefaultAllocator] TriangleDirections=%.2f MB[FDefaultAllocator] TriangleIds=%.2f MB[FDefaultAllocator] KDTreeNodes=%d (%.2f MB[TUniquePtr]) SnapshotFloat=%.2f MB[FDefaultAllocator]"),
             SamplerMemoryStats.VertexCount,
@@ -172,6 +271,15 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
             ToMegabytesSigned(SamplerMemoryStats.SnapshotFloatBytes));
     }
 #endif // !UE_BUILD_SHIPPING
+
+    const FHeightmapPreflightInfo PreflightInfo = PreflightHeightmapExport(ImageWidth, ImageHeight, SamplerMemoryStats);
+    if (!PreflightInfo.bPass)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[HeightmapExport][Preflight][Abort] %s"), *PreflightInfo.Details);
+        return FString();
+    }
+
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[HeightmapExport][Preflight] %s"), *PreflightInfo.Details);
 
     const bool bSamplerUsingAmplified = Sampler.UsesAmplifiedElevation();
     if (bSamplerUsingAmplified != bAmplifiedAvailable)
@@ -218,34 +326,52 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 
     const int32 PixelCount = ImageWidth * ImageHeight;
 
-    TArray<FColor> ImageData;
-    ImageData.SetNumUninitialized(PixelCount);
-    TArray<double> ElevationSamples;
-    ElevationSamples.SetNumUninitialized(PixelCount);
-    TArray<uint8> SampleSuccess;
-    SampleSuccess.SetNumUninitialized(PixelCount);
-    TArray<uint8> SampleTraversalSteps;
-    SampleTraversalSteps.SetNumUninitialized(PixelCount);
+    struct FRowSeam
+    {
+        float LeftElevation = 0.0f;
+        float RightElevation = 0.0f;
+        uint8 bLeftHit = 0;
+        uint8 bRightHit = 0;
+    };
+
+    TArray<uint8> RawData;
+    RawData.SetNumUninitialized(static_cast<int64>(PixelCount) * 4);
+
+    TArray<FRowSeam> RowSeams;
+    RowSeams.SetNumZeroed(ImageHeight);
+
+    TArray<uint32> RowSuccessCounts;
+    RowSuccessCounts.SetNumZeroed(ImageHeight);
+
+    TArray<uint64> RowTraversalSums;
+    RowTraversalSums.SetNumZeroed(ImageHeight);
+
+    TArray<uint8> RowMaxTraversalSteps;
+    RowMaxTraversalSteps.SetNumZeroed(ImageHeight);
 
 #if !UE_BUILD_SHIPPING
     {
         const TCHAR* const DefaultAllocatorLabel = TEXT("FDefaultAllocator");
 
-        const int64 ImageDataBytes = static_cast<int64>(ImageData.GetAllocatedSize());
-        LogBufferTelemetry(TEXT("ImageData<FColor>"), static_cast<int64>(ImageData.Num()), static_cast<int64>(sizeof(FColor)), ImageDataBytes, DefaultAllocatorLabel);
-        TotalTrackedBufferBytes += ImageDataBytes;
+        const int64 RawDataBytes = static_cast<int64>(RawData.GetAllocatedSize());
+        LogBufferTelemetry(TEXT("RawData<uint8>"), static_cast<int64>(RawData.Num()), static_cast<int64>(sizeof(uint8)), RawDataBytes, DefaultAllocatorLabel);
+        TotalTrackedBufferBytes += RawDataBytes;
 
-        const int64 ElevationSamplesBytes = static_cast<int64>(ElevationSamples.GetAllocatedSize());
-        LogBufferTelemetry(TEXT("ElevationSamples<double>"), static_cast<int64>(ElevationSamples.Num()), static_cast<int64>(sizeof(double)), ElevationSamplesBytes, DefaultAllocatorLabel);
-        TotalTrackedBufferBytes += ElevationSamplesBytes;
+        const int64 RowSeamsBytes = static_cast<int64>(RowSeams.GetAllocatedSize());
+        LogBufferTelemetry(TEXT("RowSeams<FRowSeam>"), static_cast<int64>(RowSeams.Num()), static_cast<int64>(sizeof(FRowSeam)), RowSeamsBytes, DefaultAllocatorLabel);
+        TotalTrackedBufferBytes += RowSeamsBytes;
 
-        const int64 SampleSuccessBytes = static_cast<int64>(SampleSuccess.GetAllocatedSize());
-        LogBufferTelemetry(TEXT("SampleSuccess<uint8>"), static_cast<int64>(SampleSuccess.Num()), static_cast<int64>(sizeof(uint8)), SampleSuccessBytes, DefaultAllocatorLabel);
-        TotalTrackedBufferBytes += SampleSuccessBytes;
+        const int64 RowSuccessBytes = static_cast<int64>(RowSuccessCounts.GetAllocatedSize());
+        LogBufferTelemetry(TEXT("RowSuccess<uint32>"), static_cast<int64>(RowSuccessCounts.Num()), static_cast<int64>(sizeof(uint32)), RowSuccessBytes, DefaultAllocatorLabel);
+        TotalTrackedBufferBytes += RowSuccessBytes;
 
-        const int64 SampleTraversalBytes = static_cast<int64>(SampleTraversalSteps.GetAllocatedSize());
-        LogBufferTelemetry(TEXT("SampleTraversalSteps<uint8>"), static_cast<int64>(SampleTraversalSteps.Num()), static_cast<int64>(sizeof(uint8)), SampleTraversalBytes, DefaultAllocatorLabel);
-        TotalTrackedBufferBytes += SampleTraversalBytes;
+        const int64 RowTraversalBytes = static_cast<int64>(RowTraversalSums.GetAllocatedSize());
+        LogBufferTelemetry(TEXT("RowTraversal<uint64>"), static_cast<int64>(RowTraversalSums.Num()), static_cast<int64>(sizeof(uint64)), RowTraversalBytes, DefaultAllocatorLabel);
+        TotalTrackedBufferBytes += RowTraversalBytes;
+
+        const int64 RowMaxStepsBytes = static_cast<int64>(RowMaxTraversalSteps.GetAllocatedSize());
+        LogBufferTelemetry(TEXT("RowMaxSteps<uint8>"), static_cast<int64>(RowMaxTraversalSteps.Num()), static_cast<int64>(sizeof(uint8)), RowMaxStepsBytes, DefaultAllocatorLabel);
+        TotalTrackedBufferBytes += RowMaxStepsBytes;
 
         const FPlatformMemoryStats PixelBufferStats = LogMemoryCheckpoint(TEXT("AfterPixelBufferAlloc"), &PreviousMemoryStats);
         PreviousMemoryStats = PixelBufferStats;
@@ -257,58 +383,95 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
 
     const double SamplingStartSeconds = FPlatformTime::Seconds();
 
-    ParallelFor(ImageHeight, [&Sampler, &ImageData, &ElevationSamples, &SampleSuccess, &SampleTraversalSteps, ImageWidth, InvWidth, InvHeight, Palette](int32 Y)
     {
-        const double V = (static_cast<double>(Y) + 0.5) * InvHeight;
-        for (int32 X = 0; X < ImageWidth; ++X)
+        TRACE_CPUPROFILER_EVENT_SCOPE(HeightmapSampling);
+
+        ParallelFor(ImageHeight, [&Sampler, &RawData, &RowSeams, &RowSuccessCounts, &RowTraversalSums, &RowMaxTraversalSteps, ImageWidth, InvWidth, InvHeight, Palette](int32 Y)
         {
-            const double U = (static_cast<double>(X) + 0.5) * InvWidth;
-            const FVector2d UV(U, V);
-            FHeightmapSampler::FSampleInfo SampleInfo;
-            const double Elevation = Sampler.SampleElevationAtUV(UV, &SampleInfo);
-            const int32 PixelIndex = Y * ImageWidth + X;
+            const double V = (static_cast<double>(Y) + 0.5) * InvHeight;
+            const int32 RowBase = Y * ImageWidth;
 
-            ElevationSamples[PixelIndex] = Elevation;
-            SampleSuccess[PixelIndex] = SampleInfo.bHit ? 1 : 0;
-            SampleTraversalSteps[PixelIndex] = static_cast<uint8>(FMath::Clamp(SampleInfo.Steps, 0, 255));
+            FRowSeam LocalSeam;
+            uint32 LocalSuccessCount = 0;
+            uint64 LocalStepSum = 0;
+            uint8 LocalMaxSteps = 0;
 
-            const FColor PixelColor = Palette.Sample(Elevation);
+            for (int32 X = 0; X < ImageWidth; ++X)
+            {
+                const double U = (static_cast<double>(X) + 0.5) * InvWidth;
+                const FVector2d UV(U, V);
+                FHeightmapSampler::FSampleInfo SampleInfo;
+                const double Elevation = Sampler.SampleElevationAtUV(UV, &SampleInfo);
+                const uint8 ClampedSteps = static_cast<uint8>(FMath::Clamp(SampleInfo.Steps, 0, 255));
 
-            ImageData[PixelIndex] = PixelColor;
-        }
-    }, EParallelForFlags::None);
+                LocalMaxSteps = FMath::Max<uint8>(LocalMaxSteps, ClampedSteps);
+                LocalStepSum += ClampedSteps;
+
+                if (SampleInfo.bHit)
+                {
+                    ++LocalSuccessCount;
+                }
+
+                if (X == 0)
+                {
+                    LocalSeam.LeftElevation = static_cast<float>(Elevation);
+                    LocalSeam.bLeftHit = SampleInfo.bHit ? 1 : 0;
+                }
+
+                if (X == ImageWidth - 1)
+                {
+                    LocalSeam.RightElevation = static_cast<float>(Elevation);
+                    LocalSeam.bRightHit = SampleInfo.bHit ? 1 : 0;
+                }
+
+                const FColor PixelColor = Palette.Sample(Elevation);
+                const int32 RawIndex = (RowBase + X) * 4;
+
+                RawData[RawIndex + 0] = PixelColor.R;
+                RawData[RawIndex + 1] = PixelColor.G;
+                RawData[RawIndex + 2] = PixelColor.B;
+                RawData[RawIndex + 3] = 255;
+            }
+
+            RowSeams[Y] = LocalSeam;
+            RowSuccessCounts[Y] = LocalSuccessCount;
+            RowTraversalSums[Y] = LocalStepSum;
+            RowMaxTraversalSteps[Y] = LocalMaxSteps;
+        }, EParallelForFlags::None);
+    }
 
 #if !UE_BUILD_SHIPPING
     const FPlatformMemoryStats PostSamplingStats = LogMemoryCheckpoint(TEXT("PostSampling"), &PreviousMemoryStats);
     PreviousMemoryStats = PostSamplingStats;
 #endif
 
-    int64 SuccessfulSamples = 0;
-    int64 TraversalStepSum = 0;
-    int32 MaxTraversalSteps = 0;
+    uint64 SuccessfulSamples = 0;
+    uint64 TraversalStepSum = 0;
+    uint8 MaxTraversalSteps = 0;
 
-    for (int32 Index = 0; Index < PixelCount; ++Index)
+    for (int32 Y = 0; Y < ImageHeight; ++Y)
     {
-        SuccessfulSamples += SampleSuccess[Index] ? 1 : 0;
-        TraversalStepSum += SampleTraversalSteps[Index];
-        MaxTraversalSteps = FMath::Max<int32>(MaxTraversalSteps, SampleTraversalSteps[Index]);
+        SuccessfulSamples += RowSuccessCounts[Y];
+        TraversalStepSum += RowTraversalSums[Y];
+        MaxTraversalSteps = FMath::Max<uint8>(MaxTraversalSteps, RowMaxTraversalSteps[Y]);
     }
 
     const int64 PixelCount64 = static_cast<int64>(PixelCount);
-    const int64 FailedSamples = PixelCount64 - SuccessfulSamples;
+    const int64 SuccessfulSamples64 = static_cast<int64>(SuccessfulSamples);
+    const int64 FailedSamples = PixelCount64 - SuccessfulSamples64;
     const double CoveragePercent = PixelCount64 > 0
-        ? (static_cast<double>(SuccessfulSamples) / static_cast<double>(PixelCount64)) * 100.0
+        ? (static_cast<double>(SuccessfulSamples64) / static_cast<double>(PixelCount64)) * 100.0
         : 0.0;
     const double AverageTraversalSteps = PixelCount64 > 0
         ? static_cast<double>(TraversalStepSum) / static_cast<double>(PixelCount64)
         : 0.0;
 
     Metrics.PixelCount = PixelCount64;
-    Metrics.SuccessfulSamples = SuccessfulSamples;
+    Metrics.SuccessfulSamples = SuccessfulSamples64;
     Metrics.FailedSamples = FailedSamples;
     Metrics.CoveragePercent = CoveragePercent;
     Metrics.AverageTraversalSteps = AverageTraversalSteps;
-    Metrics.MaxTraversalSteps = MaxTraversalSteps;
+    Metrics.MaxTraversalSteps = static_cast<int32>(MaxTraversalSteps);
 
     double SeamAbsAccum = 0.0;
     double SeamRmsAccum = 0.0;
@@ -321,19 +484,15 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     {
         for (int32 Y = 0; Y < ImageHeight; ++Y)
         {
-            const int32 LeftIndex = Y * ImageWidth;
-            const int32 RightIndex = LeftIndex + (ImageWidth - 1);
-
-            const bool bLeftSuccess = SampleSuccess[LeftIndex] != 0;
-            const bool bRightSuccess = SampleSuccess[RightIndex] != 0;
-            if (!bLeftSuccess || !bRightSuccess)
+            const FRowSeam& Seam = RowSeams[Y];
+            if (!Seam.bLeftHit || !Seam.bRightHit)
             {
                 ++SeamRowsWithFailures;
                 continue;
             }
 
-            const double LeftElevation = ElevationSamples[LeftIndex];
-            const double RightElevation = ElevationSamples[RightIndex];
+            const double LeftElevation = static_cast<double>(Seam.LeftElevation);
+            const double RightElevation = static_cast<double>(Seam.RightElevation);
             const double Delta = LeftElevation - RightElevation;
             const double AbsDelta = FMath::Abs(Delta);
 
@@ -394,50 +553,37 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
         return FString();
     }
 
-	// Convert FColor array to raw RGBA8 bytes
-	TArray<uint8> RawData;
-	RawData.SetNumUninitialized(ImageWidth * ImageHeight * 4);
+    const TArray64<uint8>* CompressedDataPtr = nullptr;
+    {
+        TRACE_CPUPROFILER_EVENT_SCOPE(HeightmapPNGEncode);
+
+        if (!ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), ImageWidth, ImageHeight, ERGBFormat::RGBA, 8))
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to set raw image data for PNG encoding"));
+            return FString();
+        }
+
+        const TArray64<uint8>& CompressedDataRef = ImageWrapper->GetCompressed();
+        CompressedDataPtr = &CompressedDataRef;
+        if (CompressedDataRef.Num() == 0)
+        {
+            UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to compress PNG image"));
+            return FString();
+        }
 #if !UE_BUILD_SHIPPING
-    {
-        const TCHAR* const DefaultAllocatorLabel = TEXT("FDefaultAllocator");
-        const int64 RawDataBytes = static_cast<int64>(RawData.GetAllocatedSize());
-        LogBufferTelemetry(TEXT("RawData<uint8>"), static_cast<int64>(RawData.Num()), static_cast<int64>(sizeof(uint8)), RawDataBytes, DefaultAllocatorLabel);
-        TotalTrackedBufferBytes += RawDataBytes;
+        {
+            const int64 CompressedBytes = static_cast<int64>(CompressedDataRef.GetAllocatedSize());
+            LogBufferTelemetry(TEXT("CompressedPNG<uint8>"), static_cast<int64>(CompressedDataRef.Num()), static_cast<int64>(sizeof(uint8)), CompressedBytes, TEXT("FDefaultAllocator64"));
+            TotalTrackedBufferBytes += CompressedBytes;
 
-        const FPlatformMemoryStats RawBufferStats = LogMemoryCheckpoint(TEXT("AfterRawBufferAlloc"), &PreviousMemoryStats);
-        PreviousMemoryStats = RawBufferStats;
-    }
+            const FPlatformMemoryStats CompressionStats = LogMemoryCheckpoint(TEXT("AfterPNGCompression"), &PreviousMemoryStats);
+            PreviousMemoryStats = CompressionStats;
+        }
 #endif
-	for (int32 i = 0; i < ImageData.Num(); ++i)
-	{
-		RawData[i * 4 + 0] = ImageData[i].R;
-		RawData[i * 4 + 1] = ImageData[i].G;
-		RawData[i * 4 + 2] = ImageData[i].B;
-		RawData[i * 4 + 3] = 255; // Full opacity
-	}
-
-    if (!ImageWrapper->SetRaw(RawData.GetData(), RawData.Num(), ImageWidth, ImageHeight, ERGBFormat::RGBA, 8))
-    {
-        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to set raw image data for PNG encoding"));
-        return FString();
     }
 
-    const TArray64<uint8>& CompressedData = ImageWrapper->GetCompressed();
-    if (CompressedData.Num() == 0)
-    {
-        UE_LOG(LogPlanetaryCreation, Error, TEXT("Failed to compress PNG image"));
-        return FString();
-    }
-#if !UE_BUILD_SHIPPING
-    {
-        const int64 CompressedBytes = static_cast<int64>(CompressedData.GetAllocatedSize());
-        LogBufferTelemetry(TEXT("CompressedPNG<uint8>"), static_cast<int64>(CompressedData.Num()), static_cast<int64>(sizeof(uint8)), CompressedBytes, TEXT("FDefaultAllocator64"));
-        TotalTrackedBufferBytes += CompressedBytes;
-
-        const FPlatformMemoryStats CompressionStats = LogMemoryCheckpoint(TEXT("AfterPNGCompression"), &PreviousMemoryStats);
-        PreviousMemoryStats = CompressionStats;
-    }
-#endif
+    check(CompressedDataPtr != nullptr);
+    const TArray64<uint8>& CompressedData = *CompressedDataPtr;
 
     FString OutputDirectory = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PlanetaryCreation/Heightmaps"));
 #if WITH_AUTOMATION_TESTS
@@ -540,10 +686,10 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
         ImageWidth,
         ImageHeight);
 
-    ImageData.Reset();
-    ElevationSamples.Reset();
-    SampleSuccess.Reset();
-    SampleTraversalSteps.Reset();
+    RowSeams.Reset();
+    RowSuccessCounts.Reset();
+    RowTraversalSums.Reset();
+    RowMaxTraversalSteps.Reset();
     RawData.Reset();
 
     const FPlatformMemoryStats PostBufferCleanupStats = LogMemoryCheckpoint(TEXT("PostBufferCleanup"), &PreviousMemoryStats);
@@ -564,6 +710,11 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Elevation range: %.1f m (blue) to %.1f m (red)"), MinElevation, MaxElevation);
 
     return OutputPath;
+}
+
+void UTectonicSimulationService::SetAllowUnsafeHeightmapExport(bool bInAllowUnsafe)
+{
+    bAllowUnsafeHeightmapExport = bInAllowUnsafe;
 }
 
 #if WITH_AUTOMATION_TESTS

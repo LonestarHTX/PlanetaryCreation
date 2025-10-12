@@ -6771,6 +6771,23 @@ void UTectonicSimulationService::ComputeRidgeDirections()
             continue;
         }
 
+        FVector3f ExistingStoredTangent = FVector3f::ZeroVector;
+        FVector3d StoredBoundaryTangent = FVector3d::ZeroVector;
+        bool bHadStoredBoundaryTangent = false;
+        if (VertexRidgeTangents.IsValidIndex(VertexIdx))
+        {
+            ExistingStoredTangent = VertexRidgeTangents[VertexIdx];
+            StoredBoundaryTangent = FVector3d(
+                static_cast<double>(ExistingStoredTangent.X),
+                static_cast<double>(ExistingStoredTangent.Y),
+                static_cast<double>(ExistingStoredTangent.Z));
+            if (!StoredBoundaryTangent.IsNearlyZero())
+            {
+                StoredBoundaryTangent = StoredBoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+                bHadStoredBoundaryTangent = !StoredBoundaryTangent.IsNearlyZero();
+            }
+        }
+
         const FVector3d VertexNormal = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
         const bool bIsYoungCrust = VertexCrustAge.IsValidIndex(VertexIdx) && VertexCrustAge[VertexIdx] <= 15.0;
 
@@ -6800,6 +6817,11 @@ void UTectonicSimulationService::ComputeRidgeDirections()
 
                     BoundaryDistance = FMath::Max(static_cast<double>(CacheInfo.DistanceRadians), 0.0);
                     SelectedBoundaryTangent = CacheInfo.BoundaryTangent.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+                    if (!SelectedBoundaryTangent.IsNearlyZero())
+                    {
+                        StoredBoundaryTangent = SelectedBoundaryTangent;
+                        bHadStoredBoundaryTangent = true;
+                    }
 
                     bCacheWithinInfluence = !bUseDistanceGate || BoundaryDistance <= InfluenceRadians;
                     if (bCacheWithinInfluence && !SelectedBoundaryTangent.IsNearlyZero())
@@ -6810,6 +6832,13 @@ void UTectonicSimulationService::ComputeRidgeDirections()
                     }
                 }
             }
+        }
+
+        if (!bUsedBoundaryCache && bCacheValid && bIsDivergentBoundaryCandidate && bHadStoredBoundaryTangent)
+        {
+            ResultDirection = StoredBoundaryTangent;
+            bUsedBoundaryCache = true;
+            ++RidgeCacheHitsLocal;
         }
 
         FVector3d AgeGradient = FVector3d::ZeroVector;
@@ -6926,30 +6955,26 @@ void UTectonicSimulationService::ComputeRidgeDirections()
         RidgeSoA.DirY[VertexIdx] = static_cast<float>(SafeDir.Y);
         RidgeSoA.DirZ[VertexIdx] = static_cast<float>(SafeDir.Z);
 
-        FVector3f TangentToStore = FVector3f::ZeroVector;
+        FVector3f TangentToStore = ExistingStoredTangent;
+        bool bShouldWriteTangent = false;
         if (bCacheValid)
         {
             TangentToStore = FVector3f(
                 static_cast<float>(SelectedBoundaryTangent.X),
                 static_cast<float>(SelectedBoundaryTangent.Y),
                 static_cast<float>(SelectedBoundaryTangent.Z));
+            bShouldWriteTangent = true;
         }
-        else if (bUsedGradient)
+        else if (!bHadStoredBoundaryTangent && (bUsedGradient || bAppliedPlateFallback || bAppliedMotionFallback))
         {
             TangentToStore = FVector3f(
                 static_cast<float>(SafeDir.X),
                 static_cast<float>(SafeDir.Y),
                 static_cast<float>(SafeDir.Z));
-        }
-        else if (bAppliedPlateFallback || bAppliedMotionFallback)
-        {
-            TangentToStore = FVector3f(
-                static_cast<float>(SafeDir.X),
-                static_cast<float>(SafeDir.Y),
-                static_cast<float>(SafeDir.Z));
+            bShouldWriteTangent = true;
         }
 
-        if (VertexRidgeTangents.IsValidIndex(VertexIdx))
+        if (bShouldWriteTangent && VertexRidgeTangents.IsValidIndex(VertexIdx))
         {
             VertexRidgeTangents[VertexIdx] = TangentToStore;
         }
