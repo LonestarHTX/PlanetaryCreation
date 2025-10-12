@@ -151,6 +151,98 @@ double FHeightmapSampler::SampleElevationAtUV(const FVector2d& UV, FSampleInfo* 
     return (Barycentric.X * Elev0) + (Barycentric.Y * Elev1) + (Barycentric.Z * Elev2);
 }
 
+bool FHeightmapSampler::SampleElevationAtUVWithHint(const FVector2d& UV, int32 HintTriangleIndex, FSampleInfo* OutInfo, double& OutElevation) const
+{
+    if (OutInfo)
+    {
+        *OutInfo = FSampleInfo();
+    }
+
+    const FVector3d Direction = UVToDirection(UV);
+    constexpr double InsideTolerance = -1.0e-6;
+
+    if (TriangleData.IsValidIndex(HintTriangleIndex))
+    {
+        FVector3d Bary;
+        if (ComputeTriangleBarycentrics(HintTriangleIndex, Direction, Bary))
+        {
+            if (Bary.X >= InsideTolerance && Bary.Y >= InsideTolerance && Bary.Z >= InsideTolerance)
+            {
+                const FTriangleData& Triangle = TriangleData[HintTriangleIndex];
+                const double Elev0 = FetchElevation(Triangle.Vertices[0]);
+                const double Elev1 = FetchElevation(Triangle.Vertices[1]);
+                const double Elev2 = FetchElevation(Triangle.Vertices[2]);
+
+                OutElevation = (Bary.X * Elev0) + (Bary.Y * Elev1) + (Bary.Z * Elev2);
+
+                if (OutInfo)
+                {
+                    OutInfo->bHit = true;
+                    OutInfo->TriangleIndex = HintTriangleIndex;
+                    OutInfo->Barycentrics = Bary;
+                    OutInfo->Steps = 0;
+                }
+
+                return true;
+            }
+        }
+    }
+
+    FSampleInfo LocalInfo;
+    FSampleInfo* InfoPtr = OutInfo ? OutInfo : &LocalInfo;
+    OutElevation = SampleElevationAtUV(UV, InfoPtr);
+    return InfoPtr->bHit;
+}
+
+bool FHeightmapSampler::SampleElevationAtUVWithClampedHint(const FVector2d& UV, int32 TriangleIndex, FSampleInfo* OutInfo, double& OutElevation) const
+{
+    if (OutInfo)
+    {
+        *OutInfo = FSampleInfo();
+    }
+
+    if (!TriangleData.IsValidIndex(TriangleIndex))
+    {
+        return false;
+    }
+
+    FVector3d Bary;
+    if (!ComputeTriangleBarycentrics(TriangleIndex, UVToDirection(UV), Bary))
+    {
+        return false;
+    }
+
+    FVector3d Clamped = Bary;
+    Clamped.X = FMath::Clamp(Clamped.X, 0.0, 1.0);
+    Clamped.Y = FMath::Clamp(Clamped.Y, 0.0, 1.0);
+    Clamped.Z = FMath::Clamp(Clamped.Z, 0.0, 1.0);
+
+    const double Sum = Clamped.X + Clamped.Y + Clamped.Z;
+    if (Sum <= UE_DOUBLE_SMALL_NUMBER)
+    {
+        return false;
+    }
+
+    Clamped /= Sum;
+
+    const FTriangleData& Triangle = TriangleData[TriangleIndex];
+    const double Elev0 = FetchElevation(Triangle.Vertices[0]);
+    const double Elev1 = FetchElevation(Triangle.Vertices[1]);
+    const double Elev2 = FetchElevation(Triangle.Vertices[2]);
+
+    OutElevation = (Clamped.X * Elev0) + (Clamped.Y * Elev1) + (Clamped.Z * Elev2);
+
+    if (OutInfo)
+    {
+        OutInfo->bHit = true;
+        OutInfo->TriangleIndex = TriangleIndex;
+        OutInfo->Barycentrics = Clamped;
+        OutInfo->Steps = 0;
+    }
+
+    return true;
+}
+
 FHeightmapSampler::FMemoryStats FHeightmapSampler::GetMemoryStats() const
 {
     FMemoryStats Stats;

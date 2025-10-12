@@ -15,7 +15,7 @@
 - Launch playable build: `"<UE5>\Engine\Binaries\Win64\UnrealEditor.exe" PlanetaryCreation.uproject -game`.
 - Rebuild editor target: `"<UE5>\Engine\Build\BatchFiles\Build.bat" PlanetaryCreationEditor Win64 Development -project="%CD%\PlanetaryCreation.uproject"`.
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
-- Run Milestone 3 automation suite: `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
+- Run Milestone 3 automation suite (captures `PlanetaryCreation.QuantitativeMetrics.Export` and refreshes `Saved/Metrics/heightmap_export_metrics.csv` + timestamped copy under `Docs/Validation`): `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
 - **CRITICAL AUTOMATION FIX:** CVars must use `-SetCVar=var1=val1,var2=val2` NOT `-ExecCmds`. Setting CVars in `-ExecCmds` causes them to execute AFTER test queuing, making tests run with wrong/default settings. This was the root cause of the "tests never run" regression.
 - CPU-only automation (Milestone 3/5 regressions, etc.) should use `-SetCVar=r.PlanetaryCreation.PaperDefaults=0` so the run matches the lean M5 configuration.
 - GPU preview parity suites (Milestone 6): launch from Windows PowerShell via `Automation RunTests PlanetaryCreation.Milestone6.GPU`.

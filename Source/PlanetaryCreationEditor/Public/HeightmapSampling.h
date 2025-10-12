@@ -38,6 +38,10 @@ public:
     /** Sample elevation (meters) at the provided UV coordinate. */
     double SampleElevationAtUV(const FVector2d& UV, FSampleInfo* OutInfo = nullptr) const;
 
+    /** Sample elevation using a hinted triangle before falling back to KD search. */
+    bool SampleElevationAtUVWithHint(const FVector2d& UV, int32 HintTriangleIndex, FSampleInfo* OutInfo, double& OutElevation) const;
+    bool SampleElevationAtUVWithClampedHint(const FVector2d& UV, int32 TriangleIndex, FSampleInfo* OutInfo, double& OutElevation) const;
+
     struct FMemoryStats
     {
         int32 VertexCount = 0;

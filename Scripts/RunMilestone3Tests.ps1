@@ -90,18 +90,23 @@ if ($ArchiveLogs -and -not (Test-Path $AutomationLogRoot))
     New-Item -ItemType Directory -Path $AutomationLogRoot | Out-Null
 }
 
-$Tests = @(
+$TestNames = @(
     "PlanetaryCreation.Milestone3.IcosphereSubdivision",
     "PlanetaryCreation.Milestone3.VoronoiMapping",
-    "PlanetaryCreation.Milestone3.KDTreePerformance"
+    "PlanetaryCreation.Milestone3.KDTreePerformance",
+    "PlanetaryCreation.QuantitativeMetrics.Export"
 )
 
 $Results = @()
 $OverallExitCode = 0
 $BuildSucceeded = $false
+$LocationPushed = $false
 
 try
 {
+    Push-Location -Path $ProjectDirectory
+    $LocationPushed = $true
+
     # --------------------------------------------------------------
     # Build step
     # --------------------------------------------------------------
@@ -120,77 +125,97 @@ try
     # --------------------------------------------------------------
     # Automation tests
     # --------------------------------------------------------------
-    foreach ($TestName in $Tests)
+    $RunAutomationFilter = [string]::Join('+', $TestNames)
+
+    $Arguments = @(
+        ("`"{0}`"" -f $ProjectPath),
+        "-SetCVar=r.PlanetaryCreation.PaperDefaults=0",
+        ("-ExecCmds=`"Automation RunTests {0}`"" -f $RunAutomationFilter),
+        '-TestExit="Automation Test Queue Empty"',
+        "-unattended",
+        "-nop4",
+        "-nosplash",
+        "-log"
+    )
+
+    $AutomationExitCode = Invoke-Process -FilePath $EditorCmd -Arguments $Arguments -Description "Running Milestone 3 + Quantitative Metrics automation"
+
+    if ($AutomationExitCode -ne 0)
     {
-        $ExecCmd = "r.PlanetaryCreation.PaperDefaults 0; Automation RunTests $TestName; Quit"
-        $Arguments = @(
-            $ProjectPath,
-            "-ExecCmds=$ExecCmd",
-            "-unattended",
-            "-nop4",
-            "-nosplash",
-            "-log"
-        )
+        $OverallExitCode = 1
+    }
 
-        $ExitCode = Invoke-Process -FilePath $EditorCmd -Arguments $Arguments -Description "Running $TestName"
-
-        if ($ExitCode -ne 0)
+    if (-not (Test-Path $ActiveLogPath))
+    {
+        Write-Warning "Log file not found after automation run."
+        foreach ($Name in $TestNames)
         {
-            $OverallExitCode = 1
+            $Results += [PSCustomObject]@{ Stage = "Automation"; Name = $Name; Result = "Missing Log"; Log = $null }
         }
-
-        if (-not (Test-Path $ActiveLogPath))
-        {
-            Write-Warning "Log file not found after running $TestName."
-            $Results += [PSCustomObject]@{ Stage = "Automation"; Name = $TestName; Result = "Missing Log"; Log = $null }
-            $OverallExitCode = 1
-            continue
-        }
-
-        $ResultLine = Select-String -Path $ActiveLogPath -Pattern "Test Completed\. Result=" | Select-Object -Last 1
-        $ParsedResult = "Unknown"
-
-        if ($null -ne $ResultLine -and $ResultLine.Line -match "Result=\{(?<Result>[^}]*)\} Name=\{(?<Name>[^}]*)\}")
-        {
-            $ParsedResult = $Matches.Result
-        }
-        else
-        {
-            Write-Warning "Unable to parse result for $TestName from $ActiveLogPath."
-            $OverallExitCode = 1
-        }
-
-        if ($ParsedResult -ne "Success")
-        {
-            $OverallExitCode = 1
-        }
-
-        $ExitLine = Select-String -Path $ActiveLogPath -Pattern "\*\*\*\* TEST COMPLETE\. EXIT CODE" | Select-Object -Last 1
-        $AutomationExit = $null
-        if ($null -ne $ExitLine -and $ExitLine.Line -match "EXIT CODE: (?<Code>\d+)")
-        {
-            $AutomationExit = [int]$Matches.Code
-            if ($AutomationExit -ne 0)
-            {
-                $OverallExitCode = 1
-            }
-        }
-
+        $OverallExitCode = 1
+    }
+    else
+    {
         $LogCapturePath = $null
         if ($ArchiveLogs)
         {
             $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-            $SafeName = $TestName -replace '[^A-Za-z0-9_-]', '_'
-            $LogCapturePath = Join-Path $AutomationLogRoot "${Timestamp}_${SafeName}.log"
+            $LogCapturePath = Join-Path $AutomationLogRoot "${Timestamp}_Milestone3Suite.log"
             Copy-Item -Path $ActiveLogPath -Destination $LogCapturePath -Force
         }
 
-        $Results += [PSCustomObject]@{
-            Stage = "Automation"
-            Name  = $TestName
-            Result = $ParsedResult
-            ExitCode = if ($AutomationExit -ne $null) { $AutomationExit } else { $ExitCode }
-            Log = if ($LogCapturePath) { $LogCapturePath } else { $ActiveLogPath }
+        foreach ($Name in $TestNames)
+        {
+            $Pattern = "Path=\{$([Regex]::Escape($Name))\}"
+            $ResultLine = Select-String -Path $ActiveLogPath -Pattern $Pattern | Select-Object -Last 1
+            $ParsedResult = "Unknown"
+            $AutomationExit = $AutomationExitCode
+
+            if ($null -ne $ResultLine -and $ResultLine.Line -match "Result=\{(?<Result>[^}]*)\}")
+            {
+                $ParsedResult = $Matches.Result
+                if ($ParsedResult -ne "Success")
+                {
+                    $OverallExitCode = 1
+                }
+            }
+            else
+            {
+                Write-Warning ("Unable to parse result for {0} from {1}" -f $Name, $ActiveLogPath)
+                $OverallExitCode = 1
+            }
+
+            $Results += [PSCustomObject]@{
+                Stage = "Automation"
+                Name  = $Name
+                Result = $ParsedResult
+                ExitCode = $AutomationExit
+                Log = if ($LogCapturePath) { $LogCapturePath } else { $ActiveLogPath }
+            }
+        }
+
+        try
+        {
+            $MetricsDirectory = Join-Path $ProjectDirectory "Saved\Metrics"
+            if (Test-Path $MetricsDirectory)
+            {
+                $LatestMetrics = Get-ChildItem -Path $MetricsDirectory -Filter "heightmap_export_metrics_*.csv" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($null -ne $LatestMetrics)
+                {
+                    $DocsValidation = Join-Path $ProjectDirectory "Docs\Validation"
+                    if (-not (Test-Path $DocsValidation))
+                    {
+                        New-Item -ItemType Directory -Path $DocsValidation | Out-Null
+                    }
+
+                    $DestinationPath = Join-Path $DocsValidation $LatestMetrics.Name
+                    Copy-Item -Path $LatestMetrics.FullName -Destination $DestinationPath -Force
+                }
+            }
+        }
+        catch
+        {
+            Write-Warning ("Failed to mirror metrics CSV to Docs\Validation: {0}" -f $_.Exception.Message)
         }
     }
 }
@@ -198,6 +223,13 @@ catch
 {
     Write-Error $_.Exception.Message
     $OverallExitCode = 1
+}
+finally
+{
+    if ($LocationPushed)
+    {
+        try { Pop-Location -ErrorAction Stop | Out-Null } catch { }
+    }
 }
 
 Write-Host ""  # spacer

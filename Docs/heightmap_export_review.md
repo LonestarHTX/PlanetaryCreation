@@ -2,6 +2,15 @@ Michael — I pulled apart the exporter and sampler from your snapshot and focus
 
 ---
 
+## Phase Rollup
+- **Phase 3 – Validation:** Complete (2025-10-12). Milestone 3 harness runs via `Scripts/RunMilestone3Tests.ps1 -ArchiveLogs`, archives the quantitative metrics CSV, and confirmed tiled exporter parity for Phase 4 handoff.
+- **Phase 4 – Documentation:** Ready to begin. Capture USD `LogUsd: Warning: Failed to parse plugInfo.json` as a tracked known warning and leave suppression work pending.
+
+## Stage B Rescue Telemetry Quick Reference
+- `[StageB][RescueSummary]` emits once per export after the sampler resolves all fallbacks. `StartReady`/`FinishReady` echo the Stage B readiness latch and reason strings, `RescueAttempted`/`RescueSucceeded` count fallback usage, `AmplifiedUsed`/`SnapshotFloat` confirm which datasets backed successful samples, `Coverage`/`Miss` surface absolute hit totals, and `RowReuse` sits inside the `Modes[...]` histogram as the count of rows replayed from cached Stage B output. Treat any non-zero `Fail` as a regression — supervised runs now baseline at zero failures.
+- Coverage captures from 2025‑10‑12 show 100 % hits at both scales: `Scripts/ExportHeightmap1024.py` (1024×512) logged to `Saved/Logs/PlanetaryCreation-backup-2025.10.12-20.32.15.log`; `Scripts/ExportHeightmap4096Force.py` (4096×2048) logged to `Saved/Logs/PlanetaryCreation-backup-2025.10.12-20.40.33.log`. Each file also includes the paired `[HeightmapExport][Coverage]` line for quick diffing.
+- `[HeightmapExport][PerformanceBudgetExceeded]` still triggers when sampling or encode time crosses the configured ceiling. It remains advisory provided coverage and traversal stats match baseline; escalate only if the warning aligns with rising miss counts or degraded budgets.
+
 ## TL;DR: why 4K freezes now (post‑rewrite)
 
 The new path stores **three full per‑pixel telemetry arrays** (`ElevationSamples<double>`, `SampleSuccess<uint8>`, `SampleTraversalSteps<uint8>`) **in addition to two copies of the image data** (`TArray<FColor>` and a second `TArray<uint8>` “RawData” for PNG). At 4096×2048 that’s **~144 MiB** just for these five arrays, before PNG compression buffers and the sampler’s KD‑tree/adjacency memory. That footprint didn’t exist in the pre‑rewrite “vertex‑splat” path, so the 4K step now pushes the machine past its headroom and you hit an OS‑level reset (Kernel‑Power 41) before Unreal can flush logs.

@@ -78,6 +78,32 @@ struct FHeightmapExportPerformanceSample
     bool bBudgetExceeded = false;
 };
 
+struct FHypsometricBinMetrics
+{
+    int32 BinIndex = 0;
+    double MinElevationMeters = 0.0;
+    double MaxElevationMeters = 0.0;
+    double Percentage = 0.0;
+    int32 Count = 0;
+};
+
+struct FVelocityHistogramBin
+{
+    int32 BinIndex = 0;
+    double MinSpeedCmPerYear = 0.0;
+    double MaxSpeedCmPerYear = 0.0;
+    double Percentage = 0.0;
+    int32 Count = 0;
+};
+
+struct FRidgeTrenchMetrics
+{
+    double DivergentLengthKm = 0.0;
+    double ConvergentLengthKm = 0.0;
+    double TransformLengthKm = 0.0;
+    double RidgeToTrenchRatio = 0.0;
+};
+
 enum class EStagePipelinePhase : uint8
 {
     Idle,
@@ -476,9 +502,18 @@ UENUM()
 enum class ETerraneState : uint8
 {
     Attached,       // Part of continental plate (normal)
-    Extracted,      // Surgically removed, awaiting carrier assignment
-    Transporting,   // Riding oceanic carrier plate toward collision
-    Colliding       // At convergent boundary, ready for reattachment
+   Extracted,      // Surgically removed, awaiting carrier assignment
+   Transporting,   // Riding oceanic carrier plate toward collision
+   Colliding       // At convergent boundary, ready for reattachment
+};
+
+struct FTerraneAreaDriftSample
+{
+    int32 TerraneID = INDEX_NONE;
+    ETerraneState State = ETerraneState::Attached;
+    double OriginalAreaKm2 = 0.0;
+    double CurrentAreaKm2 = 0.0;
+    double DriftPercent = 0.0;
 };
 
 /** Per-vertex payload stored for detached terranes. */
@@ -578,6 +613,26 @@ struct FContinentalTerrane
     /** Triangles added to cap the extraction hole (triplets referencing PatchVertexIndices). */
     UPROPERTY()
     TArray<int32> PatchTriangles;
+};
+
+struct FQuantitativeMetricsSnapshot
+{
+    bool bValid = false;
+    FString TimestampUTC;
+    FString LatestFilePath;
+    FString TimestampedFilePath;
+    double SimulationTimeMy = 0.0;
+    double MinElevationMeters = 0.0;
+    double MaxElevationMeters = 0.0;
+    double HypsometricSumPercent = 0.0;
+    double VelocitySumPercent = 0.0;
+    TArray<FHypsometricBinMetrics> HypsometricBins;
+    TArray<FVelocityHistogramBin> VelocityHistogram;
+    FRidgeTrenchMetrics RidgeTrench;
+    double TerraneMeanDriftPercent = 0.0;
+    double TerraneMaxDriftPercent = 0.0;
+    double TerraneRmsDriftPercent = 0.0;
+    TArray<FTerraneAreaDriftSample> TerraneSamples;
 };
 
 /** Simulation parameters (Phase 3 - UI integration). */
@@ -1176,6 +1231,7 @@ public:
     FString GetStageBAmplificationReadyDescription() const;
     FOnStageBAmplificationReadyChanged& OnStageBAmplificationReadyChanged() { return StageBReadyChangedDelegate; }
     void ForceStageBAmplificationRebuild(const TCHAR* Context);
+    void LogStageBRescueSummary(const PlanetaryCreation::StageB::FStageBRescueSummary& Summary);
 
     const TArray<int32>& GetRenderVertexAdjacencyOffsets() const { return RenderVertexAdjacencyOffsets; }
     const TArray<int32>& GetRenderVertexAdjacency() const { return RenderVertexAdjacency; }
@@ -1281,6 +1337,10 @@ public:
 
     /** Milestone 6 Task 1.5: Export active terrane records to CSV for lifecycle analysis. */
     void ExportTerranesToCSV();
+
+    /** Milestone 6 Phase 2: Export paper-aligned quantitative metrics to CSV. */
+    void ExportQuantitativeMetrics();
+    const FQuantitativeMetricsSnapshot& GetLastQuantitativeMetrics() const { return LastQuantitativeMetrics; }
 
     /** Milestone 4 Task 1.1: Re-tessellation public API. */
 
@@ -1793,6 +1853,7 @@ private:
     /** Metrics from the most recent heightmap export. */
     FHeightmapExportMetrics LastHeightmapExportMetrics;
     TArray<FHeightmapExportPerformanceSample> HeightmapExportPerformanceHistory;
+    FQuantitativeMetricsSnapshot LastQuantitativeMetrics;
     static constexpr int32 MaxHeightmapPerformanceSamples = 8;
 
     /** Cached render vertex adjacency (CSR layout: Offsets.Num == RenderVertices.Num + 1). */

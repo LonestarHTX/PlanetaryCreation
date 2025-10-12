@@ -167,3 +167,12 @@
 - Day 1 now includes `STG-00` isotropic amplification spike (simple FBM × age/ridge falloff) plus `STG-04` erosion disable. Export a PNG alongside ALG’s sampler integration to prove the pipeline.
 - Inline validation required: `STG-05` logs ridge tangent population (<1 % missing), `STG-06` logs fold/orogeny counts, and `STG-07` captures a reference PNG before handing off to QLT.
 - Hydraulic erosion stays disabled until `STG-08`, where conservative parameters must be documented alongside telemetry.
+
+## 2025-10-12 – Stage B rescue telemetry + fallback elimination
+- Instrumented exporter with per-run aggregation and a shared `FStageBRescueSummary` surface. `HeightmapExporter.cpp` now tallies fallback attempts/success/fail + mode buckets, row reuse hits, and emits a single `[StageB][RescueSummary]` that Stage B logs forward (`TectonicSimulationService.cpp`).
+- Added row-level triangle reuse: we cache each row’s last successful triangle and re-sample via `FHeightmapSampler::SampleElevationAtUVWithClampedHint` when expanded fallback still misses. New fallback mode `RowReuse` converts the remaining gap without perturbing seam hints.
+- Coverage results (real RHI, AllowCommandletRendering):
+  - 1024×512 ⇒ `[HeightmapExport][Coverage]` 524 288/524 288 (100 %), `[StageB][RescueSummary]` Fail=0, RowReuse=184 (`Saved/Logs/PlanetaryCreation-backup-2025.10.12-20.32.15.log`).
+  - 4096×2048 ⇒ `[HeightmapExport][Coverage]` 8 388 608/8 388 608 (100 %), `[StageB][RescueSummary]` Fail=0, RowReuse=13 068 (`Saved/Logs/PlanetaryCreation-backup-2025.10.12-20.40.33.log`).
+- Heartbeat rerun with `Scripts/RunStageBHeartbeat.ps1 -ThrottleMs 50` shows `[StageBDiag]` Ready=1 and `[StageB][Profile]` Ridge fallback counts stable at 0 grad / 0 plate / 7 motion (`Saved/Logs/StageBHeartbeat-20251012-154128.log`).
+- Build + validation commands: `UnrealBuildTool ...PlanetaryCreationEditor... -WaitMutex -FromMsBuild` (success), `ExportHeightmap1024.py` + `ExportHeightmap4096Force.py` under `UnrealEditor-Cmd.exe -AllowCommandletRendering`, heartbeat script above.

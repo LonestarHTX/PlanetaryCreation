@@ -3027,6 +3027,437 @@ void UTectonicSimulationService::ExportTerranesToCSV()
     }
 }
 
+void UTectonicSimulationService::ExportQuantitativeMetrics()
+{
+    TRACE_CPUPROFILER_EVENT_SCOPE(ExportQuantitativeMetrics);
+
+    FQuantitativeMetricsSnapshot Snapshot;
+    Snapshot.SimulationTimeMy = CurrentTimeMy;
+
+    const FDateTime NowUtc = FDateTime::UtcNow();
+    Snapshot.TimestampUTC = NowUtc.ToIso8601();
+
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExportQuantitativeMetrics: No render vertices available"));
+        LastQuantitativeMetrics = Snapshot;
+        return;
+    }
+
+    const TArray<double>* ElevationSource = nullptr;
+    if (VertexAmplifiedElevation.Num() == VertexCount)
+    {
+        ElevationSource = &VertexAmplifiedElevation;
+    }
+    else if (VertexElevationValues.Num() == VertexCount)
+    {
+        ElevationSource = &VertexElevationValues;
+    }
+
+    if (!ElevationSource || ElevationSource->Num() == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExportQuantitativeMetrics: Elevation arrays not initialized"));
+        LastQuantitativeMetrics = Snapshot;
+        return;
+    }
+
+    constexpr int32 HypsometricBinCount = 50;
+    Snapshot.HypsometricBins.SetNum(HypsometricBinCount);
+    TArray<int32> HypsometricCounts;
+    HypsometricCounts.Init(0, HypsometricBinCount);
+
+    double MinElevation = TNumericLimits<double>::Max();
+    double MaxElevation = -TNumericLimits<double>::Max();
+    for (double Elevation : *ElevationSource)
+    {
+        MinElevation = FMath::Min(MinElevation, Elevation);
+        MaxElevation = FMath::Max(MaxElevation, Elevation);
+    }
+
+    const double ElevationRange = MaxElevation - MinElevation;
+    if (ElevationRange < UE_DOUBLE_SMALL_NUMBER)
+    {
+        HypsometricCounts[0] = VertexCount;
+    }
+    else
+    {
+        const double InvRange = 1.0 / ElevationRange;
+        for (double Elevation : *ElevationSource)
+        {
+            double Normalized = (Elevation - MinElevation) * InvRange;
+            Normalized = FMath::Clamp(Normalized, 0.0, 0.999999);
+            const int32 BinIndex = FMath::Clamp(FMath::FloorToInt(Normalized * HypsometricBinCount), 0, HypsometricBinCount - 1);
+            HypsometricCounts[BinIndex]++;
+        }
+    }
+
+    const double BinWidth = (ElevationRange < UE_DOUBLE_SMALL_NUMBER) ? 0.0 : ElevationRange / HypsometricBinCount;
+    Snapshot.MinElevationMeters = MinElevation;
+    Snapshot.MaxElevationMeters = MaxElevation;
+
+    for (int32 Bin = 0; Bin < HypsometricBinCount; ++Bin)
+    {
+        FHypsometricBinMetrics& BinMetrics = Snapshot.HypsometricBins[Bin];
+        BinMetrics.BinIndex = Bin;
+        BinMetrics.MinElevationMeters = MinElevation + Bin * BinWidth;
+        BinMetrics.MaxElevationMeters = (Bin == HypsometricBinCount - 1)
+            ? MaxElevation
+            : BinMetrics.MinElevationMeters + BinWidth;
+        BinMetrics.Count = HypsometricCounts[Bin];
+        BinMetrics.Percentage = VertexCount > 0
+            ? (static_cast<double>(HypsometricCounts[Bin]) / static_cast<double>(VertexCount)) * 100.0
+            : 0.0;
+        Snapshot.HypsometricSumPercent += BinMetrics.Percentage;
+    }
+
+    if (VertexVelocities.Num() != VertexCount)
+    {
+        ComputeVelocityField();
+    }
+
+    constexpr int32 VelocityBinCount = 40;
+    Snapshot.VelocityHistogram.SetNum(VelocityBinCount);
+    TArray<int32> VelocityCounts;
+    VelocityCounts.Init(0, VelocityBinCount);
+
+    const double CmPerYearScale = Parameters.PlanetRadius * 100.0 / 1000000.0;
+    TArray<double> VelocitySamples;
+    VelocitySamples.Reserve(VertexVelocities.Num());
+
+    double MinSpeed = TNumericLimits<double>::Max();
+    double MaxSpeed = 0.0;
+
+    for (const FVector3d& Velocity : VertexVelocities)
+    {
+        const double Speed = Velocity.Length();
+        const double SpeedCmPerYear = Speed * CmPerYearScale;
+        VelocitySamples.Add(SpeedCmPerYear);
+        MinSpeed = FMath::Min(MinSpeed, SpeedCmPerYear);
+        MaxSpeed = FMath::Max(MaxSpeed, SpeedCmPerYear);
+    }
+
+    const int32 VelocitySampleCount = VelocitySamples.Num();
+    if (VelocitySampleCount == 0)
+    {
+        MinSpeed = 0.0;
+        MaxSpeed = 0.0;
+    }
+
+    const double VelocityRange = MaxSpeed - MinSpeed;
+    if (VelocitySampleCount > 0)
+    {
+        if (VelocityRange < UE_DOUBLE_SMALL_NUMBER)
+        {
+            VelocityCounts[0] = VelocitySampleCount;
+        }
+        else
+        {
+            const double InvVelocityRange = 1.0 / VelocityRange;
+            for (double Speed : VelocitySamples)
+            {
+                double Normalized = (Speed - MinSpeed) * InvVelocityRange;
+                Normalized = FMath::Clamp(Normalized, 0.0, 0.999999);
+                const int32 BinIndex = FMath::Clamp(FMath::FloorToInt(Normalized * VelocityBinCount), 0, VelocityBinCount - 1);
+                VelocityCounts[BinIndex]++;
+            }
+        }
+    }
+
+    const double VelocityBinWidth = (VelocityRange < UE_DOUBLE_SMALL_NUMBER) ? 0.0 : VelocityRange / VelocityBinCount;
+    for (int32 Bin = 0; Bin < VelocityBinCount; ++Bin)
+    {
+        FVelocityHistogramBin& BinMetrics = Snapshot.VelocityHistogram[Bin];
+        BinMetrics.BinIndex = Bin;
+        BinMetrics.MinSpeedCmPerYear = MinSpeed + Bin * VelocityBinWidth;
+        BinMetrics.MaxSpeedCmPerYear = (Bin == VelocityBinCount - 1)
+            ? MaxSpeed
+            : BinMetrics.MinSpeedCmPerYear + VelocityBinWidth;
+        BinMetrics.Count = VelocityCounts[Bin];
+        BinMetrics.Percentage = VelocitySampleCount > 0
+            ? (static_cast<double>(VelocityCounts[Bin]) / static_cast<double>(VelocitySampleCount)) * 100.0
+            : 0.0;
+        Snapshot.VelocitySumPercent += BinMetrics.Percentage;
+    }
+
+    const double PlanetRadiusKm = Parameters.PlanetRadius / 1000.0;
+    double DivergentLengthKm = 0.0;
+    double ConvergentLengthKm = 0.0;
+    double TransformLengthKm = 0.0;
+
+    auto AccumulateBoundaryLengthKm = [&](const FPlateBoundary& Boundary) -> double
+    {
+        const int32 EdgeCount = Boundary.SharedEdgeVertices.Num();
+        if (EdgeCount < 2)
+        {
+            return 0.0;
+        }
+
+        double AccumulatedRadians = 0.0;
+        for (int32 EdgeIdx = 0; EdgeIdx < EdgeCount - 1; ++EdgeIdx)
+        {
+            const int32 V0Index = Boundary.SharedEdgeVertices[EdgeIdx];
+            const int32 V1Index = Boundary.SharedEdgeVertices[EdgeIdx + 1];
+            if (!SharedVertices.IsValidIndex(V0Index) || !SharedVertices.IsValidIndex(V1Index))
+            {
+                continue;
+            }
+
+            const FVector3d V0 = SharedVertices[V0Index].GetSafeNormal();
+            const FVector3d V1 = SharedVertices[V1Index].GetSafeNormal();
+            const double Dot = FMath::Clamp(V0 | V1, -1.0, 1.0);
+            const double Angle = FMath::Acos(Dot);
+            AccumulatedRadians += Angle;
+        }
+
+        return AccumulatedRadians * PlanetRadiusKm;
+    };
+
+    for (const auto& BoundaryPair : Boundaries)
+    {
+        const FPlateBoundary& Boundary = BoundaryPair.Value;
+        const double BoundaryLengthKm = AccumulateBoundaryLengthKm(Boundary);
+        switch (Boundary.BoundaryType)
+        {
+        case EBoundaryType::Divergent:
+            DivergentLengthKm += BoundaryLengthKm;
+            break;
+        case EBoundaryType::Convergent:
+            ConvergentLengthKm += BoundaryLengthKm;
+            break;
+        case EBoundaryType::Transform:
+            TransformLengthKm += BoundaryLengthKm;
+            break;
+        }
+    }
+
+    Snapshot.RidgeTrench.DivergentLengthKm = DivergentLengthKm;
+    Snapshot.RidgeTrench.ConvergentLengthKm = ConvergentLengthKm;
+    Snapshot.RidgeTrench.TransformLengthKm = TransformLengthKm;
+    Snapshot.RidgeTrench.RidgeToTrenchRatio = (ConvergentLengthKm > UE_DOUBLE_SMALL_NUMBER)
+        ? DivergentLengthKm / ConvergentLengthKm
+        : 0.0;
+
+    auto ComputeDetachedTerraneAreaKm2 = [&](const FContinentalTerrane& Terrane) -> double
+    {
+        if (Terrane.VertexPayload.Num() < 3 || Terrane.ExtractedTriangles.Num() < 3)
+        {
+            return Terrane.AreaKm2;
+        }
+
+        const double RadiusKmLocal = Parameters.PlanetRadius / 1000.0;
+        double TotalArea = 0.0;
+
+        for (int32 Index = 0; Index + 2 < Terrane.ExtractedTriangles.Num(); Index += 3)
+        {
+            const int32 AIndex = Terrane.ExtractedTriangles[Index];
+            const int32 BIndex = Terrane.ExtractedTriangles[Index + 1];
+            const int32 CIndex = Terrane.ExtractedTriangles[Index + 2];
+
+            if (!Terrane.VertexPayload.IsValidIndex(AIndex) ||
+                !Terrane.VertexPayload.IsValidIndex(BIndex) ||
+                !Terrane.VertexPayload.IsValidIndex(CIndex))
+            {
+                continue;
+            }
+
+            const FVector3d A = Terrane.VertexPayload[AIndex].Position.GetSafeNormal();
+            const FVector3d B = Terrane.VertexPayload[BIndex].Position.GetSafeNormal();
+            const FVector3d C = Terrane.VertexPayload[CIndex].Position.GetSafeNormal();
+
+            const double a = FMath::Acos(FMath::Clamp(B | C, -1.0, 1.0));
+            const double b = FMath::Acos(FMath::Clamp(C | A, -1.0, 1.0));
+            const double c = FMath::Acos(FMath::Clamp(A | B, -1.0, 1.0));
+
+            const double s = (a + b + c) * 0.5;
+            const double tan_s2 = FMath::Tan(s * 0.5);
+            const double tan_sa2 = FMath::Tan((s - a) * 0.5);
+            const double tan_sb2 = FMath::Tan((s - b) * 0.5);
+            const double tan_sc2 = FMath::Tan((s - c) * 0.5);
+            const double Product = tan_s2 * tan_sa2 * tan_sb2 * tan_sc2;
+            const double tan_E4 = Product > 0.0 ? FMath::Sqrt(Product) : 0.0;
+            const double E = 4.0 * FMath::Atan(tan_E4);
+
+            if (E > 0.0)
+            {
+                TotalArea += E * RadiusKmLocal * RadiusKmLocal;
+            }
+        }
+
+        return (TotalArea > 0.0) ? TotalArea : Terrane.AreaKm2;
+    };
+
+    double AccumulatedAbsDrift = 0.0;
+    double AccumulatedAbsDriftSq = 0.0;
+    double MaxAbsDrift = 0.0;
+    int32 TerraneSampleCount = 0;
+
+    for (const FContinentalTerrane& Terrane : Terranes)
+    {
+        FTerraneAreaDriftSample Sample;
+        Sample.TerraneID = Terrane.TerraneID;
+        Sample.State = Terrane.State;
+        Sample.OriginalAreaKm2 = Terrane.AreaKm2;
+
+        double CurrentArea = Terrane.AreaKm2;
+        switch (Terrane.State)
+        {
+        case ETerraneState::Attached:
+            if (Terrane.OriginalVertexIndices.Num() >= 3)
+            {
+                CurrentArea = ComputeTerraneArea(Terrane.OriginalVertexIndices);
+            }
+            break;
+        case ETerraneState::Extracted:
+        case ETerraneState::Transporting:
+        case ETerraneState::Colliding:
+            CurrentArea = ComputeDetachedTerraneAreaKm2(Terrane);
+            break;
+        default:
+            break;
+        }
+
+        Sample.CurrentAreaKm2 = CurrentArea;
+
+        if (Terrane.AreaKm2 > KINDA_SMALL_NUMBER)
+        {
+            const double DriftPercent = ((CurrentArea - Terrane.AreaKm2) / Terrane.AreaKm2) * 100.0;
+            Sample.DriftPercent = DriftPercent;
+            const double AbsDrift = FMath::Abs(DriftPercent);
+            AccumulatedAbsDrift += AbsDrift;
+            AccumulatedAbsDriftSq += AbsDrift * AbsDrift;
+            MaxAbsDrift = FMath::Max(MaxAbsDrift, AbsDrift);
+        }
+        else
+        {
+            Sample.DriftPercent = 0.0;
+        }
+
+        Snapshot.TerraneSamples.Add(Sample);
+        ++TerraneSampleCount;
+    }
+
+    if (TerraneSampleCount > 0)
+    {
+        Snapshot.TerraneMeanDriftPercent = AccumulatedAbsDrift / static_cast<double>(TerraneSampleCount);
+        Snapshot.TerraneMaxDriftPercent = MaxAbsDrift;
+        Snapshot.TerraneRmsDriftPercent = FMath::Sqrt(AccumulatedAbsDriftSq / static_cast<double>(TerraneSampleCount));
+    }
+
+    const FString MetricsDir = FPaths::ProjectSavedDir() / TEXT("Metrics");
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (!PlatformFile.DirectoryExists(*MetricsDir))
+    {
+        PlatformFile.CreateDirectoryTree(*MetricsDir);
+    }
+
+    const FString TimestampString = NowUtc.ToString(TEXT("%Y%m%d_%H%M%S"));
+    const FString TimestampedPath = MetricsDir / FString::Printf(TEXT("heightmap_export_metrics_%s.csv"), *TimestampString);
+    const FString LatestPath = MetricsDir / TEXT("heightmap_export_metrics.csv");
+    Snapshot.TimestampedFilePath = TimestampedPath;
+    Snapshot.LatestFilePath = LatestPath;
+
+    auto TerraneStateToString = [](ETerraneState State) -> const TCHAR*
+    {
+        switch (State)
+        {
+        case ETerraneState::Attached:     return TEXT("Attached");
+        case ETerraneState::Extracted:    return TEXT("Extracted");
+        case ETerraneState::Transporting: return TEXT("Transporting");
+        case ETerraneState::Colliding:    return TEXT("Colliding");
+        default:                          return TEXT("Unknown");
+        }
+    };
+
+    TArray<FString> CSVLines;
+    CSVLines.Reserve(HypsometricBinCount + VelocityBinCount + Snapshot.TerraneSamples.Num() + 48);
+    CSVLines.Add(TEXT("# Planetary Creation Quantitative Metrics v1.0"));
+    CSVLines.Add(FString::Printf(TEXT("# TimestampUTC=%s"), *Snapshot.TimestampUTC));
+    CSVLines.Add(FString::Printf(TEXT("# SimulationTime_My=%.2f"), Snapshot.SimulationTimeMy));
+    CSVLines.Add(FString::Printf(TEXT("# VertexCount=%d"), VertexCount));
+    CSVLines.Add(FString::Printf(TEXT("# PlanetRadius_m=%.2f"), Parameters.PlanetRadius));
+    CSVLines.Add(TEXT(""));
+    CSVLines.Add(TEXT("[HypsometricCurve]"));
+    CSVLines.Add(TEXT("Bin,MinElevation_m,MaxElevation_m,Count,Percent"));
+
+    for (const FHypsometricBinMetrics& BinMetrics : Snapshot.HypsometricBins)
+    {
+        CSVLines.Add(FString::Printf(TEXT("%d,%.6f,%.6f,%d,%.6f"),
+            BinMetrics.BinIndex,
+            BinMetrics.MinElevationMeters,
+            BinMetrics.MaxElevationMeters,
+            BinMetrics.Count,
+            BinMetrics.Percentage));
+    }
+
+    CSVLines.Add(TEXT(""));
+    CSVLines.Add(TEXT("[PlateVelocityHistogram_cm_per_year]"));
+    CSVLines.Add(TEXT("Bin,MinSpeed_cm_per_year,MaxSpeed_cm_per_year,Count,Percent"));
+
+    for (const FVelocityHistogramBin& BinMetrics : Snapshot.VelocityHistogram)
+    {
+        CSVLines.Add(FString::Printf(TEXT("%d,%.6f,%.6f,%d,%.6f"),
+            BinMetrics.BinIndex,
+            BinMetrics.MinSpeedCmPerYear,
+            BinMetrics.MaxSpeedCmPerYear,
+            BinMetrics.Count,
+            BinMetrics.Percentage));
+    }
+
+    CSVLines.Add(TEXT(""));
+    CSVLines.Add(TEXT("[RidgeTrenchLengths_km]"));
+    CSVLines.Add(TEXT("Metric,Value"));
+    CSVLines.Add(FString::Printf(TEXT("TotalRidgeLength_km,%.6f"), Snapshot.RidgeTrench.DivergentLengthKm));
+    CSVLines.Add(FString::Printf(TEXT("TotalTrenchLength_km,%.6f"), Snapshot.RidgeTrench.ConvergentLengthKm));
+    CSVLines.Add(FString::Printf(TEXT("TotalTransformLength_km,%.6f"), Snapshot.RidgeTrench.TransformLengthKm));
+    CSVLines.Add(FString::Printf(TEXT("RidgeToTrenchRatio,%.6f"), Snapshot.RidgeTrench.RidgeToTrenchRatio));
+
+    CSVLines.Add(TEXT(""));
+    CSVLines.Add(TEXT("[TerraneAreaPreservation]"));
+    CSVLines.Add(TEXT("TerraneID,State,OriginalArea_km2,CurrentArea_km2,DriftPercent"));
+
+    for (const FTerraneAreaDriftSample& Sample : Snapshot.TerraneSamples)
+    {
+        CSVLines.Add(FString::Printf(TEXT("%d,%s,%.6f,%.6f,%.6f"),
+            Sample.TerraneID,
+            TerraneStateToString(Sample.State),
+            Sample.OriginalAreaKm2,
+            Sample.CurrentAreaKm2,
+            Sample.DriftPercent));
+    }
+
+    CSVLines.Add(TEXT(""));
+    CSVLines.Add(TEXT("[TerraneAreaSummary]"));
+    CSVLines.Add(TEXT("Metric,Value"));
+    CSVLines.Add(FString::Printf(TEXT("MeanAbsDriftPercent,%.6f"), Snapshot.TerraneMeanDriftPercent));
+    CSVLines.Add(FString::Printf(TEXT("MaxAbsDriftPercent,%.6f"), Snapshot.TerraneMaxDriftPercent));
+    CSVLines.Add(FString::Printf(TEXT("RmsAbsDriftPercent,%.6f"), Snapshot.TerraneRmsDriftPercent));
+    CSVLines.Add(FString::Printf(TEXT("SampleCount,%d"), Snapshot.TerraneSamples.Num()));
+
+    const FString CSVContent = FString::Join(CSVLines, TEXT("\n"));
+
+    const bool bTimestampedSaved = FFileHelper::SaveStringToFile(CSVContent, *Snapshot.TimestampedFilePath);
+    const bool bLatestSaved = FFileHelper::SaveStringToFile(CSVContent, *Snapshot.LatestFilePath);
+
+    if (!bTimestampedSaved)
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("ExportQuantitativeMetrics: Failed to write %s"), *Snapshot.TimestampedFilePath);
+    }
+    if (!bLatestSaved)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("ExportQuantitativeMetrics: Failed to update latest snapshot at %s"), *Snapshot.LatestFilePath);
+    }
+
+    Snapshot.bValid = bTimestampedSaved;
+
+    if (Snapshot.bValid)
+    {
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("Exported quantitative metrics to %s"), *Snapshot.TimestampedFilePath);
+    }
+
+    LastQuantitativeMetrics = MoveTemp(Snapshot);
+}
+
 // Milestone 3 Task 1.1: Generate high-density render mesh
 void UTectonicSimulationService::GenerateRenderMesh()
 {
@@ -7357,6 +7788,56 @@ void UTectonicSimulationService::ForceStageBAmplificationRebuild(const TCHAR* Co
     const TCHAR* LocalContext = (Context && *Context) ? Context : TEXT("ForceStageBAmplificationRebuild");
     SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ExternalReset, LocalContext);
     RebuildStageBForCurrentLOD();
+}
+
+void UTectonicSimulationService::LogStageBRescueSummary(const PlanetaryCreation::StageB::FStageBRescueSummary& Summary)
+{
+    if (Summary.TotalPixels == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB][RescueSummary] Skipping log: no pixels recorded"));
+        return;
+    }
+
+    const double CoveragePercent = static_cast<double>(Summary.FinalHits) / static_cast<double>(Summary.TotalPixels) * 100.0;
+    const double MissPercent = static_cast<double>(Summary.FinalMisses) / static_cast<double>(Summary.TotalPixels) * 100.0;
+
+    const TCHAR* ReadyStartLabel = PlanetaryCreation::StageB::GetReadyReasonLabel(Summary.ReadyReasonAtStart);
+    const TCHAR* ReadyFinishLabel = PlanetaryCreation::StageB::GetReadyReasonLabel(Summary.ReadyReasonAtFinish);
+    const TCHAR* ReadyFinishDesc = PlanetaryCreation::StageB::GetReadyReasonDescription(Summary.ReadyReasonAtFinish);
+
+    UE_LOG(LogPlanetaryCreation, Log,
+        TEXT("[StageB][RescueSummary] StartReady=%d (%s) FinishReady=%d (%s:%s) RescueAttempted=%d RescueSucceeded=%d AmplifiedUsed=%d SnapshotFloat=%d StageSerial=%llu Image=%dx%d Pixels=%llu Coverage=%.3f%% Miss=%.3f%% FallbackAttempts=%llu Success=%llu Fail=%llu ExpandedSuccess=%llu ExpandedAttempts=%llu "
+             "Modes[Sanitized=%llu Direct=%llu Expanded=%llu Wrapped=%llu Hint=%llu RowReuse=%llu] RidgeFallbacks[Dirty=%d Gradient=%d Plate=%d Motion=%d]"),
+        Summary.bStageBReadyAtStart ? 1 : 0,
+        ReadyStartLabel,
+        Summary.bStageBReadyAtFinish ? 1 : 0,
+        ReadyFinishLabel,
+        ReadyFinishDesc,
+        Summary.bRescueAttempted ? 1 : 0,
+        Summary.bRescueSucceeded ? 1 : 0,
+        Summary.bUsedAmplifiedData ? 1 : 0,
+        Summary.bUsedSnapshotFloatBuffer ? 1 : 0,
+        static_cast<unsigned long long>(StagePipelineStepSerial),
+        Summary.ImageWidth,
+        Summary.ImageHeight,
+        static_cast<unsigned long long>(Summary.TotalPixels),
+        CoveragePercent,
+        MissPercent,
+        Summary.FallbackAttempts,
+        Summary.FallbackSuccesses,
+        Summary.FallbackFailures,
+        Summary.ExpandedSuccesses,
+        Summary.ExpandedAttempts,
+        Summary.SanitizedFallbacks,
+        Summary.DirectNudgeFallbacks,
+        Summary.ExpandedFallbacks,
+        Summary.WrappedFallbacks,
+        Summary.HintFallbacks,
+        Summary.RowReuseFallbacks,
+        LastRidgeDirtyVertexCount,
+        LastRidgeGradientFallbackCount,
+        LastRidgePlateFallbackCount,
+        LastRidgeMotionFallbackCount);
 }
 
 void UTectonicSimulationService::DiscardOutdatedStageBGPUJobs(int32 ExpectedVertexCount)

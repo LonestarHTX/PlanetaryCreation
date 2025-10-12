@@ -89,5 +89,38 @@ namespace StageB
 
         return FVector2d(U, V);
     }
+
+    struct FStageBRescueSummary
+    {
+        int32 ImageWidth = 0;
+        int32 ImageHeight = 0;
+        uint64 TotalPixels = 0;
+        uint64 FinalHits = 0;
+        uint64 FinalMisses = 0;
+
+        uint64 FallbackAttempts = 0;
+        uint64 FallbackSuccesses = 0;
+        uint64 FallbackFailures = 0;
+
+        uint64 ExpandedAttempts = 0;
+        uint64 ExpandedSuccesses = 0;
+
+        uint64 SanitizedFallbacks = 0;
+        uint64 DirectNudgeFallbacks = 0;
+        uint64 ExpandedFallbacks = 0;
+        uint64 WrappedFallbacks = 0;
+        uint64 HintFallbacks = 0;
+        uint64 RowReuseFallbacks = 0;
+
+        bool bStageBReadyAtStart = false;
+        bool bStageBReadyAtFinish = false;
+        bool bUsedAmplifiedData = false;
+        bool bRescueAttempted = false;
+        bool bRescueSucceeded = false;
+        bool bUsedSnapshotFloatBuffer = false;
+
+        EStageBAmplificationReadyReason ReadyReasonAtStart = EStageBAmplificationReadyReason::None;
+        EStageBAmplificationReadyReason ReadyReasonAtFinish = EStageBAmplificationReadyReason::None;
+    };
 } // namespace StageB
 } // namespace PlanetaryCreation

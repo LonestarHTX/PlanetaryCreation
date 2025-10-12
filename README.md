@@ -91,7 +91,7 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectoni
 ## Automation & Testing
 | Purpose | Command |
 | --- | --- |
-| Milestone 3 regression suite | `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 -ArchiveLogs` |
+| Milestone 3 regression + quantitative metrics (CSV in `Saved/Metrics`) | `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 -ArchiveLogs` |
 | Targeted automation (headless) | `"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" PlanetaryCreation.uproject -ExecCmds="Automation RunTests PlanetaryCreation" -TestExit="Automation Test Queue Empty" -unattended -nop4 -nosplash` |
 | GPU parity smoke | `Automation RunTests PlanetaryCreation.Milestone6.GPU` (from in-editor console or commandlet) |
 
@@ -158,4 +158,3 @@ Milestone retrospectives and detailed plans live in `Docs/Milestone*_Plan.md` / 
 - **Automated documentation:** Maintained alongside milestone completion artifacts.
 
 For project coordination, reference `Docs/PlanningAgentPlan.md` and associated milestone documents. Issues, PRs, and feature ideas should link the relevant milestone scope and include validation steps (editor launch, automation suites, perf captures).
-

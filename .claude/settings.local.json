@@ -71,7 +71,9 @@
       "Bash(cmd.exe /c 'powershell.exe -ExecutionPolicy Bypass -File \"\"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\Scripts\\RunStageBHeartbeat.ps1\"\" -ThrottleMs 50')",
       "Bash(cmd.exe /c '\"\"C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\Scripts\\RunStageBHeartbeat.cmd\"\"')",
       "Bash(cmd.exe:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(xxd:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

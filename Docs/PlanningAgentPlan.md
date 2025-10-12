@@ -17,6 +17,13 @@
 - **Hydraulic erosion temporarily disabled:** As part of `STG-04`, gate post-amplification erosion off until Stage B alignment stabilises. Re-enable with conservative parameters in `STG-08`.
 - **Inline validation expectations:** `STG-05‒07` each ship with logging/PNG artifacts (ridge tangent population %, fold classification counts, Day 5 export) so issues surface immediately instead of waiting for QLT automation.
 - **VIS tasks are parallel polish:** Palette/API/doc work now lives in Phase 4 (Day 7+) and must not block shape or sampler delivery. Treat existing palette refactor as complete but defer additional VIS scope until critical path is green.
+- **Update 2025-10-12:** Phase 3 (Validation) is complete — `Scripts/RunMilestone3Tests.ps1 -ArchiveLogs` now drives the tiled exporter harness plus quantitative metrics CSV mirroring (see `Docs/Validation/README.md`). Phase 4 (Documentation) prep can start; keep USD `plugInfo.json` warnings on the known-noise list while suppression options are evaluated. Stage B rescue telemetry is green (zero `Fail` counts in `[StageB][RescueSummary]`) and ready to document for QLT handoff.
+
+### Phase 4 Documentation Checklist (2025-10-13)
+- Capture the Stage B rescue telemetry primer (`[StageB][RescueSummary]` fields, zero-fail expectation, row-reuse guidance) inside `Docs/heightmap_export_review.md` so QLT has a single citation.
+- Document supervised export helpers (`Scripts/ExportHeightmap1024.py`, `Scripts/ExportHeightmap4096Force.py`) in `Docs/Validation/README.md`, including the `UnrealEditor-Cmd.exe -ExecutePythonScript` invocations and their `r.PlanetaryCreation.AllowUnsafeHeightmapExport` toggles.
+- Record canonical log paths for the 1024×512 and 4096×2048 supervised runs (`Saved/Logs/PlanetaryCreation-backup-2025.10.12-20.32.15.log`, `Saved/Logs/PlanetaryCreation-backup-2025.10.12-20.40.33.log`) plus any follow-on captures.
+- Reiterate known-noise handling (USD warnings, `[HeightmapExport][PerformanceBudgetExceeded]` advisories) across the planning and validation docs before closing Phase 4.
 
 ## Milestone Timeline
 
