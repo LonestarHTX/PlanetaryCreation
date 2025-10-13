@@ -642,6 +642,15 @@ TSharedRef<SWidget> SPTectonicToolPanel::BuildStageBSection()
         .Padding(0.0f, 6.0f, 0.0f, 2.0f)
         [
             SNew(SButton)
+            .Text(NSLOCTEXT("PlanetaryCreation", "PaperReadyButtonLabel", "Paper Ready"))
+            .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PaperReadyButtonTooltip", "Apply the paper-authentic configuration, re-enable erosion/dampening, warm Stage B, and prep the editor for parity checks."))
+            .OnClicked(this, &SPTectonicToolPanel::HandlePaperReadyClicked)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 2.0f, 0.0f, 2.0f)
+        [
+            SNew(SButton)
             .Text(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonLabel", "Prime GPU Stage B"))
             .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonTooltip", "Enable both Stage B passes, keep CPU fallbacks active, and switch the GPU path on in one click (resets simulation if Stage B settings change)."))
             .OnClicked(this, &SPTectonicToolPanel::HandlePrimeGPUStageBClicked)
@@ -1497,6 +1506,90 @@ void SPTectonicToolPanel::ApplySurfaceProcessMutation(TFunctionRef<bool(FTectoni
             UE_LOG(LogPlanetaryCreation, Log, TEXT("%s toggled, simulation reset."), ChangeLabel);
         }
     }
+}
+
+FReply SPTectonicToolPanel::HandlePaperReadyClicked()
+{
+    const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin();
+    if (!Controller)
+    {
+        return FReply::Handled();
+    }
+
+    if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+    {
+        // Target the published paper defaults for deterministic captures.
+        FTectonicSimulationParameters Params = Service->GetParameters();
+
+        const int32 PaperSeed = 42;
+        Params.Seed = PaperSeed;
+        CachedSeed = PaperSeed;
+
+        Params.MinAmplificationLOD = FMath::Max(Params.MinAmplificationLOD, 5);
+        Params.RenderSubdivisionLevel = FMath::Max(Params.MinAmplificationLOD, 5);
+        Params.bEnableAutomaticLOD = false;
+        Params.bEnableOceanicAmplification = true;
+        Params.bEnableContinentalAmplification = true;
+        Params.bEnableHydraulicErosion = true;
+        Params.bEnableContinentalErosion = true;
+        Params.bEnableSedimentTransport = true;
+        Params.bEnableOceanicDampening = true;
+        Params.bSkipCPUAmplification = true;
+        Params.VisualizationMode = ETectonicVisualizationMode::Amplified;
+
+        CachedSubdivisionLevel = Params.SubdivisionLevel;
+
+        // Ensure runtime CVars mirror the preset expectations.
+        if (IConsoleVariable* PaperDefaultsVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.PaperDefaults")))
+        {
+            PaperDefaultsVar->Set(1, ECVF_SetByCode);
+        }
+        if (IConsoleVariable* UseGPUVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.UseGPUAmplification")))
+        {
+            UseGPUVar->Set(1, ECVF_SetByCode);
+        }
+        if (IConsoleVariable* StageBProfilingVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.StageBProfiling")))
+        {
+            StageBProfilingVar->Set(1, ECVF_SetByCode);
+        }
+
+        // Clear the STG-04 latch so erosion and dampening can execute.
+        Service->SetForceHydraulicErosionDisabled(false);
+
+#if UE_BUILD_DEVELOPMENT
+        Service->SetForceStageBGPUReplayForTests(false);
+#endif
+
+        Service->SetParameters(Params);
+
+        // Keep the preview visuals aligned with the preset.
+        Controller->SetPBRShadingEnabled(true);
+        Controller->SetGPUPreviewMode(true);
+
+        // Force Stage B to rebuild and wait for GPU readbacks so readiness flips green.
+        Service->ForceStageBAmplificationRebuild(TEXT("PaperReadyPreset"));
+        Service->ProcessPendingOceanicGPUReadbacks(true, nullptr);
+        Service->ProcessPendingContinentalGPUReadbacks(true, nullptr);
+
+        if (!Service->IsStageBAmplificationReady())
+        {
+            Service->AdvanceSteps(1);
+            Service->ProcessPendingOceanicGPUReadbacks(true, nullptr);
+            Service->ProcessPendingContinentalGPUReadbacks(true, nullptr);
+        }
+
+        Controller->RebuildPreview();
+        RefreshStageBReadinessFromService();
+        RefreshCachedPaletteMode();
+
+        const bool bStageBReady = Service->IsStageBAmplificationReady();
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[PaperReady] Applied (Seed=%d RenderLOD=%d StageBReady=%s)"),
+            Params.Seed,
+            Params.RenderSubdivisionLevel,
+            bStageBReady ? TEXT("true") : TEXT("false"));
+    }
+
+    return FReply::Handled();
 }
 
 FReply SPTectonicToolPanel::HandlePrimeGPUStageBClicked()

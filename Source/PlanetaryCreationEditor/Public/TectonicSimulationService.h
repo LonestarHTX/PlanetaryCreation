@@ -1198,6 +1198,8 @@ public:
     /** Skip CPU Stage B amplification passes when GPU preview handles displacement. */
     void SetSkipCPUAmplification(bool bInSkip);
     bool IsSkippingCPUAmplification() const { return Parameters.bSkipCPUAmplification; }
+    void SetForceHydraulicErosionDisabled(bool bDisabled);
+    bool IsForceHydraulicErosionDisabled() const { return bForceHydraulicErosionDisabled; }
 
     /** Accessor for vertex-to-plate assignments (Milestone 3 Phase 2). */
     const TArray<int32>& GetVertexPlateAssignments() const { return VertexPlateAssignments; }

@@ -1946,6 +1946,31 @@ void UTectonicSimulationService::SetSkipCPUAmplification(bool bInSkip)
     SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ParametersDirty, TEXT("SetSkipCPUAmplification"));
 }
 
+void UTectonicSimulationService::SetForceHydraulicErosionDisabled(bool bDisabled)
+{
+    if (bForceHydraulicErosionDisabled == bDisabled)
+    {
+        return;
+    }
+
+    bForceHydraulicErosionDisabled = bDisabled;
+    if (!bDisabled)
+    {
+        bLoggedHydraulicDisableNotice = false;
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB][Plan] Hydraulic erosion latch cleared; surface processes re-enabled."));
+    }
+    else
+    {
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB][Plan] Hydraulic erosion latch engaged (surface processes disabled)."));
+        Parameters.bEnableHydraulicErosion = false;
+        Parameters.bEnableContinentalErosion = false;
+        Parameters.bEnableSedimentTransport = false;
+        Parameters.bEnableOceanicDampening = false;
+    }
+
+    SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::ParametersDirty, TEXT("SetForceHydraulicErosionDisabled"));
+}
+
 void UTectonicSimulationService::SetParameters(const FTectonicSimulationParameters& NewParams)
 {
     if (Parameters.VisualizationMode != NewParams.VisualizationMode)
