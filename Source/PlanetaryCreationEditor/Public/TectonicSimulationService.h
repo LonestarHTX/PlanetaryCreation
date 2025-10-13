@@ -5,12 +5,14 @@
 #include "StageBAmplificationTypes.h"
 #include "Subsystems/UnrealEditorSubsystem.h"
 #include "Containers/BitArray.h"
+#include "VectorTypes.h"
+#include "RHIGPUReadback.h"
 #include "TectonicSimulationService.generated.h"
 
 namespace PlanetaryCreation::GPU
 {
-    bool ApplyOceanicAmplificationGPU(class UTectonicSimulationService& Service);
-    bool ApplyContinentalAmplificationGPU(class UTectonicSimulationService& Service);
+    struct FStageBUnifiedDispatchResult;
+    bool ApplyStageBUnifiedGPU(class UTectonicSimulationService& Service, bool bDispatchOceanic, bool bDispatchContinental, FStageBUnifiedDispatchResult& OutResult);
 }
 
 UENUM(BlueprintType)
@@ -195,6 +197,7 @@ struct FContinentalAmplificationGPUInputs
     TArray<FVector4f> ExemplarWeights;
     TArray<FVector2f> RandomUVOffsets;
     TArray<FVector2f> WrappedUVs;
+    TArray<FVector4f> SampleHeights;
     uint64 CachedDataSerial = 0;
     int32 CachedTopologyVersion = INDEX_NONE;
     int32 CachedSurfaceVersion = INDEX_NONE;
@@ -530,6 +533,9 @@ struct FTerraneVertexRecord
 
     UPROPERTY()
     FVector3d RidgeDirection = FVector3d::ZeroVector;
+
+    UPROPERTY()
+    FVector3f RidgeTangent = FVector3f::ZeroVector;
 
     UPROPERTY()
     double Stress = 0.0;
@@ -1152,6 +1158,8 @@ class UTectonicSimulationService : public UUnrealEditorSubsystem
     GENERATED_BODY()
 
 public:
+    friend bool PlanetaryCreation::GPU::ApplyStageBUnifiedGPU(UTectonicSimulationService& Service, bool bDispatchOceanic, bool bDispatchContinental, PlanetaryCreation::GPU::FStageBUnifiedDispatchResult& OutResult);
+
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
 
@@ -1248,6 +1256,7 @@ public:
 
     /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
     const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
+    const TArray<FVector3f>& GetVertexRidgeTangents() const { return VertexRidgeTangents; }
     int32 GetLastRidgeDirectionUpdateCount() const { return LastRidgeDirectionUpdateCount; }
     int32 GetLastRidgeDirtyVertexCount() const { return LastRidgeDirtyVertexCount; }
     int32 GetLastRidgeCacheHitCount() const { return LastRidgeCacheHitCount; }
@@ -1259,9 +1268,15 @@ public:
     int32 GetLastRidgeOceanicVertexCount() const { return LastRidgeOceanicVertexCount; }
     int32 GetLastRidgeValidTangentCount() const { return LastRidgeValidTangentCount; }
     double GetLastRidgeTangentCoveragePercent() const { return LastRidgeTangentCoveragePercent; }
+    double GetLastRidgeCacheHitPercent() const { return LastRidgeCacheHitPercent; }
+    double GetLastRidgeGradientFallbackPercent() const { return LastRidgeGradientFallbackPercent; }
+    double GetLastRidgeMotionFallbackPercent() const { return LastRidgeMotionFallbackPercent; }
+    const FString& GetLastRidgeInvalidateContext() const { return LastRidgeInvalidateContext; }
+    bool WasLastRidgeInvalidationFullReset() const { return bLastRidgeInvalidateWasFull; }
     int32 GetLastOceanicBaselineReuseCount() const { return LastOceanicBaselineReuseCount; }
     int32 GetLastOceanicMaskMismatchCount() const { return LastOceanicMaskMismatchCount; }
     bool WasOceanicCpuFallbackForcedLastStep() const { return bLastOceanicForcedCpuFallback; }
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters GetStageBUnifiedParameters() const;
     const TArray<FRenderVertexBoundaryInfo>& GetRenderVertexBoundaryCache() const { return RenderVertexBoundaryCache; }
 
     /** Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification. */
@@ -1317,8 +1332,7 @@ public:
     void SetRenderSubdivisionLevel(int32 NewLevel);
 
     bool ShouldUseGPUAmplification() const;
-    bool ApplyOceanicAmplificationGPU();
-    bool ApplyContinentalAmplificationGPU();
+    bool ApplyStageBUnifiedGPU(bool bRunOceanic, bool bRunContinental, PlanetaryCreation::GPU::FStageBUnifiedDispatchResult& OutResult);
     bool ShouldUseGPUHydraulic() const;
     bool ApplyHydraulicErosionGPU(double DeltaTimeMy);
     bool IsStagePipelineStageBComplete() const;
@@ -1599,7 +1613,11 @@ public:
 #if UE_BUILD_DEVELOPMENT
     void ForceContinentalSnapshotSerialDrift();
     void ResetAmplifiedElevationForTests();
+    void SetForceStageBGPUReplayForTests(bool bEnabled);
+    bool GetForceStageBGPUReplayForTests() const { return bForceStageBGPUReplayForTests; }
 #endif
+    void SetStageBUnifiedDebugVertexIndex(int32 VertexIndex);
+    int32 GetStageBUnifiedDebugVertexIndex() const;
 
     /** Pump pending GPU readbacks; optionally block until all are ready. */
     void ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
@@ -1609,8 +1627,13 @@ public:
     uint64 GetOceanicAmplificationDataSerial() const { return OceanicAmplificationDataSerial; }
 
 #if WITH_EDITOR
-    void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount, FOceanicAmplificationSnapshot&& Snapshot);
-    void EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount, FContinentalAmplificationSnapshot&& Snapshot);
+    void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback, int32 VertexCount, FOceanicAmplificationSnapshot&& Snapshot, int32 DebugVertexIndex);
+    void EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback,
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback,
+        int32 VertexCount,
+        int32 WorkCount,
+        TSharedPtr<TArray<uint32>, ESPMode::ThreadSafe> WorkIndices,
+        FContinentalAmplificationSnapshot&& Snapshot);
 #endif
 
     /**
@@ -1680,7 +1703,7 @@ private:
     void SubdivideIcosphere(int32 SubdivisionLevel);
 
     /** Milestone 3 Task 1.1: Generate high-density render mesh from base icosphere. */
-    void GenerateRenderMesh();
+    void GenerateRenderMesh(const TCHAR* RidgeInvalidateContext = TEXT("GenerateRenderMesh"));
 
     /** Milestone 3 Task 1.1 helper: Subdivide a triangle by splitting edges. */
     int32 GetMidpointIndex(int32 V0, int32 V1, TMap<TPair<int32, int32>, int32>& MidpointCache, TArray<FVector3d>& Vertices);
@@ -1765,6 +1788,9 @@ private:
 
     /** Milestone 6 Task 2.1: Compute ridge directions for all oceanic vertices. */
     void ComputeRidgeDirections();
+    void RecordRidgeCacheInvalidation(const TCHAR* Context, bool bFullReset, int32 DirtyCount, const TCHAR* Details = nullptr);
+    void RecordRidgeTerraneEvent(const TCHAR* Phase, int32 TerraneID, int32 VertexCountBefore, int32 VertexCountAfter);
+    void OnExemplarAtlasLoaded(uint64 AtlasFingerprint, const TCHAR* Context);
     /** Milestone 6 Task 2.1: Recompute ridge directions if dirty or topology changed. Returns true when recomputed. */
     bool RefreshRidgeDirectionsIfNeeded();
 
@@ -1919,6 +1945,8 @@ public:
     void SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure = false, const FString& InOverrideOutputDirectory = FString());
 
     void ForceRidgeRecomputeForTest() { ComputeRidgeDirections(); }
+    void ForceRidgeRingDirtyForTest(const TArray<int32>& SeedVertices, int32 RingDepth);
+    void SetVertexCrustAgeForTest(int32 VertexIdx, double Age);
     int32 GetPendingOceanicGPUJobCount() const;
     const TArray<FContinentalBlendCache>& GetContinentalAmplificationBlendCacheForTests() const { return ContinentalAmplificationBlendCache; }
 
@@ -1939,6 +1967,9 @@ private:
     mutable FContinentalCacheProfileMetrics LastContinentalCacheProfileMetrics;
     mutable double LastContinentalCacheBuildSeconds = 0.0;
     bool bContinentalGPUResultWasApplied = false;
+#if UE_BUILD_DEVELOPMENT
+    bool bForceStageBGPUReplayForTests = false;
+#endif
     mutable FRidgeDirectionFloatSoA RidgeDirectionFloatSoA;
     mutable TMap<int32, FPlateBoundarySummary> PlateBoundarySummaries;
     mutable int32 PlateBoundarySummaryTopologyVersion = INDEX_NONE;
@@ -1981,19 +2012,38 @@ private:
     bool bForceHydraulicErosionDisabled = true;
     bool bLoggedHydraulicDisableNotice = false;
     bool bStageBValidationPlanLogged = false;
+    FString LastRidgeInvalidateContext = TEXT("Init");
+    bool bLastRidgeInvalidateWasFull = true;
+    int32 LastRidgeInvalidateVertexEstimate = 0;
+    double LastRidgeCacheHitPercent = 100.0;
+    double LastRidgeGradientFallbackPercent = 0.0;
+    double LastRidgeMotionFallbackPercent = 0.0;
+    bool bLastRidgeCacheHealthOk = true;
+    uint64 LastExemplarAtlasFingerprint = 0;
+#if UE_BUILD_DEVELOPMENT
+    int32 StageBUnifiedDebugVertexIndex = 23949;
+#endif
 
 #if WITH_EDITOR
     struct FOceanicGPUAsyncJob
     {
         TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback;
+        TSharedPtr<FRHIGPUTextureReadback, ESPMode::ThreadSafe> TextureReadback;
         FRenderCommandFence DispatchFence;
         FRenderCommandFence CopyFence;
         int32 NumBytes = 0;
+        int32 DebugNumBytes = 0;
         int32 VertexCount = 0;
         uint64 JobId = 0;
         bool bCopySubmitted = false;
         bool bCpuReplayApplied = false;
         FOceanicAmplificationSnapshot Snapshot;
+        int32 DebugVertexIndex = INDEX_NONE;
+#if UE_BUILD_DEVELOPMENT
+        FVector4f DebugMetrics = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+        bool bDebugMetricsValid = false;
+#endif
     };
 
     TArray<FOceanicGPUAsyncJob> PendingOceanicGPUJobs;
@@ -2004,19 +2054,30 @@ private:
     struct FContinentalGPUAsyncJob
     {
         TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback;
+        TSharedPtr<FRHIGPUTextureReadback, ESPMode::ThreadSafe> TextureReadback;
         FRenderCommandFence DispatchFence;
         FRenderCommandFence CopyFence;
         int32 NumBytes = 0;
+        int32 DebugNumBytes = 0;
         int32 VertexCount = 0;
+        int32 WorkCount = 0;
         uint64 JobId = 0;
         bool bCopySubmitted = false;
         FContinentalAmplificationSnapshot Snapshot;
+        TSharedPtr<TArray<uint32>, ESPMode::ThreadSafe> WorkIndices;
+#if UE_BUILD_DEVELOPMENT
+        TArray<FVector4f> DebugData;
+        bool bDebugDataValid = false;
+        bool bTextureDataLogged = false;
+#endif
     };
 
     TArray<FContinentalGPUAsyncJob> PendingContinentalGPUJobs;
     uint64 NextContinentalGPUJobId = 1;
     TArray<TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>> ContinentalReadbackPool;
     int32 NextContinentalReadbackIndex = 0;
+    int32 PendingOceanicSerialBumps = 0;
 
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer();
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer();
@@ -2025,8 +2086,6 @@ private:
     bool IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
     bool IsContinentalReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
 
-    friend bool PlanetaryCreation::GPU::ApplyOceanicAmplificationGPU(UTectonicSimulationService& Service);
-    friend bool PlanetaryCreation::GPU::ApplyContinentalAmplificationGPU(UTectonicSimulationService& Service);
 #else
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer() { return nullptr; }
     TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer() { return nullptr; }

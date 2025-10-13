@@ -2,8 +2,51 @@ Michael — I pulled apart the exporter and sampler from your snapshot and focus
 
 ---
 
+### Phase 1.0 Profiling Baseline (2025‑10‑12)
+
+- Stage B was profiled at LOD 7 via `PlanetaryCreation.Milestone6.Perf.StageBSurfaceProcesses` with `r.PlanetaryCreation.StageBProfiling=1` and the safety throttle set to 50 ms. Hydraulic erosion remains disabled by the STG‑04 latch, while sediment diffusion and oceanic dampening execute on the CPU.
+- Command (run from WSL using the PowerShell wrapper):
+
+  ```powershell
+  powershell.exe -Command "& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' `
+    'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' `
+    -SetCVar='r.PlanetaryCreation.StageBProfiling=1,r.PlanetaryCreation.StageBThrottleMs=50,r.PlanetaryCreation.UseGPUAmplification=1,r.PlanetaryCreation.AllowGPUAutomation=1,r.PlanetaryCreation.EnableHydraulicErosion=1,r.PlanetaryCreation.EnableSedimentTransport=1,r.PlanetaryCreation.EnableOceanicDampening=1' `
+    -ExecCmds='Automation RunTests PlanetaryCreation.Milestone6.Perf.StageBSurfaceProcesses' `
+    -TestExit='Automation Test Queue Empty' `
+    '-trace=cpu,frame,counters,stats' `
+    '-tracefile=C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\Saved\Profiling\Phase1_StageB_LOD7.utrace' `
+    -statnamedevents -unattended -nop4 -nosplash -log"
+  ```
+
+- Hardware: AMD Ryzen 9 7950X (16C/32T, 4.5 GHz boost), NVIDIA GeForce RTX 3080 (driver 32.0.15.8142), 64 GB RAM, Windows 11 Pro 10.0.26100 (64‑bit).
+- Unreal Insights trace: `Docs/Validation/PerfCaptures/Phase1_LOD7_StageB_2025-10-12.utrace`
+
+| Step sample | Stage B total (ms) | Oceanic GPU (ms) | Continental GPU (ms) | Hydraulic (ms) | Sediment CPU (ms) | Dampening CPU (ms) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Warm-up (Step 1) | 43.69 | 10.51 | 29.25 | 0.00 *(latched off)* | 9.32 | 1.01 |
+| Steady state (Steps 5–8 avg) | 38.72 | 7.52 | 26.32 | 0.00 *(latched off)* | 11.41 | 1.25 |
+
+**Notes**
+- Oceanic and continental amplification are running entirely on the GPU fast path (CPU columns remain at 0 ms).
+- Hydraulic erosion is still suppressed by `bForceHydraulicErosionDisabled`; re-enabling it will be required before we can publish a complete Stage B + surface budget.
+- Sediment diffusion stabilises around 10–12 ms after the initial fill pass (Step 2 peaks at 23.85 ms while caches warm). Oceanic dampening holds at ~1.1–1.3 ms on the CPU.
+
+### Ridge Tangent Cache Lifecycle
+- Ridge fixture helpers now live in `Source/PlanetaryCreationEditor/Private/Tests/RidgeTestHelpers.{h,cpp}` (triple-junction selector + crust-age discontinuity pair). They back `PlanetaryCreation.StageB.RidgeTerraneCache`, which exercises extraction/reattachment with asserts on cache hit and fallback ceilings.
+- Milestone 3 harness (including the ridge lifecycle + terrane cache coverage assertions) executed via:
+
+  ```powershell
+  powershell.exe -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 -ArchiveLogs
+  ```
+
+  The 2025‑10‑12 rerun (`Saved/Logs/PlanetaryCreation.log`) confirms the cache thresholds:
+  - `[RidgeDiag] Summary: Dirty=2556 Oceanic=1782 CacheHits=1782 (100.0%) StoredReuse=1657 Missing=559 (31.4%) GradientFallback=0 (0.0%) MotionFallback=0 (0.0%)`
+  - `[RidgeDir][Terrane] Action=Extract Terrane=994958138 Coverage=100.00% Dirty=1782 CacheHits=1782` followed by `Action=Reattach … Coverage=100.00%`
+  - Test harness output archived in `Docs/Validation/heightmap_export_metrics_20251012_231808.csv` with the associated parity renders under `Docs/Validation/ParityFigures/`.
+- Pre/post ridge tangent heatmaps (`ridge_tangent_before_reattach.png`, `ridge_tangent_after_reattach.png`) remain in `Docs/Validation/ParityFigures/` for downstream parity checks.
+
 ## Phase Rollup
-- **Phase 3 – Validation:** Complete (2025-10-12). Milestone 3 harness runs via `Scripts/RunMilestone3Tests.ps1 -ArchiveLogs`, archives the quantitative metrics CSV, and confirmed tiled exporter parity for Phase 4 handoff.
+- **Phase 3 – Validation:** Complete (2025-10-12, re-verified 2025-10-13). Milestone 3 harness runs via `Scripts/RunMilestone3Tests.ps1 -ArchiveLogs`, archives the quantitative metrics CSV, and confirmed tiled exporter parity for Phase 4 handoff. The latest run (2025-10-13 22:04 UTC) incorporated the unified Stage B GPU parity fix — automation reported MaxΔ 0.003 m / MeanΔ 0.0002 m and refreshed `Docs/Validation/heightmap_export_metrics_*.csv`.
 - **Phase 4 – Documentation:** Ready to begin. Capture USD `LogUsd: Warning: Failed to parse plugInfo.json` as a tracked known warning and leave suppression work pending.
 
 ## Stage B Rescue Telemetry Quick Reference

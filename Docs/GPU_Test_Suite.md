@@ -73,7 +73,36 @@ Automation RunTests PlanetaryCreation.Milestone6.GPU.ContinentalParity
 
 ---
 
-### 3. **GPUAmplificationIntegrationTest.cpp** ✅ Ready to Run
+### 3. **StageBUnifiedGPUParityTest.cpp** ✅ Ready to Run
+
+**Category:** `PlanetaryCreation.StageB.UnifiedGPUParity`
+
+**Purpose:** End-to-end parity harness that runs the *exact* Stage B unified workflow used by the editor/exporter. The test seeds the continental exemplar cache once, forces the GPU path to apply readbacks during automation, and reports the worst delta along with packed exemplar metadata.
+
+**Test Flow:**
+1. Baseline run captures the CPU-only Stage B output at L6 (40,962 vertices).
+2. GPU run replays Stage B with `SetForceStageBGPUReplayForTests(true)` so GPU buffers are applied even inside automation (bypasses hash drift guards, dev-only).
+3. Metrics (vertex count, max delta, mean delta, offending vertex id/weights/heights) are logged and written to `Saved/Automation/UnifiedGPUParityMetrics.txt`.
+
+**Acceptance Criteria:**
+- ✅ `MaxDelta < 0.1 m`, `MeanDelta < 0.01 m`. Current baseline: **MaxΔ = 0.003 m**, **MeanΔ = 0.0002 m** (3 mm / 0.2 mm).
+- ✅ `[ContinentalGPU][DebugBlend]` output shows identical blended height/detail between CPU and GPU.
+- ✅ Dispatch stats indicate snapshot hits (`HashMatchCount > 0`) and no CPU fallback unless the cache is intentionally invalidated.
+
+**Enable Command:**
+```powershell
+powershell.exe -Command "& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' `
+  'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' `
+  -AllowGPUAutomation `
+  -ExecCmds='Automation RunTests PlanetaryCreation.StageB.UnifiedGPUParity' `
+  -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log"
+```
+
+> **Dev-Only Toggle:** `UTectonicSimulationService::SetForceStageBGPUReplayForTests(true)` is automatically set by the test to accept GPU readbacks during automation. Do **not** enable this in shipping code.
+
+---
+
+### 4. **GPUAmplificationIntegrationTest.cpp** ✅ Ready to Run
 
 **Category:** `PlanetaryCreation.Milestone6.GPU.IntegrationSmoke`
 
@@ -111,7 +140,7 @@ Automation RunTests PlanetaryCreation.Milestone6.GPU.IntegrationSmoke
 
 ---
 
-### 4. **ContinentalBlendCacheTest.cpp** ✅ Ready to Run
+### 5. **ContinentalBlendCacheTest.cpp** ✅ Ready to Run
 
 **Category:** `PlanetaryCreation.Milestone6.ContinentalBlendCache`
 
@@ -141,12 +170,13 @@ Automation RunTests PlanetaryCreation.Milestone6.ContinentalBlendCache
 # From Unreal Editor console
 Automation RunTests PlanetaryCreation.Milestone6.GPU
 Automation RunTests PlanetaryCreation.Milestone6.ContinentalBlendCache
+Automation RunTests PlanetaryCreation.StageB.UnifiedGPUParity
 
 # From command line
 "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
   "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
   -SetCVar="r.PlanetaryCreation.StageBProfiling=1" \
-  -ExecCmds="r.PlanetaryCreation.StageBProfiling 1; Automation RunTests PlanetaryCreation.Milestone6.GPU; Automation RunTests PlanetaryCreation.Milestone6.ContinentalBlendCache; Quit" \
+  -ExecCmds="r.PlanetaryCreation.StageBProfiling 1; Automation RunTests PlanetaryCreation.Milestone6.GPU; Automation RunTests PlanetaryCreation.Milestone6.ContinentalBlendCache; Automation RunTests PlanetaryCreation.StageB.UnifiedGPUParity; Quit" \
   -unattended -nop4 -nosplash
 ```
 

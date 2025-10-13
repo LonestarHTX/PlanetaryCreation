@@ -1,0 +1,502 @@
+#include "/Engine/Public/Platform.ush"
+#include "/Plugin/PlanetaryCreation/Private/TectonicCommon.ush"
+
+#ifndef PI
+#define PI 3.14159265358979323846f
+#endif
+
+static const int Permutation[512] = {
+    63, 9, 212, 205, 31, 128, 72, 59, 137, 203, 195, 170, 181, 115, 165, 40, 116, 139, 175, 225, 132, 99, 222, 2, 41, 15, 197, 93, 169, 90, 228, 43,
+    221, 38, 206, 204, 73, 17, 97, 10, 96, 47, 32, 138, 136, 30, 219, 78, 224, 13, 193, 88, 134, 211, 7, 112, 176, 19, 106, 83, 75, 217, 85,
+    0, 98, 140, 229, 80, 118, 151, 117, 251, 103, 242, 81, 238, 172, 82, 110, 4, 227, 77, 243, 46, 12, 189, 34, 188, 200, 161, 68, 76, 171, 194,
+    57, 48, 247, 233, 51, 105, 5, 23, 42, 50, 216, 45, 239, 148, 249, 84, 70, 125, 108, 241, 62, 66, 64, 240, 173, 185, 250, 49, 6, 37, 26, 21,
+    244, 60, 223, 255, 16, 145, 27, 109, 58, 102, 142, 253, 120, 149, 160, 124, 156, 79, 186, 135, 127, 14, 121, 22, 65, 54, 153, 91, 213, 174, 24,
+    252, 131, 192, 190, 202, 208, 35, 94, 231, 56, 95, 183, 163, 111, 147, 25, 67, 36, 92, 236, 71, 166, 1, 187, 100, 130, 143, 237, 178, 158, 104,
+    184, 159, 177, 52, 214, 230, 119, 87, 114, 201, 179, 198, 3, 248, 182, 39, 11, 152, 196, 113, 20, 232, 69, 141, 207, 234, 53, 86, 180, 226, 74,
+    150, 218, 29, 133, 8, 44, 123, 28, 146, 89, 101, 154, 220, 126, 155, 122, 210, 168, 254, 162, 129, 33, 18, 209, 61, 191, 199, 157, 245, 55, 164,
+    167, 215, 246, 144, 107, 235,
+
+    63, 9, 212, 205, 31, 128, 72, 59, 137, 203, 195, 170, 181, 115, 165, 40, 116, 139, 175, 225, 132, 99, 222, 2, 41, 15, 197, 93, 169, 90, 228, 43,
+    221, 38, 206, 204, 73, 17, 97, 10, 96, 47, 32, 138, 136, 30, 219, 78, 224, 13, 193, 88, 134, 211, 7, 112, 176, 19, 106, 83, 75, 217, 85,
+    0, 98, 140, 229, 80, 118, 151, 117, 251, 103, 242, 81, 238, 172, 82, 110, 4, 227, 77, 243, 46, 12, 189, 34, 188, 200, 161, 68, 76, 171, 194,
+    57, 48, 247, 233, 51, 105, 5, 23, 42, 50, 216, 45, 239, 148, 249, 84, 70, 125, 108, 241, 62, 66, 64, 240, 173, 185, 250, 49, 6, 37, 26, 21,
+    244, 60, 223, 255, 16, 145, 27, 109, 58, 102, 142, 253, 120, 149, 160, 124, 156, 79, 186, 135, 127, 14, 121, 22, 65, 54, 153, 91, 213, 174, 24,
+    252, 131, 192, 190, 202, 208, 35, 94, 231, 56, 95, 183, 163, 111, 147, 25, 67, 36, 92, 236, 71, 166, 1, 187, 100, 130, 143, 237, 178, 158, 104,
+    184, 159, 177, 52, 214, 230, 119, 87, 114, 201, 179, 198, 3, 248, 182, 39, 11, 152, 196, 113, 20, 232, 69, 141, 207, 234, 53, 86, 180, 226, 74,
+    150, 218, 29, 133, 8, 44, 123, 28, 146, 89, 101, 154, 220, 126, 155, 122, 210, 168, 254, 162, 129, 33, 18, 209, 61, 191, 199, 157, 245, 55, 164,
+    167, 215, 246, 144, 107, 235
+};
+
+int Perm(int Index)
+{
+    return Permutation[Index & 255];
+}
+
+float SmoothCurve(float X)
+{
+    return X * X * X * (X * (X * 6.0f - 15.0f) + 10.0f);
+}
+
+float Grad3(int Hash, float X, float Y, float Z)
+{
+    switch (Hash & 15)
+    {
+    case 0:  return X + Z;
+    case 1:  return X + Y;
+    case 2:  return Y + Z;
+    case 3:  return -X + Y;
+    case 4:  return -X + Z;
+    case 5:  return -X - Y;
+    case 6:  return -Y + Z;
+    case 7:  return X - Y;
+    case 8:  return X - Z;
+    case 9:  return Y - Z;
+    case 10: return -X - Z;
+    case 11: return -Y - Z;
+    case 12: return X + Y;
+    case 13: return -X + Y;
+    case 14: return -Y + Z;
+    case 15: return -Y - Z;
+    default: return 0.0f;
+    }
+}
+
+float PerlinNoise3D(float3 Position)
+{
+    float3 FloorPos = floor(Position);
+    int Xi = (int)FloorPos.x & 255;
+    int Yi = (int)FloorPos.y & 255;
+    int Zi = (int)FloorPos.z & 255;
+
+    float X = Position.x - FloorPos.x;
+    float Y = Position.y - FloorPos.y;
+    float Z = Position.z - FloorPos.z;
+
+    float Xm1 = X - 1.0f;
+    float Ym1 = Y - 1.0f;
+    float Zm1 = Z - 1.0f;
+
+    int A  = Perm(Xi) + Yi;
+    int AA = Perm(A) + Zi;
+    int AB = Perm(A + 1) + Zi;
+    int B  = Perm(Xi + 1) + Yi;
+    int BA = Perm(B) + Zi;
+    int BB = Perm(B + 1) + Zi;
+
+    float U = SmoothCurve(X);
+    float V = SmoothCurve(Y);
+    float W = SmoothCurve(Z);
+
+    float N000 = Grad3(Perm(AA),     X,   Y,   Z);
+    float N100 = Grad3(Perm(BA),   Xm1,   Y,   Z);
+    float N010 = Grad3(Perm(AB),     X, Ym1,   Z);
+    float N110 = Grad3(Perm(BB),   Xm1, Ym1,   Z);
+    float N001 = Grad3(Perm(AA + 1),   X,   Y, Zm1);
+    float N101 = Grad3(Perm(BA + 1), Xm1,   Y, Zm1);
+    float N011 = Grad3(Perm(AB + 1),   X, Ym1, Zm1);
+    float N111 = Grad3(Perm(BB + 1), Xm1, Ym1, Zm1);
+
+    float LerpX1 = lerp(N000, N100, U);
+    float LerpX2 = lerp(N010, N110, U);
+    float LerpX3 = lerp(N001, N101, U);
+    float LerpX4 = lerp(N011, N111, U);
+
+    float LerpY1 = lerp(LerpX1, LerpX2, V);
+    float LerpY2 = lerp(LerpX3, LerpX4, V);
+
+    float Result = lerp(LerpY1, LerpY2, W);
+    return clamp(Result * 0.97f, -1.0f, 1.0f);
+}
+
+float3 SafeNormalize(float3 V, float3 DefaultValue)
+{
+    const float LenSqr = dot(V, V);
+    if (LenSqr <= 1.0e-6f)
+    {
+        return DefaultValue;
+    }
+    return normalize(V);
+}
+
+float ComputeOceanicDisplacement(
+    float CrustAge,
+    float3 RidgeDir,
+    float3 Position,
+    float RidgeAmplitude,
+    float FaultFrequency,
+    float AgeFalloff,
+    float VarianceScale,
+    float ExtraVarianceAmplitude,
+    uint VertexIndex,
+    uint bWriteDebug,
+    uint DebugVertexIndex,
+    RWStructuredBuffer<float4> DebugOutput)
+{
+    float3 SafePosition = SafeNormalize(Position, float3(0.0f, 0.0f, 1.0f));
+    float3 SafeRidge = SafeNormalize(RidgeDir, float3(1.0f, 0.0f, 0.0f));
+
+    float3 FaultDir = normalize(cross(SafeRidge, SafePosition));
+    if (length(FaultDir) < 1.0e-5f)
+    {
+        FaultDir = normalize(cross(SafeRidge, float3(0.0f, 0.0f, 1.0f)));
+        if (length(FaultDir) < 1.0e-5f)
+        {
+            FaultDir = normalize(cross(SafeRidge, float3(0.0f, 1.0f, 0.0f)));
+        }
+    }
+
+    const float AgeFactor = (AgeFalloff > 0.0f) ? exp(-CrustAge * AgeFalloff) : 1.0f;
+    const float FaultAmplitude = RidgeAmplitude * AgeFactor;
+
+    const float3 SamplePoint1 = SafePosition * FaultFrequency;
+    const float3 SamplePoint2 = (SafePosition + FaultDir * 2.0f) * FaultFrequency;
+    const float Noise1 = PerlinNoise3D(SamplePoint1);
+    const float Noise2 = PerlinNoise3D(SamplePoint2);
+    const float NoiseValue = (abs(Noise1) > abs(Noise2)) ? Noise1 : Noise2;
+    const float SharpNoise = (NoiseValue == 0.0f) ? 0.0f : sign(NoiseValue) * pow(abs(NoiseValue), 0.6f);
+    const float GaborNoise = clamp(SharpNoise * 3.0f, -1.0f, 1.0f);
+    const float FaultDetail = FaultAmplitude * GaborNoise;
+
+    float GradientNoise = 0.0f;
+    float Frequency = 0.1f;
+    float Amplitude = 1.0f;
+    [unroll]
+    for (int Octave = 0; Octave < 4; ++Octave)
+    {
+        GradientNoise += PerlinNoise3D(SafePosition * Frequency) * Amplitude;
+        Frequency *= 2.0f;
+        Amplitude *= 0.5f;
+    }
+
+    const float FineDetail = 20.0f * GradientNoise;
+
+    float Displacement = FaultDetail + FineDetail;
+    Displacement *= VarianceScale;
+
+    const float3 ExtraNoiseOffset = float3(23.17f, 42.73f, 7.91f);
+    const float ExtraVarianceNoise = ExtraVarianceAmplitude * PerlinNoise3D(SafePosition * 8.0f + ExtraNoiseOffset);
+    Displacement += ExtraVarianceNoise;
+
+    if (bWriteDebug != 0 && VertexIndex == DebugVertexIndex)
+    {
+        DebugOutput[0] = float4(FaultDetail, FineDetail, ExtraVarianceNoise, Displacement);
+    }
+
+    return Displacement;
+}
+
+// ---------------------------------------------------------------------------
+// Oceanic kernel (compacted dispatch)
+// ---------------------------------------------------------------------------
+
+uint OceanicWorkCount;
+uint OceanicGroupCountX;
+uint OceanicGroupCountY;
+float OceanicRidgeAmplitude;
+float OceanicFaultFrequency;
+float OceanicAgeFalloff;
+float OceanicVarianceScale;
+float OceanicExtraVarianceAmplitude;
+uint bWriteDebug;
+uint DebugVertexIndex;
+StructuredBuffer<uint> OceanicWorkIndices;
+StructuredBuffer<float> OceanicBaseline;
+StructuredBuffer<float4> OceanicRidgeDirection;
+StructuredBuffer<float> OceanicCrustAge;
+StructuredBuffer<float3> OceanicRenderPosition;
+RWStructuredBuffer<float4> OceanicDebugOutput;
+RWStructuredBuffer<float> OceanicOutAmplified;
+
+[numthreads(8, 8, 1)]
+void OceanicMainCS(uint3 GroupID : SV_GroupID, uint3 GroupThreadID : SV_GroupThreadID)
+{
+    const uint LocalIndex = GroupThreadID.y * 8u + GroupThreadID.x;
+    const uint GroupLinearIndex = GroupID.x + GroupID.y * OceanicGroupCountX;
+    const uint WorkIndex = GroupLinearIndex * 64u + LocalIndex;
+    if (WorkIndex >= OceanicWorkCount)
+    {
+        return;
+    }
+
+    const uint VertexIndex = OceanicWorkIndices[WorkIndex];
+    const float Baseline = OceanicBaseline[VertexIndex];
+    const float CrustAge = OceanicCrustAge[VertexIndex];
+    const float3 RidgeDir = normalize(OceanicRidgeDirection[VertexIndex].xyz);
+    const float3 Position = OceanicRenderPosition[VertexIndex];
+
+    const float Displacement = ComputeOceanicDisplacement(
+        CrustAge,
+        RidgeDir,
+        Position,
+        OceanicRidgeAmplitude,
+        OceanicFaultFrequency,
+        OceanicAgeFalloff,
+        OceanicVarianceScale,
+        OceanicExtraVarianceAmplitude,
+        VertexIndex,
+        bWriteDebug,
+        DebugVertexIndex,
+        OceanicDebugOutput);
+
+    OceanicOutAmplified[VertexIndex] = Baseline + Displacement;
+}
+
+// ---------------------------------------------------------------------------
+// Continental kernel (compacted dispatch with transition-zone handling)
+// ---------------------------------------------------------------------------
+
+uint ContinentalWorkCount;
+uint ContinentalGroupCountX;
+uint ContinentalGroupCountY;
+float ContinentalRidgeAmplitude;
+float ContinentalFaultFrequency;
+float ContinentalAgeFalloff;
+float ContinentalVarianceScale;
+float ContinentalExtraVarianceAmplitude;
+float TransitionAgeMy;
+float ContinentalMinDetailScale;
+float ContinentalNormalizationEpsilon;
+StructuredBuffer<uint> ContinentalWorkIndices;
+StructuredBuffer<float> ContinentalBaseline;
+StructuredBuffer<float3> ContinentalRenderPosition;
+StructuredBuffer<uint4> ContinentalExemplarIndices;
+StructuredBuffer<float4> ContinentalExemplarWeights;
+StructuredBuffer<uint> ContinentalPackedTerrainInfo;
+StructuredBuffer<float2> ContinentalRandomUV;
+StructuredBuffer<float4> ContinentalWrappedUV;
+StructuredBuffer<float4> ContinentalSampleHeights;
+StructuredBuffer<float> ContinentalCrustAge;
+StructuredBuffer<float4> ContinentalRidgeDirection;
+StructuredBuffer<float4> ContinentalExemplarMetadata;
+Texture2DArray<uint> ContinentalExemplarTexture;
+uint ContinentalTextureWidth;
+uint ContinentalTextureHeight;
+uint ContinentalLayerCount;
+RWStructuredBuffer<float> ContinentalOutAmplified;
+RWStructuredBuffer<float4> ContinentalDebugOutput;
+
+float SampleExemplarHeightGPU(
+    Texture2DArray<uint> ExemplarTexture,
+    uint AtlasIndex,
+    float2 WrappedUV,
+    float ElevationMin,
+    float ElevationMax,
+    uint TextureWidth,
+    uint TextureHeight,
+    uint MaxLayerCount)
+{
+    if (TextureWidth == 0u || TextureHeight == 0u || AtlasIndex >= MaxLayerCount)
+    {
+        return ElevationMin;
+    }
+
+    const float ClampedU = saturate(WrappedUV.x);
+    const float ClampedV = saturate(WrappedUV.y);
+    const int PixelX = clamp(int(ClampedU * (float)(TextureWidth - 1u)), 0, int(TextureWidth - 1u));
+    const int PixelY = clamp(int(ClampedV * (float)(TextureHeight - 1u)), 0, int(TextureHeight - 1u));
+    const int4 LoadCoords = int4(PixelX, PixelY, int(AtlasIndex), 0);
+    const uint RawValue = ExemplarTexture.Load(LoadCoords).r;
+    const float Normalized = float(RawValue) / 65535.0f;
+    return lerp(ElevationMin, ElevationMax, Normalized);
+}
+
+[numthreads(8, 8, 1)]
+void ContinentalMainCS(uint3 GroupID : SV_GroupID, uint3 GroupThreadID : SV_GroupThreadID)
+{
+    const uint LocalIndex = GroupThreadID.y * 8u + GroupThreadID.x;
+    const uint GroupLinearIndex = GroupID.x + GroupID.y * ContinentalGroupCountX;
+    const uint WorkIndex = GroupLinearIndex * 64u + LocalIndex;
+    if (WorkIndex >= ContinentalWorkCount)
+    {
+        return;
+    }
+
+    const uint VertexIndex = ContinentalWorkIndices[WorkIndex];
+    const float Baseline = ContinentalBaseline[VertexIndex];
+    const float CrustAge = ContinentalCrustAge[VertexIndex];
+    const bool bIsDebugVertex = (VertexIndex == DebugVertexIndex);
+
+    float DebugFirstSample = -1.0f;
+    float DebugFirstElevation = -9999.0f;
+    float DebugFirstAtlas = -1.0f;
+    float DebugFirstWrappedU = -1.0f;
+    float DebugFirstWrappedV = -1.0f;
+    bool bHasDebugSample = false;
+    uint DebugPrimaryRawSample = 0u;
+    float DebugPrimarySampleNorm = 0.0f;
+    float DebugPrimaryElevation = 0.0f;
+    float DebugPrimaryWeight = 0.0f;
+
+    const uint PackedInfo = ContinentalPackedTerrainInfo[VertexIndex];
+    const uint ExemplarCount = (PackedInfo >> 8u) & 0xFFu;
+    if (bWriteDebug != 0 && bIsDebugVertex && WorkIndex < ContinentalWorkCount)
+    {
+        const float4 WrappedInfo = ContinentalWrappedUV[VertexIndex];
+        ContinentalDebugOutput[WorkIndex] = float4(
+            (float)PackedInfo,
+            (float)ExemplarCount,
+            WrappedInfo.x,
+            WrappedInfo.y);
+    }
+
+    if (ExemplarCount == 0u)
+    {
+        ContinentalOutAmplified[VertexIndex] = Baseline;
+        return;
+    }
+
+    const uint4 PackedIndices = ContinentalExemplarIndices[VertexIndex];
+    const float4 PackedWeights = ContinentalExemplarWeights[VertexIndex];
+    if (bIsDebugVertex)
+    {
+        DebugPrimaryWeight = PackedWeights.x;
+    }
+
+    const float2 WrappedUV = ContinentalWrappedUV[VertexIndex].xy;
+    const float4 SampleHeightsVector = ContinentalSampleHeights[VertexIndex];
+    const bool bHasPrecomputedSamples = (SampleHeightsVector.w > ContinentalNormalizationEpsilon);
+
+    float WeightedSum = 0.0f;
+    float AccumulatedWeights = 0.0f;
+
+    const uint PrimaryIndex = PackedIndices.x;
+    float ReferenceMean = 0.0f;
+    float ReferenceStdDev = ContinentalNormalizationEpsilon;
+    bool bHasReferenceMean = false;
+
+    [unroll]
+    for (uint SampleIdx = 0u; SampleIdx < 3u; ++SampleIdx)
+    {
+        if (SampleIdx >= ExemplarCount)
+        {
+            break;
+        }
+
+        const uint AtlasIndex =
+            (SampleIdx == 0u) ? PackedIndices.x :
+            (SampleIdx == 1u) ? PackedIndices.y : PackedIndices.z;
+
+        if (AtlasIndex == 0xffffffffu)
+        {
+            continue;
+        }
+
+        float Weight = 0.0f;
+        if (SampleIdx == 0u)
+        {
+            Weight = (PackedWeights.x > 0.0f) ? PackedWeights.x : 1.0f;
+        }
+        else if (SampleIdx == 1u)
+        {
+            Weight = (PackedWeights.y > 0.0f) ? PackedWeights.y : 0.5f;
+        }
+        else
+        {
+            const float DefaultWeight = 1.0f / (float)(SampleIdx + 1u);
+            Weight = (PackedWeights.z > 0.0f) ? PackedWeights.z : DefaultWeight;
+        }
+
+        if (Weight <= 0.0f)
+        {
+            continue;
+        }
+
+        float4 Meta = ContinentalExemplarMetadata[AtlasIndex];
+        const float ElevationMin = Meta.x;
+        const float ElevationMax = Meta.y;
+        const float ElevationMean = Meta.z;
+        const float ElevationStdDev = max(Meta.w, ContinentalNormalizationEpsilon);
+
+        float Elevation =
+            (SampleIdx == 0u) ? SampleHeightsVector.x :
+            (SampleIdx == 1u) ? SampleHeightsVector.y : SampleHeightsVector.z;
+
+        if (!bHasPrecomputedSamples || Elevation == 0.0f)
+        {
+            Elevation = SampleExemplarHeightGPU(
+                ContinentalExemplarTexture,
+                AtlasIndex,
+                WrappedUV,
+                ElevationMin,
+                ElevationMax,
+                ContinentalTextureWidth,
+                ContinentalTextureHeight,
+                ContinentalLayerCount);
+        }
+
+        const float ElevationRange = max(ElevationMax - ElevationMin, ContinentalNormalizationEpsilon);
+        const float SampleNorm = (ElevationRange > 0.0f) ? clamp((Elevation - ElevationMin) / ElevationRange, 0.0f, 1.0f) : 0.0f;
+        const uint RawSample = (uint)round(SampleNorm * 65535.0f);
+        if (bIsDebugVertex && SampleIdx == 0u)
+        {
+            DebugPrimaryRawSample = RawSample;
+            DebugPrimarySampleNorm = SampleNorm;
+            DebugPrimaryElevation = Elevation;
+            DebugPrimaryWeight = Weight;
+        }
+
+        WeightedSum += Elevation * Weight;
+        AccumulatedWeights += Weight;
+
+        if (!bHasDebugSample)
+        {
+            DebugFirstSample = SampleNorm;
+            DebugFirstElevation = Elevation;
+            DebugFirstAtlas = (float)AtlasIndex;
+            DebugFirstWrappedU = WrappedUV.x;
+            DebugFirstWrappedV = WrappedUV.y;
+            bHasDebugSample = true;
+        }
+
+        if (SampleIdx == 0u)
+        {
+            ReferenceMean = ElevationMean;
+            ReferenceStdDev = ElevationStdDev;
+            bHasReferenceMean = true;
+        }
+    }
+
+    if (AccumulatedWeights <= ContinentalNormalizationEpsilon)
+    {
+        ContinentalOutAmplified[VertexIndex] = Baseline;
+        return;
+    }
+
+    const float BlendedHeight = WeightedSum / AccumulatedWeights;
+
+    float DetailScale = ContinentalMinDetailScale;
+    if (Baseline > 1000.0f)
+    {
+        DetailScale = (bHasReferenceMean && ReferenceMean > ContinentalNormalizationEpsilon)
+            ? (Baseline / ReferenceMean)
+            : 0.0f;
+    }
+
+    float Detail = 0.0f;
+    if (bHasReferenceMean)
+    {
+        Detail = (BlendedHeight - ReferenceMean) * DetailScale;
+    }
+
+    if (bWriteDebug != 0 && WorkIndex < ContinentalWorkCount)
+    {
+        if (VertexIndex == DebugVertexIndex)
+        {
+            ContinentalDebugOutput[WorkIndex] = float4(
+                BlendedHeight,
+                ReferenceMean,
+                Detail,
+                bHasPrecomputedSamples ? 1.0f : 0.0f);
+        }
+        else
+        {
+            const float DebugSampleOut = bHasDebugSample ? DebugFirstSample : -1.0f;
+            const float DebugWrappedUOut = bHasDebugSample ? DebugFirstWrappedU : -1.0f;
+            const float DebugWrappedVOut = bHasDebugSample ? DebugFirstWrappedV : -1.0f;
+            const float DebugAtlasOut = bHasDebugSample ? DebugFirstAtlas : -1.0f;
+            ContinentalDebugOutput[WorkIndex] = float4(DebugSampleOut, DebugWrappedUOut, DebugWrappedVOut, DebugAtlasOut);
+        }
+    }
+
+    ContinentalOutAmplified[VertexIndex] = Baseline + Detail;
+}

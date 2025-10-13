@@ -22,7 +22,7 @@ Logs for every run are written to `Saved/Logs/PlanetaryCreation.log`. When the G
 
 ### Stage B Profiling (LOD 7)
 
-`Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity` and `…ContinentalParity` drive the CPU baseline + replay followed by the GPU path with Stage B profiling enabled. (Recorded with the PowerShell command pattern above on 2025-10-10.)
+`Automation RunTests PlanetaryCreation.Milestone6.GPU.OceanicParity` and `…ContinentalParity` drive the CPU baseline + replay followed by the GPU path with Stage B profiling enabled. (Recorded with the PowerShell command pattern above on 2025-10-10 and re-validated 2025-10-13 alongside the unified parity harness.)
 
 **Oceanic GPU parity (2025-10-10)**
 
@@ -41,12 +41,13 @@ Log excerpt with the new instrumentation:
 [ContinentalGPU] Hash check JobId 11 Snapshot=0x92b4ed5b Current=0x92b4ed5b Match=1 (DataSerial=83/83 Topology=0/0 Surface=22/22)
 ```
 
-**Key takeaways**
+**Key takeaways (2025-10-13 refresh)**
 - Hash refinement keeps the GPU snapshot hot: steps 2‑10 now stay on the fast path (`ContinentalCPU ≈2.8 ms`, `ContinentalGPU ≈22.6 ms`) instead of replaying the ~19 ms CPU fallback every frame.
 - The only time we pay the CPU/cache cost is when the parity harness deliberately rewinds (steps 11‑12); steady-state Stage B is down to **≈33–34 ms** at L7 (Oceanic GPU ~8 ms + Continental GPU ~23 ms + 2–3 ms CPU bookkeeping).
 - Oceanic parity remains cheap when run solo (≈1.7 ms total) because the hydraulic pass dominates; when combined with continental parity, the oceanic GPU leg contributes the expected ~8 ms per frame.
 - Ridge recompute and Voronoi updates remain around **0.03 ms**, and readback stays at zero thanks to the async job fencing.
 - Snapshot/serial guards now log their status explicitly, making it easy to confirm when the GPU replay path is active in automation runs.
+- Unified Stage B parity (the new `PlanetaryCreation.StageB.UnifiedGPUParity` harness) reports **MaxΔ = 0.003 m** and **MeanΔ = 0.0002 m**, confirming the shader’s blended heights match the CPU sampler down to millimetres.
 
 **Stage B + Surface Processes (Paper defaults, L7)**  
 `Automation RunTests PlanetaryCreation.Milestone6.Perf.StageBSurfaceProcesses` (with GPU amplification on) reports:
@@ -79,6 +80,7 @@ These measurements replace the extrapolated L3 figures in earlier performance do
 ## Latest Automation Status
 - `PlanetaryCreation.Milestone6.GPU.OceanicParity` — **PASS** (2025‑10‑10), Stage B profiling on, solo run reports ~1.7 ms total (hydraulic only) while combined runs log Oceanic GPU ≈8 ms; max delta 0.0003 m.
 - `PlanetaryCreation.Milestone6.GPU.ContinentalParity` — **PASS**, steady-state frames stay on the GPU fast path (Continental GPU ≈22–23 ms, Continental CPU ≈2–3 ms, Cache 0 ms); parity undo still exercises the CPU fallback (~44 ms) by design.
+- `PlanetaryCreation.StageB.UnifiedGPUParity` — **PASS** (2025‑10‑13), automation-only GPU replay flag enabled; MaxΔ 0.003 m, MeanΔ 0.0002 m.
 - `PlanetaryCreation.Milestone6.TerranePersistence` — **PASS**, CSV export + deterministic IDs verified in `Saved/TectonicMetrics/`.
 - `PlanetaryCreation.Milestone5.PerformanceRegression` — **PASS**, full M5 overhead 0.32 ms (reference baseline).
 - `PlanetaryCreation.Milestone6.ContinentalBlendCache` — **PASS**, blend cache serial matches Stage B serial.

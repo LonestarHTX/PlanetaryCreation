@@ -35,6 +35,7 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "RHIGPUReadback.h"
 #include "OceanicAmplificationGPU.h"
 #include "ExemplarTextureArray.h"
+#include "Engine/Texture2DArray.h"
 #include "ContinentalAmplificationTypes.h"
 #include <queue>
 #if WITH_EDITOR
@@ -476,7 +477,11 @@ namespace
         return Hash;
     }
 
-    bool ComputeCurrentContinentalInputHash(const UTectonicSimulationService& Service, const FContinentalAmplificationSnapshot& Snapshot, uint32& OutHash)
+    bool ComputeCurrentContinentalInputHash(
+        const UTectonicSimulationService& Service,
+        const FContinentalAmplificationSnapshot& Snapshot,
+        uint32& OutHash,
+        uint64 ExpectedDataSerial)
     {
         const FContinentalAmplificationGPUInputs& Inputs = Service.GetContinentalAmplificationGPUInputs();
         if (Inputs.BaselineElevation.Num() != Snapshot.VertexCount ||
@@ -498,7 +503,7 @@ namespace
         }
 
         const FTectonicSimulationParameters LiveParams = Service.GetParameters();
-        const uint64 DataSerial = Service.GetOceanicAmplificationDataSerial();
+        const uint64 DataSerial = ExpectedDataSerial;
         const int32 TopologyVersion = Service.GetTopologyVersion();
         const int32 SurfaceVersion = Service.GetSurfaceDataVersion();
         uint32 Hash = 0;
@@ -1331,8 +1336,14 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
         }
         else
         {
-            // Milestone 6 Task 2.1: Apply Stage B oceanic amplification (GPU/CPU path)
-            if (Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
+            const bool bNeedOceanic = Parameters.bEnableOceanicAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
+            const bool bNeedContinental = Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
+
+            bool bOceanicHandledByGPU = false;
+            bool bContinentalHandledByGPU = false;
+            bool bApplyOceanicSnapshot = false;
+
+            if (bNeedOceanic)
             {
                 bool bUpdatedRidgeDirections = false;
                 {
@@ -1351,105 +1362,125 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                     LogBoundaryCacheState(TEXT("AfterComputeRidgeDirections"));
                 }
 #endif
-
-                bool bUsedGPU = false;
-#if WITH_EDITOR
-                if (ShouldUseGPUAmplification())
-                {
-                    InitializeGPUExemplarResources();
-
-                    TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplificationGPU);
-                    const double GpuBlockStart = FPlatformTime::Seconds();
-                    bUsedGPU = ApplyOceanicAmplificationGPU();
-                    if (bUsedGPU)
-                    {
-                        OceanicGpuDispatchTime += FPlatformTime::Seconds() - GpuBlockStart;
-                        const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
-                        ProcessPendingOceanicGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
-                        bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
-#if WITH_EDITOR
-                        if (bPendingOceanicGPUReadback)
-                        {
-                            if (bForceReadbackSync)
-                            {
-                                UE_LOG(LogPlanetaryCreation, Warning,
-                                    TEXT("[StageB][GPU] Oceanic amplification readback still pending after forced sync. Subsequent steps may stall detail updates."));
-                            }
-                            const bool bAppliedSnapshot = EnsureLatestOceanicSnapshotApplied();
-                            if (bAppliedSnapshot)
-                            {
-                                bSurfaceDataChanged = true;
-                            }
-                            bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
-                        }
-#endif
-                    }
-                }
-#endif // WITH_EDITOR
-                if (!bUsedGPU)
-                {
-                    if (!Parameters.bSkipCPUAmplification)
-                    {
-                        TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
-                        const double CpuBlockStart = FPlatformTime::Seconds();
-                        ApplyOceanicAmplification();
-                        OceanicCpuTime += FPlatformTime::Seconds() - CpuBlockStart;
-                        bSurfaceDataChanged = true;
-                    }
-                    else
-                    {
-                        static bool bLoggedOceanicSkip = false;
-                        if (!bLoggedOceanicSkip)
-                        {
-                            UE_LOG(LogPlanetaryCreation, Warning,
-                                TEXT("[StageB][GPU] Oceanic amplification skipped: GPU path unavailable while CPU amplification is disabled. Stage B elevations may remain at baseline."));
-                            bLoggedOceanicSkip = true;
-                        }
-                    }
-                }
             }
 
-            // Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based)
-            if (Parameters.bEnableContinentalAmplification && Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD)
-            {
-                if (bPendingOceanicGPUReadback)
-                {
-                    ProcessPendingOceanicGPUReadbacks(false, &GpuReadbackSeconds);
 #if WITH_EDITOR
+            if (ShouldUseGPUAmplification() && (bNeedOceanic || bNeedContinental))
+            {
+                InitializeGPUExemplarResources();
+                ResetContinentalGPUDispatchStats();
+
+                TRACE_CPUPROFILER_EVENT_SCOPE(StageBUnifiedGPU);
+                const double GpuBlockStart = FPlatformTime::Seconds();
+                PlanetaryCreation::GPU::FStageBUnifiedDispatchResult UnifiedDispatchResult;
+                const bool bUnifiedExecuted = ApplyStageBUnifiedGPU(bNeedOceanic, bNeedContinental, UnifiedDispatchResult);
+                const double GpuElapsedSeconds = FPlatformTime::Seconds() - GpuBlockStart;
+
+                if (UnifiedDispatchResult.bExecutedOceanic)
+                {
+                    const double OceanicSeconds = UnifiedDispatchResult.OceanicDispatchSeconds > 0.0
+                        ? UnifiedDispatchResult.OceanicDispatchSeconds
+                        : GpuElapsedSeconds;
+                    OceanicGpuDispatchTime += OceanicSeconds;
+
+                    const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
+                    ProcessPendingOceanicGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
+                    bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+                    if (bPendingOceanicGPUReadback && bForceReadbackSync)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("[StageB][GPU] Oceanic amplification readback still pending after forced sync. Subsequent steps may stall detail updates."));
+                    }
+
+                    bApplyOceanicSnapshot = true;
+                    bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+                    bOceanicHandledByGPU = true;
+                }
+                else if (bUnifiedExecuted && bNeedOceanic && Parameters.bSkipCPUAmplification)
+                {
+                    bLastOceanicForcedCpuFallback = true;
+                }
+
+                if (UnifiedDispatchResult.bExecutedContinental)
+                {
+                    const double ContinentalSeconds = UnifiedDispatchResult.ContinentalDispatchSeconds > 0.0
+                        ? UnifiedDispatchResult.ContinentalDispatchSeconds
+                        : GpuElapsedSeconds;
+                    ContinentalGpuDispatchTime += ContinentalSeconds;
+                    ContinentalGPUDispatchStats.bDispatchAttempted = true;
+                    ContinentalGPUDispatchStats.bDispatchSucceeded = true;
+
+                    const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
+                    ProcessPendingContinentalGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
+                    if (bForceReadbackSync && !bContinentalGPUResultWasApplied)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("[StageB][GPU] Continental amplification readback did not complete after forced sync. Detail output may lag this step."));
+                    }
+
+                    bContinentalHandledByGPU = bContinentalGPUResultWasApplied;
+                }
+                else if (bUnifiedExecuted && bNeedContinental)
+                {
+                    ContinentalGPUDispatchStats.bDispatchAttempted = true;
+                    ContinentalGPUDispatchStats.bDispatchSucceeded = false;
+                }
+
+                if (bApplyOceanicSnapshot)
+                {
                     const bool bAppliedSnapshot = EnsureLatestOceanicSnapshotApplied();
                     if (bAppliedSnapshot)
                     {
                         bSurfaceDataChanged = true;
                     }
                     bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
-#else
-                    bPendingOceanicGPUReadback = false;
-#endif
                 }
+            }
+#endif
 
-                bool bUsedGPU = false;
-#if WITH_EDITOR
-                if (ShouldUseGPUAmplification())
+            if (bNeedOceanic && !bOceanicHandledByGPU)
+            {
+                if (!Parameters.bSkipCPUAmplification)
                 {
-                    InitializeGPUExemplarResources();
-
-                    TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplificationGPU);
-                    const double GpuBlockStart = FPlatformTime::Seconds();
-                    bUsedGPU = ApplyContinentalAmplificationGPU();
-                    if (bUsedGPU)
+                    TRACE_CPUPROFILER_EVENT_SCOPE(OceanicAmplification);
+                    const double CpuBlockStart = FPlatformTime::Seconds();
+                    ApplyOceanicAmplification();
+                    OceanicCpuTime += FPlatformTime::Seconds() - CpuBlockStart;
+                    bSurfaceDataChanged = true;
+                }
+                else
+                {
+                    static bool bLoggedOceanicSkip = false;
+                    if (!bLoggedOceanicSkip)
                     {
-                        ContinentalGpuDispatchTime += FPlatformTime::Seconds() - GpuBlockStart;
-                        const bool bForceReadbackSync = Parameters.bSkipCPUAmplification;
-                        ProcessPendingContinentalGPUReadbacks(bForceReadbackSync, &GpuReadbackSeconds);
-                        if (bForceReadbackSync && !bContinentalGPUResultWasApplied)
-                        {
-                            UE_LOG(LogPlanetaryCreation, Warning,
-                                TEXT("[StageB][GPU] Continental amplification readback did not complete after forced sync. Detail output may lag this step."));
-                        }
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("[StageB][GPU] Oceanic amplification skipped: GPU path unavailable while CPU amplification is disabled. Stage B elevations may remain at baseline."));
+                        bLoggedOceanicSkip = true;
                     }
                 }
+            }
+
+            if (bNeedOceanic && bPendingOceanicGPUReadback)
+            {
+                ProcessPendingOceanicGPUReadbacks(false, &GpuReadbackSeconds);
+#if WITH_EDITOR
+                if (PendingOceanicGPUJobs.Num() == 0)
+                {
+                    const bool bAppliedSnapshot = EnsureLatestOceanicSnapshotApplied();
+                    if (bAppliedSnapshot)
+                    {
+                        bSurfaceDataChanged = true;
+                    }
+                }
+                bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+#else
+                bPendingOceanicGPUReadback = false;
 #endif
-                if ((!bUsedGPU || !bContinentalGPUResultWasApplied) && !Parameters.bSkipCPUAmplification)
+            }
+
+            if (bNeedContinental)
+            {
+                if ((!bContinentalHandledByGPU || !bContinentalGPUResultWasApplied) && !Parameters.bSkipCPUAmplification)
                 {
                     TRACE_CPUPROFILER_EVENT_SCOPE(ContinentalAmplification);
                     const double CpuBlockStart = FPlatformTime::Seconds();
@@ -1459,7 +1490,7 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                     CacheInvalidationSeconds += LastContinentalCacheBuildSeconds;
                     bSurfaceDataChanged = true;
                 }
-                else if (!bUsedGPU || !bContinentalGPUResultWasApplied)
+                else if (!bContinentalHandledByGPU || !bContinentalGPUResultWasApplied)
                 {
                     static bool bLoggedContinentalSkip = false;
                     if (!bLoggedContinentalSkip)
@@ -2141,29 +2172,28 @@ bool UTectonicSimulationService::ShouldUseGPUAmplification() const
 #endif
 }
 
-bool UTectonicSimulationService::ApplyOceanicAmplificationGPU()
+PlanetaryCreation::StageB::FStageB_UnifiedParameters UTectonicSimulationService::GetStageBUnifiedParameters() const
 {
-#if WITH_EDITOR
-    const bool bResult = PlanetaryCreation::GPU::ApplyOceanicAmplificationGPU(*this);
-    if (bResult)
-    {
-        BumpOceanicAmplificationSerial();
-    }
-    return bResult;
-#else
-    return false;
-#endif
+    using namespace PlanetaryCreation::StageB;
+
+    FStageB_UnifiedParameters Unified;
+    Unified.OceanicFaultAmplitude = FMath::Max(static_cast<float>(Parameters.OceanicFaultAmplitude), 0.0f);
+    Unified.OceanicFaultFrequency = FMath::Max(static_cast<float>(Parameters.OceanicFaultFrequency), 0.0001f);
+    Unified.OceanicAgeFalloff = FMath::Max(static_cast<float>(Parameters.OceanicAgeFalloff), 0.0f);
+    Unified.TransitionAgeMy = 10.0f;
+    Unified.ContinentalMinDetailScale = 0.5f;
+    Unified.ContinentalNormalizationEpsilon = 1.0e-3f;
+    Unified.OceanicVarianceScale = 1.5f;
+    Unified.ExtraVarianceAmplitude = 150.0f;
+    return Unified;
 }
 
-bool UTectonicSimulationService::ApplyContinentalAmplificationGPU()
+bool UTectonicSimulationService::ApplyStageBUnifiedGPU(bool bRunOceanic, bool bRunContinental, PlanetaryCreation::GPU::FStageBUnifiedDispatchResult& OutResult)
 {
 #if WITH_EDITOR
-    ResetContinentalGPUDispatchStats();
-    const bool bDispatched = PlanetaryCreation::GPU::ApplyContinentalAmplificationGPU(*this);
-    ContinentalGPUDispatchStats.bDispatchAttempted = true;
-    ContinentalGPUDispatchStats.bDispatchSucceeded = bDispatched;
-    return bDispatched;
+    return PlanetaryCreation::GPU::ApplyStageBUnifiedGPU(*this, bRunOceanic, bRunContinental, OutResult);
 #else
+    OutResult = PlanetaryCreation::GPU::FStageBUnifiedDispatchResult();
     return false;
 #endif
 }
@@ -3459,8 +3489,10 @@ void UTectonicSimulationService::ExportQuantitativeMetrics()
 }
 
 // Milestone 3 Task 1.1: Generate high-density render mesh
-void UTectonicSimulationService::GenerateRenderMesh()
+void UTectonicSimulationService::GenerateRenderMesh(const TCHAR* RidgeInvalidateContext)
 {
+    (void)RidgeInvalidateContext;
+
     RenderVertices.Reset();
     RenderTriangles.Reset();
 
@@ -7708,73 +7740,138 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
     const bool bShouldRunContinental = bMeetsAmplificationLOD && Parameters.bEnableContinentalAmplification;
     const bool bSkipCPUAmplification = Parameters.bSkipCPUAmplification;
     const bool bGpuAmplificationAvailable = ShouldUseGPUAmplification();
-    const bool bRunGPUAmplification = bSkipCPUAmplification && bGpuAmplificationAvailable;
     bLastOceanicForcedCpuFallback = false;
 
     if (bShouldRunOceanic)
     {
         MarkAllRidgeDirectionsDirty();
         RefreshRidgeDirectionsIfNeeded();
-
-        if (bRunGPUAmplification)
-        {
-#if WITH_EDITOR
-            InitializeGPUExemplarResources();
-            if (ApplyOceanicAmplificationGPU())
-            {
-                ProcessPendingOceanicGPUReadbacks(true, nullptr);
-            }
-#endif
-        }
-        else
-        {
-#if WITH_EDITOR
-            static int32 OceanicFallbackLogCount = 0;
-            if (bSkipCPUAmplification && !bGpuAmplificationAvailable && OceanicFallbackLogCount < 3)
-            {
-                const int32 UseGPUValue = CVarPlanetaryCreationUseGPUAmplification.GetValueOnAnyThread();
-                UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[StageB][Fallback] Oceanic CPU amplification forced (SkipCPU=1 | UseGPUAmplification=%d | LOD=%d). Running CPU path to keep baseline parity."),
-                    UseGPUValue,
-                    Parameters.RenderSubdivisionLevel);
-                ++OceanicFallbackLogCount;
-            }
-#endif
-            if (bSkipCPUAmplification && !bGpuAmplificationAvailable)
-            {
-                bLastOceanicForcedCpuFallback = true;
-            }
-            ApplyOceanicAmplification();
-        }
     }
 
     if (bShouldRunContinental)
     {
         RefreshContinentalAmplificationCache();
+    }
 
-        if (bRunGPUAmplification)
-        {
+    bool bOceanicHandledByGPU = false;
+    bool bContinentalHandledByGPU = false;
+    bool bPendingOceanicGPUReadback = false;
+    bool bApplyOceanicSnapshot = false;
+
 #if WITH_EDITOR
-            InitializeGPUExemplarResources();
-            if (ApplyContinentalAmplificationGPU())
+    PlanetaryCreation::GPU::FStageBUnifiedDispatchResult UnifiedDispatchResult;
+    if (bGpuAmplificationAvailable && (bShouldRunOceanic || bShouldRunContinental))
+    {
+        InitializeGPUExemplarResources();
+        ResetContinentalGPUDispatchStats();
+
+        const bool bUnifiedExecuted = ApplyStageBUnifiedGPU(bShouldRunOceanic, bShouldRunContinental, UnifiedDispatchResult);
+
+        if (UnifiedDispatchResult.bExecutedOceanic)
+        {
+            const bool bForceReadbackSync = bSkipCPUAmplification;
+            ProcessPendingOceanicGPUReadbacks(bForceReadbackSync, nullptr);
+            bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+
+            if (bPendingOceanicGPUReadback && bForceReadbackSync)
             {
-                ProcessPendingContinentalGPUReadbacks(true, nullptr);
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][GPU] Oceanic amplification readback still pending after forced sync. Subsequent steps may stall detail updates."));
             }
+
+            bApplyOceanicSnapshot = true;
+            bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+            bOceanicHandledByGPU = true;
+        }
+        else if (bUnifiedExecuted && bShouldRunOceanic && bSkipCPUAmplification)
+        {
+            bLastOceanicForcedCpuFallback = true;
+        }
+
+        if (UnifiedDispatchResult.bExecutedContinental)
+        {
+            ContinentalGPUDispatchStats.bDispatchAttempted = true;
+            ContinentalGPUDispatchStats.bDispatchSucceeded = true;
+
+            const bool bForceReadbackSync = bSkipCPUAmplification;
+            ProcessPendingContinentalGPUReadbacks(bForceReadbackSync, nullptr);
+            if (bForceReadbackSync && !bContinentalGPUResultWasApplied)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][GPU] Continental amplification readback did not complete after forced sync. Detail output may lag this step."));
+            }
+
+            bContinentalHandledByGPU = bContinentalGPUResultWasApplied;
+        }
+        else if (bUnifiedExecuted && bShouldRunContinental)
+        {
+            ContinentalGPUDispatchStats.bDispatchAttempted = true;
+            ContinentalGPUDispatchStats.bDispatchSucceeded = false;
+        }
+
+        if (bApplyOceanicSnapshot)
+        {
+            EnsureLatestOceanicSnapshotApplied();
+            bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+        }
+    }
 #endif
+
+    if (bShouldRunOceanic && !bOceanicHandledByGPU)
+    {
+#if WITH_EDITOR
+        static int32 OceanicFallbackLogCount = 0;
+        if (bSkipCPUAmplification && !bGpuAmplificationAvailable && OceanicFallbackLogCount < 3)
+        {
+            const int32 UseGPUValue = CVarPlanetaryCreationUseGPUAmplification.GetValueOnAnyThread();
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[StageB][Fallback] Oceanic CPU amplification forced (SkipCPU=1 | UseGPUAmplification=%d | LOD=%d). Running CPU path to keep baseline parity."),
+                UseGPUValue,
+                Parameters.RenderSubdivisionLevel);
+            ++OceanicFallbackLogCount;
+        }
+#endif
+
+        if (bSkipCPUAmplification)
+        {
+            bLastOceanicForcedCpuFallback = true;
         }
         else
         {
+            ApplyOceanicAmplification();
+        }
+    }
+
+    if (bPendingOceanicGPUReadback)
+    {
+        ProcessPendingOceanicGPUReadbacks(false, nullptr);
 #if WITH_EDITOR
-            static int32 ContinentalFallbackLogCount = 0;
-            if (bSkipCPUAmplification && !bGpuAmplificationAvailable && ContinentalFallbackLogCount < 3)
-            {
-                UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[StageB][Fallback] Continental CPU amplification forced (SkipCPU=1 | UseGPUAmplification=%d | LOD=%d)."),
-                    CVarPlanetaryCreationUseGPUAmplification.GetValueOnAnyThread(),
-                    Parameters.RenderSubdivisionLevel);
-                ++ContinentalFallbackLogCount;
-            }
+        if (PendingOceanicGPUJobs.Num() == 0)
+        {
+            EnsureLatestOceanicSnapshotApplied();
+        }
+        bPendingOceanicGPUReadback = PendingOceanicGPUJobs.Num() > 0;
+#else
+        bPendingOceanicGPUReadback = false;
 #endif
+    }
+
+    if (bShouldRunContinental)
+    {
+#if WITH_EDITOR
+        static int32 ContinentalFallbackLogCount = 0;
+        if ((!bContinentalHandledByGPU || !bContinentalGPUResultWasApplied) && bSkipCPUAmplification && !bGpuAmplificationAvailable && ContinentalFallbackLogCount < 3)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[StageB][Fallback] Continental CPU amplification forced (SkipCPU=1 | UseGPUAmplification=%d | LOD=%d)."),
+                CVarPlanetaryCreationUseGPUAmplification.GetValueOnAnyThread(),
+                Parameters.RenderSubdivisionLevel);
+            ++ContinentalFallbackLogCount;
+        }
+#endif
+
+        if ((!bContinentalHandledByGPU || !bContinentalGPUResultWasApplied) && !bSkipCPUAmplification)
+        {
             ApplyContinentalAmplification();
         }
     }
@@ -8406,10 +8503,72 @@ void UTectonicSimulationService::ResetAmplifiedElevationForTests()
 {
     InitializeAmplifiedElevationBaseline();
 }
+
+void UTectonicSimulationService::SetForceStageBGPUReplayForTests(bool bEnabled)
+{
+    bForceStageBGPUReplayForTests = bEnabled;
+}
+
+void UTectonicSimulationService::ForceRidgeRingDirtyForTest(const TArray<int32>& SeedVertices, int32 RingDepth)
+{
+#if UE_BUILD_DEVELOPMENT
+    if (SeedVertices.Num() > 0)
+    {
+        MarkRidgeRingDirty(SeedVertices, RingDepth);
+    }
+#else
+    (void)SeedVertices;
+    (void)RingDepth;
+#endif
+}
+
+void UTectonicSimulationService::SetVertexCrustAgeForTest(int32 VertexIndex, double AgeMy)
+{
+#if UE_BUILD_DEVELOPMENT
+    if (!RenderVertices.IsValidIndex(VertexIndex))
+    {
+        return;
+    }
+
+    if (VertexCrustAge.Num() != RenderVertices.Num())
+    {
+        VertexCrustAge.SetNum(RenderVertices.Num());
+    }
+
+    VertexCrustAge[VertexIndex] = AgeMy;
+#else
+    (void)VertexIndex;
+    (void)AgeMy;
+#endif
+}
+
 #endif
 
+void UTectonicSimulationService::SetStageBUnifiedDebugVertexIndex(int32 VertexIndex)
+{
+#if UE_BUILD_DEVELOPMENT
+    StageBUnifiedDebugVertexIndex = VertexIndex;
+#else
+    (void)VertexIndex;
+#endif
+}
+
+int32 UTectonicSimulationService::GetStageBUnifiedDebugVertexIndex() const
+{
+#if UE_BUILD_DEVELOPMENT
+    return StageBUnifiedDebugVertexIndex;
+#else
+    return INDEX_NONE;
+#endif
+}
+
 #if WITH_EDITOR
-void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount, FOceanicAmplificationSnapshot&& Snapshot)
+void UTectonicSimulationService::EnqueueOceanicGPUJob(
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback,
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback,
+    int32 VertexCount,
+    FOceanicAmplificationSnapshot&& Snapshot,
+    int32 DebugVertexIndex)
 {
     if (!Readback.IsValid() || VertexCount <= 0)
     {
@@ -8418,15 +8577,28 @@ void UTectonicSimulationService::EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferRe
 
     FOceanicGPUAsyncJob& Job = PendingOceanicGPUJobs.AddDefaulted_GetRef();
     Job.Readback = MoveTemp(Readback);
+    Job.DebugReadback = MoveTemp(DebugReadback);
     Job.VertexCount = VertexCount;
     Job.NumBytes = VertexCount * sizeof(float);
+    Job.DebugNumBytes = sizeof(FVector4f);
     Job.DispatchFence.BeginFence();
     Job.Snapshot = MoveTemp(Snapshot);
     Job.JobId = NextOceanicGPUJobId++;
+    Job.DebugVertexIndex = DebugVertexIndex;
+#if UE_BUILD_DEVELOPMENT
+    Job.DebugMetrics = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+    Job.bDebugMetricsValid = false;
+#endif
     SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::PendingGPUReadback, TEXT("EnqueueOceanicGPUJob"));
 }
 
-void UTectonicSimulationService::EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, int32 VertexCount, FContinentalAmplificationSnapshot&& Snapshot)
+void UTectonicSimulationService::EnqueueContinentalGPUJob(
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback,
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback,
+    int32 VertexCount,
+    int32 WorkCount,
+    TSharedPtr<TArray<uint32>, ESPMode::ThreadSafe> WorkIndices,
+    FContinentalAmplificationSnapshot&& Snapshot)
 {
     if (!Readback.IsValid() || VertexCount <= 0)
     {
@@ -8435,11 +8607,21 @@ void UTectonicSimulationService::EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBuff
 
     FContinentalGPUAsyncJob& Job = PendingContinentalGPUJobs.AddDefaulted_GetRef();
     Job.Readback = MoveTemp(Readback);
+    Job.DebugReadback = MoveTemp(DebugReadback);
+    Job.TextureReadback = nullptr;
     Job.VertexCount = VertexCount;
     Job.NumBytes = VertexCount * sizeof(float);
+    Job.DebugNumBytes = (WorkCount > 0) ? WorkCount * sizeof(FVector4f) : 0;
+    Job.WorkCount = WorkCount;
     Job.DispatchFence.BeginFence();
     Job.Snapshot = MoveTemp(Snapshot);
     Job.JobId = NextContinentalGPUJobId++;
+    Job.WorkIndices = MoveTemp(WorkIndices);
+#if UE_BUILD_DEVELOPMENT
+    Job.DebugData.Reset();
+    Job.bDebugDataValid = false;
+    Job.bTextureDataLogged = false;
+#endif
     SetStageBAmplificationReady(false, EStageBAmplificationReadyReason::PendingGPUReadback, TEXT("EnqueueContinentalGPUJob"));
 }
 
@@ -8589,6 +8771,10 @@ bool UTectonicSimulationService::EnsureLatestOceanicSnapshotApplied()
     const int32 CurrentLOD = CurrentParams.RenderSubdivisionLevel;
     const int32 CurrentTopologyVersion = GetTopologyVersion();
     const int32 CurrentSurfaceVersion = GetSurfaceDataVersion();
+#if UE_BUILD_DEVELOPMENT
+    const int32 DebugVertexIndex = 40283;
+    double DebugBefore = VertexAmplifiedElevation.IsValidIndex(DebugVertexIndex) ? VertexAmplifiedElevation[DebugVertexIndex] : 0.0;
+#endif
 
     const bool bMetadataMatch =
         Snapshot.RenderLOD == CurrentLOD &&
@@ -8653,6 +8839,14 @@ bool UTectonicSimulationService::EnsureLatestOceanicSnapshotApplied()
         LatestJob.Snapshot.InputHash = CurrentHash;
     }
 
+#if UE_BUILD_DEVELOPMENT
+    double DebugAfter = VertexAmplifiedElevation.IsValidIndex(DebugVertexIndex) ? VertexAmplifiedElevation[DebugVertexIndex] : 0.0;
+    UE_LOG(LogPlanetaryCreation, Log,
+        TEXT("[V40283][SnapshotApply] Before=%.3f After=%.3f"),
+        DebugBefore,
+        DebugAfter);
+#endif
+
     UE_LOG(LogPlanetaryCreation, Log,
         TEXT("[StageB][GPU] Applied oceanic snapshot while awaiting readback (JobId=%llu SnapshotId=%llu Hash=0x%08x)"),
         LatestJob.JobId,
@@ -8685,6 +8879,21 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
 #endif
     int32 LocalBaselineReuseCount = 0;
     int32 LocalMaskMismatchCount = 0;
+    auto IsPlateOceanic = [&](int32 PlateId) -> bool
+    {
+        if (PlateId == INDEX_NONE)
+        {
+            return false;
+        }
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.PlateID == PlateId)
+            {
+                return Plate.CrustType == ECrustType::Oceanic;
+            }
+        }
+        return false;
+    };
 
     for (int32 JobIndex = PendingOceanicGPUJobs.Num() - 1; JobIndex >= 0; --JobIndex)
     {
@@ -8727,10 +8936,70 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
             }
         }
 
-        const int32 NumFloats = Job.VertexCount;
+        if (Job.DebugReadback.IsValid() && !Job.DebugReadback->IsReady())
+        {
+            if (bBlockUntilComplete)
+            {
+                const double DebugWaitStart = FPlatformTime::Seconds();
+                while (!Job.DebugReadback->IsReady())
+                {
+                    FPlatformProcess::SleepNoStats(0.001f);
+                }
+                AccumulatedSeconds += FPlatformTime::Seconds() - DebugWaitStart;
+            }
+            else
+            {
+                continue;
+            }
+        }
 
+        if (Job.DebugReadback.IsValid() && !Job.DebugReadback->IsReady())
+        {
+            if (bBlockUntilComplete)
+            {
+                const double DebugWaitStart = FPlatformTime::Seconds();
+                while (!Job.DebugReadback->IsReady())
+                {
+                    FPlatformProcess::SleepNoStats(0.001f);
+                }
+                AccumulatedSeconds += FPlatformTime::Seconds() - DebugWaitStart;
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        const int32 NumFloats = Job.VertexCount;
         TSharedRef<TArray<float>, ESPMode::ThreadSafe> TempData = MakeShared<TArray<float>, ESPMode::ThreadSafe>();
         TempData->SetNum(NumFloats);
+
+#if UE_BUILD_DEVELOPMENT
+        TSharedRef<FVector4f, ESPMode::ThreadSafe> DebugBuffer = MakeShared<FVector4f, ESPMode::ThreadSafe>(FVector4f(0.0f, 0.0f, 0.0f, 0.0f));
+        TSharedRef<bool, ESPMode::ThreadSafe> DebugValid = MakeShared<bool, ESPMode::ThreadSafe>(false);
+#endif
+
+#if UE_BUILD_DEVELOPMENT
+        if (Job.DebugReadback.IsValid())
+        {
+            ENQUEUE_RENDER_COMMAND(CopyOceanicGPUDebug)(
+                [DebugReadback = Job.DebugReadback, DebugBytes = Job.DebugNumBytes, DebugBuffer, DebugValid](FRHICommandListImmediate& RHICmdList)
+                {
+                    if (!DebugReadback.IsValid())
+                    {
+                        return;
+                    }
+
+                    const void* RawData = DebugReadback->Lock(DebugBytes);
+                    if (const FVector4f* DebugPtr = static_cast<const FVector4f*>(RawData))
+                    {
+                        *DebugBuffer = *DebugPtr;
+                        *DebugValid = true;
+                    }
+                    DebugReadback->Unlock();
+                });
+        }
+#endif
 
         ENQUEUE_RENDER_COMMAND(CopyOceanicGPUReadback)(
             [Readback = Job.Readback, NumBytes = Job.NumBytes, TempData](FRHICommandListImmediate& RHICmdList)
@@ -8760,6 +9029,29 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
             continue;
         }
 
+#if UE_BUILD_DEVELOPMENT
+        if (Job.DebugReadback.IsValid())
+        {
+            Job.bDebugMetricsValid = *DebugValid;
+            if (Job.bDebugMetricsValid)
+            {
+                Job.DebugMetrics = *DebugBuffer;
+                if (OceanicDebugComparisonCount < 12)
+                {
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[UnifiedGPU][OceanicDebug] JobId=%llu Vertex=%d Fault=%.3f Fine=%.3f Extra=%.3f Displacement=%.3f"),
+                        Job.JobId,
+                        Job.DebugVertexIndex,
+                        Job.DebugMetrics.X,
+                        Job.DebugMetrics.Y,
+                        Job.DebugMetrics.Z,
+                        Job.DebugMetrics.W);
+                    ++OceanicDebugComparisonCount;
+                }
+            }
+        }
+#endif
+
         const FOceanicAmplificationSnapshot& Snapshot = Job.Snapshot;
         const bool bSnapshotUsable = Snapshot.IsConsistent() && Snapshot.VertexCount == NumFloats;
         const FTectonicSimulationParameters CurrentParams = GetParameters();
@@ -8776,50 +9068,39 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
         const bool bHashComputed = bMetadataMatch && ComputeCurrentOceanicInputHash(*this, Snapshot, CurrentHash);
         const bool bHashMatch = bHashComputed && (CurrentHash == Snapshot.InputHash);
 
-        const bool bUseSnapshot = bSnapshotUsable && bMetadataMatch;
-        if (bUseSnapshot)
-        {
-            if (!bHashComputed)
-            {
-                UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[StageB][GPU] Oceanic snapshot hash unavailable for JobId=%llu SnapshotId=%llu. Applying snapshot to preserve GPU parity."),
-                    Job.JobId,
-                    Snapshot.SnapshotId);
-            }
-            else if (!bHashMatch)
-            {
-                UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[StageB][GPU] Oceanic snapshot hash mismatch for JobId=%llu SnapshotId=%llu (Snapshot=0x%08x Current=0x%08x). Applying snapshot to maintain GPU parity."),
-                    Job.JobId,
-                    Snapshot.SnapshotId,
-                    Snapshot.InputHash,
-                    CurrentHash);
-            }
+        bool bReplayGpuResults =
+            bSnapshotUsable &&
+            bMetadataMatch &&
+            bHashComputed &&
+            bHashMatch &&
+            !bParameterMismatch;
 
-            if (bParameterMismatch)
-            {
-                UE_LOG(LogPlanetaryCreation, Log,
-                    TEXT("[StageB][GPU] Parameter drift detected post-dispatch (JobId=%llu SnapshotId=%llu). Applying snapshot parameters."),
-                    Job.JobId,
-                    Snapshot.SnapshotId);
-            }
+#if UE_BUILD_DEVELOPMENT
+        if (bForceStageBGPUReplayForTests && bSnapshotUsable && !bReplayGpuResults)
+        {
             UE_LOG(LogPlanetaryCreation, Log,
-                TEXT("[StageB][GPU] Accepted oceanic snapshot (JobId=%llu SnapshotId=%llu LOD=%d Hash=0x%08x)"),
+                TEXT("[StageB][GPU] Forcing oceanic GPU result acceptance for tests (JobId=%llu)."),
+                Job.JobId);
+            bReplayGpuResults = true;
+        }
+#endif
+
+        if (bReplayGpuResults)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[StageB][GPU] Applying oceanic GPU results (JobId=%llu SnapshotId=%llu LOD=%d Hash=0x%08x)."),
                 Job.JobId,
                 Snapshot.SnapshotId,
                 Snapshot.RenderLOD,
                 Snapshot.InputHash);
-            if (bHashComputed)
-            {
-                Job.Snapshot.InputHash = CurrentHash;
-            }
+            Job.Snapshot.InputHash = CurrentHash;
         }
         else
         {
             if (!bSnapshotUsable)
             {
                 UE_LOG(LogPlanetaryCreation, Verbose,
-                    TEXT("[StageB][GPU] Oceanic snapshot unusable for JobId %llu (SnapshotId=%llu VertexCount=%d Consistent=%d). Using CPU parity."),
+                    TEXT("[StageB][GPU] Oceanic snapshot unusable for JobId %llu (SnapshotId=%llu VertexCount=%d Consistent=%d). Using CPU fallback."),
                     Job.JobId,
                     Snapshot.SnapshotId,
                     Snapshot.VertexCount,
@@ -8828,7 +9109,7 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
             else if (!bMetadataMatch)
             {
                 UE_LOG(LogPlanetaryCreation, Log,
-                    TEXT("[StageB][GPU] Dropping oceanic snapshot (JobId=%llu SnapshotId=%llu) metadata mismatch. Snapshot[Lod=%d Topo=%d Surface=%d] Current[Lod=%d Topo=%d Surface=%d]."),
+                    TEXT("[StageB][GPU] Snapshot metadata mismatch (JobId=%llu SnapshotId=%llu). Snapshot[Lod=%d Topo=%d Surface=%d] Current[Lod=%d Topo=%d Surface=%d]. Falling back to CPU."),
                     Job.JobId,
                     Snapshot.SnapshotId,
                     Snapshot.RenderLOD,
@@ -8841,14 +9122,23 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
             else if (!bHashComputed)
             {
                 UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[StageB][GPU] Unable to compute oceanic input hash for JobId=%llu SnapshotId=%llu due to data inconsistency. Falling back to CPU parity."),
+                    TEXT("[StageB][GPU] Unable to compute oceanic input hash for JobId=%llu SnapshotId=%llu. Using CPU fallback."),
                     Job.JobId,
                     Snapshot.SnapshotId);
             }
-            else
+            else if (!bHashMatch)
             {
                 UE_LOG(LogPlanetaryCreation, Warning,
-                    TEXT("[StageB][GPU] Oceanic snapshot rejected (JobId=%llu SnapshotId=%llu) after metadata mismatch detected."),
+                    TEXT("[StageB][GPU] Oceanic snapshot hash mismatch for JobId=%llu SnapshotId=%llu (Snapshot=0x%08x Current=0x%08x). Using CPU fallback."),
+                    Job.JobId,
+                    Snapshot.SnapshotId,
+                    Snapshot.InputHash,
+                    CurrentHash);
+            }
+            else if (bParameterMismatch)
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[StageB][GPU] Parameter drift detected post-dispatch (JobId=%llu SnapshotId=%llu). Using CPU fallback."),
                     Job.JobId,
                     Snapshot.SnapshotId);
             }
@@ -8856,7 +9146,7 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
 
         const FString ProjectContentDir = FPaths::ProjectContentDir();
 
-        if (!bUseSnapshot && bSnapshotUsable)
+        if (!bReplayGpuResults && bSnapshotUsable)
         {
             UE_LOG(LogPlanetaryCreation, Verbose,
                 TEXT("[StageB][GPU] Oceanic snapshot mismatch for JobId %llu (SnapshotId=%llu). Replaying snapshot on CPU to preserve parity."),
@@ -8864,27 +9154,30 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                 Snapshot.SnapshotId);
         }
 
-        if (!bUseSnapshot && !bSnapshotUsable)
+        if (!bReplayGpuResults && !bSnapshotUsable)
         {
             TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
             Amplified.SetNum(NumFloats);
+#if UE_BUILD_DEVELOPMENT
+            const int32 DebugVertexIndex = 40283;
+            auto LogDebugVertex = [&](const TCHAR* Label)
+            {
+                if (Amplified.IsValidIndex(DebugVertexIndex))
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[V40283][%s] %.3f"),
+                        Label,
+                        Amplified[DebugVertexIndex]);
+                }
+            };
+            LogDebugVertex(TEXT("OceanicReadback_Fallback_Before"));
+#endif
             for (int32 Index = 0; Index < NumFloats; ++Index)
             {
                 const double GPUValue = static_cast<double>((*TempData)[Index]);
                 const int32 PlateId = VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE;
-                bool bOceanicPlate = false;
+                const bool bOceanicPlate = IsPlateOceanic(PlateId);
                 const double BaseElevation = VertexElevationValues.IsValidIndex(Index) ? VertexElevationValues[Index] : GPUValue;
-                if (PlateId != INDEX_NONE)
-                {
-                    for (const FTectonicPlate& Plate : Plates)
-                    {
-                        if (Plate.PlateID == PlateId)
-                        {
-                            bOceanicPlate = (Plate.CrustType == ECrustType::Oceanic);
-                            break;
-                        }
-                    }
-                }
 
                 if (bOceanicPlate)
                 {
@@ -8928,14 +9221,38 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                     }
                 }
             }
+#if UE_BUILD_DEVELOPMENT
+            LogDebugVertex(TEXT("OceanicReadback_Fallback_After"));
+#endif
 
             PendingOceanicGPUJobs.RemoveAt(JobIndex);
-            BumpOceanicAmplificationSerial();
+            if (PendingContinentalGPUJobs.Num() > 0)
+            {
+                ++PendingOceanicSerialBumps;
+            }
+            else
+            {
+                BumpOceanicAmplificationSerial();
+            }
             continue;
         }
 
         TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
         Amplified.SetNum(NumFloats);
+#if UE_BUILD_DEVELOPMENT
+        const int32 DebugVertexIndexMain = 40283;
+        auto LogDebugVertexMain = [&](const TCHAR* Label)
+        {
+            if (Amplified.IsValidIndex(DebugVertexIndexMain))
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[V40283][%s] %.3f"),
+                    Label,
+                    Amplified[DebugVertexIndexMain]);
+            }
+        };
+        LogDebugVertexMain(TEXT("OceanicReadback_Apply_Before"));
+#endif
 
         const FOceanicAmplificationSnapshot* ActiveSnapshot = bSnapshotUsable ? &Snapshot : nullptr;
 
@@ -8948,16 +9265,30 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
             const int32 PlateId = ActiveSnapshot && ActiveSnapshot->PlateAssignments.IsValidIndex(Index)
                 ? ActiveSnapshot->PlateAssignments[Index]
                 : (VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE);
-            const bool bOceanic = ActiveSnapshot && ActiveSnapshot->OceanicMask.IsValidIndex(Index)
-                ? ActiveSnapshot->OceanicMask[Index] != 0u
-                : (PlateId != INDEX_NONE && Plates.IsValidIndex(PlateId) && Plates[PlateId].CrustType == ECrustType::Oceanic);
+            bool bOceanic = IsPlateOceanic(PlateId);
+            if (ActiveSnapshot && ActiveSnapshot->OceanicMask.IsValidIndex(Index))
+            {
+                bOceanic = bOceanic || (ActiveSnapshot->OceanicMask[Index] != 0u);
+            }
 
             if (!bOceanic)
             {
                 Amplified[Index] = Baseline;
                 ++LocalBaselineReuseCount;
 
-                const bool bPlateOceanic = PlateId != INDEX_NONE && Plates.IsValidIndex(PlateId) && Plates[PlateId].CrustType == ECrustType::Oceanic;
+                if (Index == 40283)
+                {
+                    const uint32 SnapshotMaskValue = (ActiveSnapshot && ActiveSnapshot->OceanicMask.IsValidIndex(Index)) ? ActiveSnapshot->OceanicMask[Index] : 0u;
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[OceanicReadback][SkipOceanic] Vertex 40283 Baseline=%.3f GPU=%.3f bOceanic=%d SnapshotMask=%u PlateId=%d"),
+                        Baseline,
+                        GPUValue,
+                        bOceanic ? 1 : 0,
+                        SnapshotMaskValue,
+                        PlateId);
+                }
+
+                const bool bPlateOceanic = IsPlateOceanic(PlateId);
                 const double DeltaBaseline = FMath::Abs(GPUValue - Baseline);
                 if (bPlateOceanic)
                 {
@@ -9008,10 +9339,13 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                     GetParameters());
             }
 
-            Amplified[Index] = CpuValue;
+            const double GpuAbsolute = Baseline + GPUValue;
+            const bool bApplyGpuValue = bReplayGpuResults;
+            const double AppliedValue = bApplyGpuValue ? GpuAbsolute : CpuValue;
+            Amplified[Index] = AppliedValue;
 
 #if UE_BUILD_DEVELOPMENT
-            const double Delta = FMath::Abs(CpuValue - GPUValue);
+            const double Delta = FMath::Abs(CpuValue - GpuAbsolute);
             const bool bShouldLog = (OceanicDebugComparisonCount < 5) || (Delta > 1.0);
             if (bShouldLog)
             {
@@ -9019,11 +9353,13 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                 const FVector4f RidgeFloat = Snapshot.RidgeDirections.IsValidIndex(Index) ? Snapshot.RidgeDirections[Index] : FVector4f(0.0f, 0.0f, 1.0f, 0.0f);
 
                 UE_LOG(LogPlanetaryCreation, Log,
-                    TEXT("[StageB][GPU][ParityAdjust] Vtx=%d Plate=%d CPU=%.3f GPU=%.3f Base=%.3f Ridge=(%.3f,%.3f,%.3f) Pos=(%.3f,%.3f,%.3f)"),
+                    TEXT("[StageB][GPU][ParityAdjust] Vtx=%d Plate=%d CPU=%.3f GPUDisp=%.3f GPUAbs=%.3f Applied=%.3f Base=%.3f Ridge=(%.3f,%.3f,%.3f) Pos=(%.3f,%.3f,%.3f)"),
                     Index,
                     PlateId,
                     CpuValue,
                     GPUValue,
+                    GpuAbsolute,
+                    AppliedValue,
                     Baseline,
                     RidgeFloat.X, RidgeFloat.Y, RidgeFloat.Z,
                     PositionFloat.X, PositionFloat.Y, PositionFloat.Z);
@@ -9031,10 +9367,33 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
                 ++OceanicDebugComparisonCount;
             }
 #endif
+
+            if (Index == 40283)
+            {
+                UE_LOG(LogPlanetaryCreation, Display,
+                    TEXT("[OceanicReadback][Apply] Vertex 40283 Baseline=%.3f GPUDisp=%.3f GPUAbs=%.3f CPU=%.3f Applied=%.3f Delta=%.3f bOceanic=%d"),
+                    Baseline,
+                    GPUValue,
+                    GpuAbsolute,
+                    CpuValue,
+                    AppliedValue,
+                    FMath::Abs(CpuValue - GpuAbsolute),
+                    bOceanic ? 1 : 0);
+            }
         }
 
         PendingOceanicGPUJobs.RemoveAt(JobIndex);
-        BumpOceanicAmplificationSerial();
+        if (PendingContinentalGPUJobs.Num() > 0)
+        {
+            ++PendingOceanicSerialBumps;
+        }
+        else
+        {
+            BumpOceanicAmplificationSerial();
+        }
+#if UE_BUILD_DEVELOPMENT
+        LogDebugVertexMain(TEXT("OceanicReadback_Apply_After"));
+#endif
         continue;
     }
 
@@ -9061,6 +9420,21 @@ void UTectonicSimulationService::ProcessPendingOceanicGPUReadbacks(bool bBlockUn
 void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlockUntilComplete, double* OutReadbackSeconds)
 {
     double AccumulatedSeconds = 0.0;
+    auto IsPlateOceanic = [&](int32 PlateId) -> bool
+    {
+        if (PlateId == INDEX_NONE)
+        {
+            return false;
+        }
+        for (const FTectonicPlate& Plate : Plates)
+        {
+            if (Plate.PlateID == PlateId)
+            {
+                return Plate.CrustType == ECrustType::Oceanic;
+            }
+        }
+        return false;
+    };
 
 #if UE_BUILD_DEVELOPMENT
     static int32 DebugComparisonCount = 0;
@@ -9130,6 +9504,29 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                 Readback->Unlock();
             });
 
+#if UE_BUILD_DEVELOPMENT
+        TSharedRef<TArray<FVector4f>, ESPMode::ThreadSafe> DebugTempData = MakeShared<TArray<FVector4f>, ESPMode::ThreadSafe>();
+        if (Job.DebugReadback.IsValid() && Job.WorkCount > 0)
+        {
+            DebugTempData->SetNum(Job.WorkCount);
+            ENQUEUE_RENDER_COMMAND(CopyContinentalGPUDebug)(
+                [DebugReadback = Job.DebugReadback, NumBytes = Job.DebugNumBytes, DebugTempData](FRHICommandListImmediate& RHICmdList)
+                {
+                    if (!DebugReadback.IsValid())
+                    {
+                        return;
+                    }
+
+                    const FVector4f* GPUData = static_cast<const FVector4f*>(DebugReadback->Lock(NumBytes));
+                    if (GPUData)
+                    {
+                        FMemory::Memcpy(DebugTempData->GetData(), GPUData, NumBytes);
+                    }
+                    DebugReadback->Unlock();
+                });
+        }
+#endif
+
         Job.CopyFence.BeginFence();
         if (bBlockUntilComplete)
         {
@@ -9142,22 +9539,122 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
             continue;
         }
 
+#if UE_BUILD_DEVELOPMENT
+        if (Job.DebugReadback.IsValid() && Job.WorkCount > 0)
+        {
+            if (DebugTempData->Num() == Job.WorkCount)
+            {
+                Job.DebugData = MoveTemp(*DebugTempData);
+                Job.bDebugDataValid = true;
+            }
+            else
+            {
+                Job.DebugData.Reset();
+                Job.bDebugDataValid = false;
+            }
+        }
+        else
+        {
+            Job.DebugData.Reset();
+            Job.bDebugDataValid = false;
+        }
+#endif
+
+#if UE_BUILD_DEVELOPMENT
+        if (Job.TextureReadback.IsValid() && !Job.TextureReadback->IsReady())
+        {
+            if (bBlockUntilComplete)
+            {
+                const double TextureWaitStart = FPlatformTime::Seconds();
+                while (!Job.TextureReadback->IsReady())
+                {
+                    FPlatformProcess::SleepNoStats(0.001f);
+                }
+                AccumulatedSeconds += FPlatformTime::Seconds() - TextureWaitStart;
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        if (Job.TextureReadback.IsValid() && Job.TextureReadback->IsReady() && !Job.bTextureDataLogged)
+        {
+            int32 RowPitchPixels = 0;
+            int32 BufferHeight = 0;
+            uint16 FirstNonZeroValue = 0;
+            int32 NonZeroSampleCount = 0;
+            bool bHadData = false;
+
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalGPUReadback][ExemplarTexture] Inspecting exemplar texture readback (JobId=%llu)"),
+                Job.JobId);
+
+            if (void* TexturePtr = Job.TextureReadback->Lock(RowPitchPixels, &BufferHeight))
+            {
+                const uint32 Pitch = static_cast<uint32>(FMath::Max(RowPitchPixels, 0));
+                const uint32 Rows = static_cast<uint32>(FMath::Max(BufferHeight, 0));
+                const uint32 TotalPixels = Pitch * Rows;
+                uint16* TextureData = static_cast<uint16*>(TexturePtr);
+                for (uint32 PixelIndex = 0; PixelIndex < TotalPixels; ++PixelIndex)
+                {
+                    const uint16 SampleValue = TextureData[PixelIndex];
+                    if (SampleValue != 0)
+                    {
+                        ++NonZeroSampleCount;
+                        if (FirstNonZeroValue == 0)
+                        {
+                            FirstNonZeroValue = SampleValue;
+                        }
+                        if (NonZeroSampleCount >= 8)
+                        {
+                            break;
+                        }
+                    }
+                }
+                bHadData = true;
+            }
+            Job.TextureReadback->Unlock();
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalGPUReadback][ExemplarTexture] Pitch=%d Height=%d NonZero=%d FirstValue=0x%04x"),
+                RowPitchPixels,
+                BufferHeight,
+                NonZeroSampleCount,
+                FirstNonZeroValue);
+            if (!bHadData)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[ContinentalGPUReadback][ExemplarTexture] Readback buffer pointer was null (JobId=%llu)"),
+                    Job.JobId);
+            }
+            Job.TextureReadback.Reset();
+            Job.bTextureDataLogged = true;
+        }
+#endif
+
         const FContinentalAmplificationSnapshot& Snapshot = Job.Snapshot;
         const bool bSnapshotUsable = Snapshot.IsConsistent() && Snapshot.VertexCount == NumFloats;
-        bool bSnapshotConsistent = false;
-        if (bSnapshotUsable)
+        const uint64 SnapshotSerial = Snapshot.DataSerial;
+        const uint64 CurrentSerial = GetOceanicAmplificationDataSerial();
+        const bool bSerialMatch = (SnapshotSerial == CurrentSerial);
+        const bool bTopologyMatch = (Snapshot.TopologyVersion == GetTopologyVersion());
+        const bool bSurfaceMatch = (Snapshot.SurfaceVersion == GetSurfaceDataVersion());
+
+        bool bSnapshotConsistent = bTopologyMatch && bSurfaceMatch;
+        if (!bSerialMatch && bSnapshotConsistent)
         {
-            bSnapshotConsistent =
-                Snapshot.DataSerial == GetOceanicAmplificationDataSerial() &&
-                Snapshot.TopologyVersion == GetTopologyVersion() &&
-                Snapshot.SurfaceVersion == GetSurfaceDataVersion();
+            UE_LOG(LogPlanetaryCreation, Verbose,
+                TEXT("[ContinentalGPU] Snapshot serial drift detected for JobId %llu (SnapshotSerial=%llu CurrentSerial=%llu). Attempting hash validation."),
+                Job.JobId,
+                SnapshotSerial,
+                CurrentSerial);
         }
 
         bool bUseSnapshot = bSnapshotConsistent;
         if (bUseSnapshot)
         {
             uint32 CurrentHash = 0;
-            const bool bComputedHash = ComputeCurrentContinentalInputHash(*this, Snapshot, CurrentHash);
+            const bool bComputedHash = ComputeCurrentContinentalInputHash(*this, Snapshot, CurrentHash, SnapshotSerial);
             if (bComputedHash)
             {
                 ++GPUStats.HashCheckCount;
@@ -9188,6 +9685,14 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                 {
                     ++GPUStats.HashMatchCount;
                     GPUStats.bSnapshotMatched = true;
+                    if (!bSerialMatch)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[ContinentalGPU] Snapshot hash validated despite serial drift for JobId %llu (SnapshotSerial=%llu CurrentSerial=%llu)."),
+                            Job.JobId,
+                            SnapshotSerial,
+                            CurrentSerial);
+                    }
                 }
             }
             else
@@ -9219,6 +9724,19 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                 Snapshot.VertexCount);
         }
 
+#if UE_BUILD_DEVELOPMENT
+        if (bForceStageBGPUReplayForTests && bSnapshotUsable && !bUseSnapshot)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalGPU] Forcing snapshot acceptance for tests (JobId=%llu)."),
+                Job.JobId);
+            bUseSnapshot = true;
+            GPUStats.bSnapshotMatched = true;
+            ++GPUStats.HashCheckCount;
+            ++GPUStats.HashMatchCount;
+        }
+#endif
+
         const FContinentalAmplificationSnapshot* ActiveSnapshot = bSnapshotUsable ? &Snapshot : nullptr;
         const TCHAR* SummaryLabel = ActiveSnapshot ? (bUseSnapshot ? TEXT("snapshot") : TEXT("snapshot fallback")) : TEXT("live fallback");
 
@@ -9234,6 +9752,266 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
 
         TArray<double>& Amplified = GetMutableVertexAmplifiedElevation();
         Amplified.SetNum(NumFloats);
+#if UE_BUILD_DEVELOPMENT
+    const int32 ContinentalDebugVertex = GetStageBUnifiedDebugVertexIndex();
+    auto LogContinentalDebugValue = [&](const TCHAR* Label)
+    {
+        if (ContinentalDebugVertex != INDEX_NONE && Amplified.IsValidIndex(ContinentalDebugVertex))
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[V%d][%s] %.3f"),
+                ContinentalDebugVertex,
+                Label,
+                Amplified[ContinentalDebugVertex]);
+        }
+    };
+    if (ContinentalDebugVertex != INDEX_NONE)
+    {
+        LogContinentalDebugValue(TEXT("ContinentalReadback_Before"));
+    }
+
+    FVector4f ContinentalDebugVector(0.0f, 0.0f, 0.0f, 0.0f);
+    bool bContinentalDebugValid = false;
+    if (ContinentalDebugVertex != INDEX_NONE && Job.bDebugDataValid)
+    {
+        int32 DebugWorkIndex = Job.WorkIndices.IsValid()
+            ? Job.WorkIndices->IndexOfByKey(static_cast<uint32>(ContinentalDebugVertex))
+            : INDEX_NONE;
+            if (DebugWorkIndex != INDEX_NONE && Job.DebugData.IsValidIndex(DebugWorkIndex))
+            {
+                ContinentalDebugVector = Job.DebugData[DebugWorkIndex];
+                bContinentalDebugValid = true;
+                UE_LOG(LogPlanetaryCreation, Display,
+                    TEXT("[ContinentalGPU][DebugVector] RAW (%.3f, %.3f, %.3f, %.3f)"),
+                    ContinentalDebugVector.X,
+                    ContinentalDebugVector.Y,
+                    ContinentalDebugVector.Z,
+                    ContinentalDebugVector.W);
+                const FContinentalAmplificationGPUInputs& DebugInputs = GetContinentalAmplificationGPUInputs();
+                const FUintVector4 DebugIndices = DebugInputs.ExemplarIndices.IsValidIndex(ContinentalDebugVertex)
+                    ? DebugInputs.ExemplarIndices[ContinentalDebugVertex]
+                    : FUintVector4(MAX_uint32, MAX_uint32, MAX_uint32, MAX_uint32);
+                const uint32 PrimaryIndex = DebugIndices.X;
+
+                FVector2f WrappedUVValue = DebugInputs.WrappedUVs.IsValidIndex(ContinentalDebugVertex)
+                    ? DebugInputs.WrappedUVs[ContinentalDebugVertex]
+                    : FVector2f::ZeroVector;
+
+                int32 DebugPixelX = -1;
+                int32 DebugPixelY = -1;
+                UTexture2DArray* TextureArray = PlanetaryCreation::GPU::GetExemplarTextureArray().GetTextureArray();
+                int32 TexWidth = TextureArray ? TextureArray->GetSizeX() : 0;
+                int32 TexHeight = TextureArray ? TextureArray->GetSizeY() : 0;
+                if (TexWidth > 0 && TexHeight > 0)
+                {
+                    DebugPixelX = FMath::Clamp(static_cast<int32>(WrappedUVValue.X * static_cast<float>(TexWidth)), 0, TexWidth - 1);
+                    DebugPixelY = FMath::Clamp(static_cast<int32>(WrappedUVValue.Y * static_cast<float>(TexHeight)), 0, TexHeight - 1);
+                }
+                const int32 FlippedPixelY = (TexHeight > 0) ? (TexHeight - 1 - DebugPixelY) : DebugPixelY;
+
+                bool bHandledDebugVector = false;
+
+                const bool bDebugVertexMatch = Job.WorkIndices.IsValid() && DebugWorkIndex != INDEX_NONE
+                    ? Job.WorkIndices->IsValidIndex(DebugWorkIndex) && (*Job.WorkIndices)[DebugWorkIndex] == static_cast<uint32>(ContinentalDebugVertex)
+                    : true;
+
+                if (bDebugVertexMatch)
+                {
+                    const float BlendedHeightGPU = ContinentalDebugVector.X;
+                    const float ReferenceMeanGPU = ContinentalDebugVector.Y;
+                    const float DetailGPU = ContinentalDebugVector.Z;
+                    const bool bUsedPrecomputedSamples = ContinentalDebugVector.W > 0.5f;
+                    const float BaselineValue = DebugInputs.BaselineElevation.IsValidIndex(ContinentalDebugVertex)
+                        ? DebugInputs.BaselineElevation[ContinentalDebugVertex]
+                        : 0.0f;
+                    const float EstimatedResult = BaselineValue + DetailGPU;
+
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[ContinentalGPU][DebugBlend] Vertex %d WorkIndex=%d Blended=%.3f RefMean=%.3f Detail=%.3f Baseline=%.3f GPUResult=%.3f PrecomputedSamples=%d"),
+                        ContinentalDebugVertex,
+                        DebugWorkIndex,
+                        BlendedHeightGPU,
+                        ReferenceMeanGPU,
+                        DetailGPU,
+                        BaselineValue,
+                        EstimatedResult,
+                        bUsedPrecomputedSamples ? 1 : 0);
+
+                    bHandledDebugVector = true;
+                }
+
+                if (!bHandledDebugVector && ContinentalDebugVector.W >= 0.0f)
+                {
+                    const float SampleNorm = ContinentalDebugVector.X;
+                    const float DebugPixelXFromGPU = ContinentalDebugVector.Y;
+                    const float DebugPixelYFromGPU = ContinentalDebugVector.Z;
+                    const float DebugAtlasFromGPU = ContinentalDebugVector.W;
+
+                    const int32 GPUAtlasIndex = FMath::RoundToInt(DebugAtlasFromGPU);
+                    const int32 GPUPixelX = FMath::RoundToInt(DebugPixelXFromGPU);
+                    const int32 GPUPixelY = FMath::RoundToInt(DebugPixelYFromGPU);
+                    const int32 RawSampleValue = FMath::RoundToInt(SampleNorm * 65535.0f);
+
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[ContinentalGPU][DebugSample] Vertex %d WorkIndex=%d AtlasGPU=%d AtlasCPU=%d PixelGPU=(%d,%d) PixelCPU=(%d,%d) WrappedUV=(%.4f,%.4f) Norm=%.6f Raw=0x%04x"),
+                        ContinentalDebugVertex,
+                        DebugWorkIndex,
+                        GPUAtlasIndex,
+                        static_cast<int32>(PrimaryIndex),
+                        GPUPixelX,
+                        GPUPixelY,
+                        DebugPixelX,
+                        FlippedPixelY,
+                        WrappedUVValue.X,
+                        WrappedUVValue.Y,
+                        SampleNorm,
+                        RawSampleValue & 0xFFFF);
+
+                    bHandledDebugVector = true;
+                }
+                else if (ContinentalDebugVector.W <= -900.0f)
+                {
+                    const float SampleCenterRaw = ContinentalDebugVector.X;
+                    const float SampleOriginRaw = ContinentalDebugVector.Y;
+                    const float AgeValue = ContinentalDebugVector.Z;
+                    const float TransitionAgeValue = -900.0f - ContinentalDebugVector.W;
+
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[ContinentalGPU][DebugTop] Vertex %d WorkIndex=%d Atlas=%d Pixel=(%d,%d) WrappedUV=(%.4f,%.4f) RawCenter=%.0f RawOrigin=%.0f Age=%.3f TransitionAge=%.3f"),
+                        ContinentalDebugVertex,
+                        DebugWorkIndex,
+                        static_cast<int32>(PrimaryIndex),
+                        DebugPixelX,
+                        DebugPixelY,
+                        WrappedUVValue.X,
+                        WrappedUVValue.Y,
+                        SampleCenterRaw,
+                        SampleOriginRaw,
+                        AgeValue,
+                        TransitionAgeValue);
+
+#if UE_BUILD_DEVELOPMENT
+                    if (TextureArray)
+                    {
+                        const int32 AtlasSlice = (PrimaryIndex != MAX_uint32)
+                            ? FMath::Clamp(static_cast<int32>(PrimaryIndex), 0, TextureArray->GetArraySize() - 1)
+                            : 0;
+                        PlanetaryCreation::GPU::FExemplarTextureArray& ExemplarArray = PlanetaryCreation::GPU::GetExemplarTextureArray();
+                        const TArray<PlanetaryCreation::GPU::FExemplarTextureArray::FExemplarInfo>& ExemplarInfo = ExemplarArray.GetExemplarInfo();
+                        if (ExemplarInfo.IsValidIndex(AtlasSlice))
+                        {
+                            const auto& Info = ExemplarInfo[AtlasSlice];
+                            const float CenterNorm = SampleCenterRaw / 65535.0f;
+                            const float OriginNorm = SampleOriginRaw / 65535.0f;
+                            UE_LOG(LogPlanetaryCreation, Display,
+                                TEXT("[ContinentalGPU][DebugTopSample] Atlas=%d NormCenter=%.6f NormOrigin=%.6f ElevationRange=[%.1f, %.1f]"),
+                                AtlasSlice,
+                                CenterNorm,
+                                OriginNorm,
+                                Info.ElevationMin_m,
+                                Info.ElevationMax_m);
+                        }
+                    }
+#endif
+                }
+                else if (ContinentalDebugVector.W <= -500.0f)
+                {
+                    const float SampleCenterRaw = ContinentalDebugVector.X;
+                    const float SampleOriginRaw = ContinentalDebugVector.Y;
+                    const float SampleComputedRaw = ContinentalDebugVector.Z;
+                    const bool bInBounds = ContinentalDebugVector.W <= -700.0f;
+
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[ContinentalGPU][Debug] Vertex %d WorkIndex=%d Atlas=%d Pixel=(%d,%d) WrappedUV=(%.4f,%.4f) RawSamples {Center=%.0f Origin=%.0f Computed=%.0f} InBounds=%d"),
+                        ContinentalDebugVertex,
+                        DebugWorkIndex,
+                        static_cast<int32>(PrimaryIndex),
+                        DebugPixelX,
+                        DebugPixelY,
+                        WrappedUVValue.X,
+                        WrappedUVValue.Y,
+                        SampleCenterRaw,
+                        SampleOriginRaw,
+                        SampleComputedRaw,
+                        bInBounds ? 1 : 0);
+
+#if UE_BUILD_DEVELOPMENT
+                    if (TextureArray && PrimaryIndex != MAX_uint32)
+                    {
+                        PlanetaryCreation::GPU::FExemplarTextureArray& ExemplarArray = PlanetaryCreation::GPU::GetExemplarTextureArray();
+                        const TArray<PlanetaryCreation::GPU::FExemplarTextureArray::FExemplarInfo>& ExemplarInfo = ExemplarArray.GetExemplarInfo();
+                        if (ExemplarInfo.IsValidIndex(static_cast<int32>(PrimaryIndex)))
+                        {
+                            const PlanetaryCreation::GPU::FExemplarTextureArray::FExemplarInfo& Info = ExemplarInfo[static_cast<int32>(PrimaryIndex)];
+                            const float CenterNorm = SampleCenterRaw / 65535.0f;
+                            const float OriginNorm = SampleOriginRaw / 65535.0f;
+                            const float ComputedNorm = SampleComputedRaw / 65535.0f;
+                            UE_LOG(LogPlanetaryCreation, Display,
+                                TEXT("[ContinentalGPU][DebugSample] Atlas=%d Norm {Center=%.6f Origin=%.6f Computed=%.6f} ElevationRange=[%.1f, %.1f]"),
+                                static_cast<int32>(PrimaryIndex),
+                                CenterNorm,
+                                OriginNorm,
+                                ComputedNorm,
+                                Info.ElevationMin_m,
+                                Info.ElevationMax_m);
+                        }
+                    }
+#endif
+                }
+                else
+                {
+                    const float NormalizedSample = ContinentalDebugVector.X;
+                    const float DebugWrappedU = ContinentalDebugVector.Y;
+                    const float DebugWrappedV = ContinentalDebugVector.Z;
+                    const int32 SampleAtlas = FMath::FloorToInt(ContinentalDebugVector.W + 0.5f);
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[ContinentalGPU][Debug] Vertex %d WorkIndex=%d SampleNorm=%.6f Atlas=%d Pixel=(%d,%d) WrappedUV=(%.4f,%.4f)"),
+                        ContinentalDebugVertex,
+                        DebugWorkIndex,
+                        NormalizedSample,
+                        SampleAtlas,
+                        DebugPixelX,
+                        DebugPixelY,
+                        DebugWrappedU,
+                        DebugWrappedV);
+#if UE_BUILD_DEVELOPMENT
+                    if (SampleAtlas >= 0)
+                    {
+                        PlanetaryCreation::GPU::FExemplarTextureArray& ExemplarArray = PlanetaryCreation::GPU::GetExemplarTextureArray();
+                        const TArray<PlanetaryCreation::GPU::FExemplarTextureArray::FExemplarInfo>& ExemplarInfo = ExemplarArray.GetExemplarInfo();
+                        if (ExemplarInfo.IsValidIndex(SampleAtlas))
+                        {
+                            const PlanetaryCreation::GPU::FExemplarTextureArray::FExemplarInfo& Info = ExemplarInfo[SampleAtlas];
+                            float CpuSampleRaw = -1.0f;
+                            float CpuSampleElevation = 0.0f;
+                            if (Info.DebugWidth > 0 && Info.DebugHeight > 0 &&
+                                DebugPixelX >= 0 && DebugPixelX < Info.DebugWidth &&
+                                DebugPixelY >= 0 && DebugPixelY < Info.DebugHeight)
+                            {
+                                const int32 SampleIndex = DebugPixelY * Info.DebugWidth + DebugPixelX;
+                                if (Info.DebugHeightData.IsValidIndex(SampleIndex))
+                                {
+                                    const uint16 HeightSample = Info.DebugHeightData[SampleIndex];
+                                    CpuSampleRaw = static_cast<float>(HeightSample) / 65535.0f;
+                                    CpuSampleElevation = FMath::Lerp(
+                                        Info.ElevationMin_m,
+                                        Info.ElevationMax_m,
+                                        CpuSampleRaw);
+                                }
+                            }
+                            UE_LOG(LogPlanetaryCreation, Display,
+                                TEXT("[ContinentalGPU][DebugSample] Atlas=%d GPU SampleNorm=%.6f CPU SampleRaw=%.6f CPU Elevation=%.3f"),
+                                SampleAtlas,
+                                NormalizedSample,
+                                CpuSampleRaw,
+                                CpuSampleElevation);
+                        }
+                    }
+#endif
+                }
+            }
+        }
+#endif
 
         if (bUseSnapshot && ActiveSnapshot)
         {
@@ -9248,8 +10026,30 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
 
             for (int32 Index = 0; Index < NumFloats; ++Index)
             {
+                const int32 PlateId = ActiveSnapshot->PlateAssignments.IsValidIndex(Index)
+                    ? ActiveSnapshot->PlateAssignments[Index]
+                    : (VertexPlateAssignments.IsValidIndex(Index) ? VertexPlateAssignments[Index] : INDEX_NONE);
+                const bool bOceanicVertex = IsPlateOceanic(PlateId);
+                if (bOceanicVertex)
+                {
+                    continue;
+                }
+
                 const double GPUValue = static_cast<double>((*TempData)[Index]);
                 Amplified[Index] = GPUValue;
+
+#if UE_BUILD_DEVELOPMENT
+                if (ContinentalDebugVertex != INDEX_NONE && Index == ContinentalDebugVertex)
+                {
+                    const float SnapshotBaseline = ActiveSnapshot->BaselineElevation.IsValidIndex(Index) ? ActiveSnapshot->BaselineElevation[Index] : 0.0f;
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[ContinentalReadback][SnapshotApply] Vertex %d GPU=%.3f Baseline=%.3f Plate=%d"),
+                        ContinentalDebugVertex,
+                        GPUValue,
+                        SnapshotBaseline,
+                        PlateId);
+                }
+#endif
 
 #if UE_BUILD_DEVELOPMENT
                 if (ActiveSnapshot->AmplifiedElevation.IsValidIndex(Index))
@@ -9387,6 +10187,17 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                 AccumulatedDelta += Delta;
                 MaxDelta = FMath::Max(MaxDelta, Delta);
 
+                if (ContinentalDebugVertex != INDEX_NONE && Index == ContinentalDebugVertex)
+                {
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[ContinentalReadback][Fallback] Vertex %d Baseline=%.3f CPU=%.3f GPU=%.3f Delta=%.3f"),
+                        ContinentalDebugVertex,
+                        Baseline,
+                        CpuValue,
+                        GPUValue,
+                        Delta);
+                }
+
                 if ((DebugComparisonCount < 5) || Delta > 1.0)
                 {
                     const uint32 TerrainInfo = bHasSnapshotEntry
@@ -9435,7 +10246,15 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
 
         SurfaceDataVersion++;
         PendingContinentalGPUJobs.RemoveAt(JobIndex);
+        while (PendingOceanicSerialBumps > 0)
+        {
+            BumpOceanicAmplificationSerial();
+            --PendingOceanicSerialBumps;
+        }
         BumpOceanicAmplificationSerial();
+#if UE_BUILD_DEVELOPMENT
+        LogContinentalDebugValue(TEXT("ContinentalReadback_After"));
+#endif
     }
 
     TryMarkStageBReady(TEXT("ProcessPendingContinentalGPUReadbacks"));
@@ -9691,6 +10510,7 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
     Cache.ExemplarWeights.SetNum(VertexCount);
     Cache.RandomUVOffsets.SetNum(VertexCount);
     Cache.WrappedUVs.SetNum(VertexCount);
+    Cache.SampleHeights.SetNum(VertexCount);
 
     using namespace PlanetaryCreation::GPU;
 
@@ -9698,6 +10518,11 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
     if (!ExemplarArray.IsInitialized())
     {
         const_cast<UTectonicSimulationService*>(this)->InitializeGPUExemplarResources();
+    }
+    const FString ProjectContentDirLocal = FPaths::ProjectContentDir();
+    if (!IsExemplarLibraryLoaded())
+    {
+        LoadExemplarLibraryJSON(ProjectContentDirLocal);
     }
 
     const TArray<FExemplarTextureArray::FExemplarInfo>& ExemplarInfo = ExemplarArray.GetExemplarInfo();
@@ -9888,12 +10713,19 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
 
     constexpr uint32 MaxExemplarBlendCount = 3;
     const uint32 InvalidIndex = MAX_uint32;
+#if UE_BUILD_DEVELOPMENT
+    const int32 DebugVertexIndex = GetStageBUnifiedDebugVertexIndex();
+#endif
 
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
         Cache.RenderPositions[VertexIdx] = FVector3f(VertexPosition);
-        Cache.BaselineElevation[VertexIdx] = static_cast<float>(VertexAmplifiedElevation[VertexIdx]);
+
+        const double RawElevation = VertexElevationValues.IsValidIndex(VertexIdx)
+            ? VertexElevationValues[VertexIdx]
+            : 0.0;
+        Cache.BaselineElevation[VertexIdx] = static_cast<float>(RawElevation);
 
         uint32 PackedInfo = 0;
         FUintVector4 PackedIndices(InvalidIndex, InvalidIndex, InvalidIndex, InvalidIndex);
@@ -9907,12 +10739,22 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         const bool bIsContinental = PlatePtr && PlatePtr->CrustType == ECrustType::Continental;
         if (!bIsContinental)
         {
-            Cache.PackedTerrainInfo[VertexIdx] = PackedInfo;
-            Cache.ExemplarIndices[VertexIdx] = PackedIndices;
-            Cache.ExemplarWeights[VertexIdx] = PackedWeights;
-            Cache.RandomUVOffsets[VertexIdx] = RandomOffset;
-            Cache.WrappedUVs[VertexIdx] = FVector2f::ZeroVector;
-            continue;
+#if UE_BUILD_DEVELOPMENT
+            if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
+            {
+                UE_LOG(LogPlanetaryCreation, Display,
+                    TEXT("[ContinentalInputs] Vertex %d marked non-continental (PlateID=%d)"),
+                    DebugVertexIndex,
+                    PlateID);
+            }
+#endif
+        Cache.PackedTerrainInfo[VertexIdx] = PackedInfo;
+        Cache.ExemplarIndices[VertexIdx] = PackedIndices;
+        Cache.ExemplarWeights[VertexIdx] = PackedWeights;
+        Cache.RandomUVOffsets[VertexIdx] = RandomOffset;
+        Cache.WrappedUVs[VertexIdx] = FVector2f::ZeroVector;
+        Cache.SampleHeights[VertexIdx] = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+        continue;
         }
 
         ++LocalMetrics.ContinentalVertexCount;
@@ -9923,7 +10765,9 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             ClassificationStart = FPlatformTime::Seconds();
         }
 
-        const double BaseElevation = VertexAmplifiedElevation[VertexIdx];
+        const double BaseElevation = VertexElevationValues.IsValidIndex(VertexIdx)
+            ? VertexElevationValues[VertexIdx]
+            : 0.0;
         const double OrogenyAge = VertexCrustAge.IsValidIndex(VertexIdx) ? VertexCrustAge[VertexIdx] : 0.0;
 
         const FPlateBoundarySummary* BoundarySummary = bHasBoundaries
@@ -9990,6 +10834,7 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         else
         {
             PackedInfo = static_cast<uint32>(TerrainType);
+            Cache.SampleHeights[VertexIdx] = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
         }
 
         Cache.PackedTerrainInfo[VertexIdx] = PackedInfo;
@@ -10051,6 +10896,88 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         }
 
         Cache.WrappedUVs[VertexIdx] = FVector2f(static_cast<float>(FinalUV.X), static_cast<float>(FinalUV.Y));
+#if UE_BUILD_DEVELOPMENT
+        if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
+        {
+            UE_LOG(LogPlanetaryCreation, Display,
+                TEXT("[ContinentalInputs] Vertex %d WrappedUV=(%.4f,%.4f) FinalUV=(%.4f,%.4f) LocalUV=(%.4f,%.4f) RandomOffset=(%.4f,%.4f)"),
+                DebugVertexIndex,
+                Cache.WrappedUVs[VertexIdx].X,
+                Cache.WrappedUVs[VertexIdx].Y,
+                FinalUV.X,
+                FinalUV.Y,
+                RotatedUV.X,
+                RotatedUV.Y,
+                RandomOffsetDouble.X,
+                RandomOffsetDouble.Y);
+            UE_LOG(LogPlanetaryCreation, Display,
+                TEXT("[ContinentalInputs] Vertex %d WeightsGPUInput=(%.3f,%.3f,%.3f,%.3f) PackedInfo=0x%08x Indices=(%u,%u,%u)"),
+                DebugVertexIndex,
+                PackedWeights.X,
+                PackedWeights.Y,
+                PackedWeights.Z,
+                PackedWeights.W,
+                PackedInfo,
+                PackedIndices.X,
+                PackedIndices.Y,
+                PackedIndices.Z);
+        }
+#endif
+
+        float SampleHeights[MaxExemplarBlendCount] = { 0.0f, 0.0f, 0.0f };
+        for (uint32 ExemplarIdx = 0; ExemplarIdx < ExemplarCount; ++ExemplarIdx)
+        {
+            const uint32 LibraryIndex = PackedIndices[ExemplarIdx];
+            if (LibraryIndex == InvalidIndex)
+            {
+                continue;
+            }
+
+            FExemplarMetadata* Exemplar = AccessExemplarMetadata(static_cast<int32>(LibraryIndex));
+            if (!Exemplar)
+            {
+                continue;
+            }
+
+            if (!Exemplar->bDataLoaded)
+            {
+                const FString ProjectContentDir = FPaths::ProjectContentDir();
+                LoadExemplarHeightData(*Exemplar, ProjectContentDir);
+            }
+
+            const double SampledHeight = SampleExemplarHeight(*Exemplar, FinalUV.X, FinalUV.Y);
+            SampleHeights[ExemplarIdx] = static_cast<float>(SampledHeight);
+        }
+
+        Cache.SampleHeights[VertexIdx] = FVector4f(
+            SampleHeights[0],
+            SampleHeights[1],
+            SampleHeights[2],
+            PackedWeights.W);
+
+#if UE_BUILD_DEVELOPMENT
+        if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
+        {
+            UE_LOG(LogPlanetaryCreation, Display,
+                TEXT("[ContinentalInputs] Vertex %d Baseline=%.3f PackedInfo=0x%08x Weights=(%.3f,%.3f,%.3f,%.3f) Indices=(%u,%u,%u)"),
+                DebugVertexIndex,
+                Cache.BaselineElevation[VertexIdx],
+                Cache.PackedTerrainInfo[VertexIdx],
+                PackedWeights.X,
+                PackedWeights.Y,
+                PackedWeights.Z,
+                PackedWeights.W,
+                PackedIndices.X,
+                PackedIndices.Y,
+                PackedIndices.Z);
+            UE_LOG(LogPlanetaryCreation, Display,
+                TEXT("[ContinentalInputs] Vertex %d SampleHeightsGPUInput=(%.3f,%.3f,%.3f)"),
+                DebugVertexIndex,
+                SampleHeights[0],
+                SampleHeights[1],
+                SampleHeights[2]);
+        }
+#endif
 
 #if UE_BUILD_DEVELOPMENT
         static int32 DebugPackedLog = 0;
@@ -10367,6 +11294,21 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
                 continue;
             }
 
+            int32 PixelX = 0;
+            int32 PixelY = 0;
+            uint16 RawValue = 0;
+            if (Exemplar->Width_px > 0 && Exemplar->Height_px > 0)
+            {
+                PixelX = FMath::Clamp(static_cast<int32>(WrappedU * static_cast<double>(Exemplar->Width_px)), 0, Exemplar->Width_px - 1);
+                PixelY = FMath::Clamp(static_cast<int32>(WrappedV * static_cast<double>(Exemplar->Height_px)), 0, Exemplar->Height_px - 1);
+                const int32 PixelIndex = PixelY * Exemplar->Width_px + PixelX;
+                if (Exemplar->HeightData.IsValidIndex(PixelIndex))
+                {
+                    RawValue = Exemplar->HeightData[PixelIndex];
+                }
+            }
+            const int32 FlippedPixelY = (Exemplar->Height_px > 0) ? (Exemplar->Height_px - 1 - PixelY) : PixelY;
+
             const double SampledHeight = SampleExemplarHeight(*Exemplar, WrappedU, WrappedV);
             WeightedSum += SampledHeight * Weight;
             TotalWeight += Weight;
@@ -10377,6 +11319,23 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
                 DebugInfo->ExemplarIndices[SampleIdx] = LibraryIndex;
                 DebugInfo->SampleHeights[SampleIdx] = SampledHeight;
                 DebugInfo->Weights[SampleIdx] = Weight;
+            }
+
+            const int32 DebugVertexIndex = GetStageBUnifiedDebugVertexIndex();
+            if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
+            {
+                UE_LOG(LogPlanetaryCreation, Display,
+                    TEXT("[ContinentalCPU][Sample] Vertex %d SampleIdx=%u Atlas=%u Pixel=(%d,%d) PixelFlipped=(%d,%d) Raw=0x%04x Height=%.3f Weight=%.3f"),
+                    DebugVertexIndex,
+                    SampleIdx,
+                    LibraryIndex,
+                    PixelX,
+                    PixelY,
+                    PixelX,
+                    FlippedPixelY,
+                    RawValue,
+                    SampledHeight,
+                    Weight);
             }
 #endif
         }
@@ -10419,6 +11378,23 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
     }
 
 #if UE_BUILD_DEVELOPMENT
+    const int32 DebugVertexIndex = GetStageBUnifiedDebugVertexIndex();
+    if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
+    {
+        const double DetailScaleDbg = (BaseElevation_m > 1000.0)
+            ? (ReferenceMean != 0.0 ? (BaseElevation_m / ReferenceMean) : 0.0)
+            : 0.5;
+        UE_LOG(LogPlanetaryCreation, Display,
+            TEXT("[ContinentalCPU] Vertex %d Base=%.3f Blended=%.3f RefMean=%.3f DetailScale=%.3f Result=%.3f TotalWeight=%.3f"),
+            DebugVertexIndex,
+            BaseElevation_m,
+            BlendedHeight,
+            ReferenceMean,
+            DetailScaleDbg,
+            AmplifiedElevation,
+            TotalWeight);
+    }
+
     if (DebugInfo)
     {
         DebugInfo->TotalWeight = TotalWeight;
