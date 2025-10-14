@@ -201,6 +201,7 @@ struct FContinentalAmplificationGPUInputs
     uint64 CachedDataSerial = 0;
     int32 CachedTopologyVersion = INDEX_NONE;
     int32 CachedSurfaceVersion = INDEX_NONE;
+    uint64 ForcedSettingsHash = 0;
 };
 
 struct FContinentalGPUDispatchStats
@@ -1148,6 +1149,24 @@ FORCEINLINE float MetersToUE(double Meters)
     return static_cast<float>(Meters * 100.0); // 1 meter = 100 centimeters
 }
 
+USTRUCT(BlueprintType)
+struct FStageBVertexSample
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    int32 VertexIndex = INDEX_NONE;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    double LongitudeDeg = 0.0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    double LatitudeDeg = 0.0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    double ElevationMeters = 0.0;
+};
+
 /**
  * Editor-only subsystem that holds the canonical tectonic simulation state.
  * The state uses double precision so long-running editor sessions avoid drift.
@@ -1196,7 +1215,9 @@ public:
     const TArray<int32>& GetRenderTriangles() const { return RenderTriangles; }
 
     /** Skip CPU Stage B amplification passes when GPU preview handles displacement. */
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
     void SetSkipCPUAmplification(bool bInSkip);
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
     bool IsSkippingCPUAmplification() const { return Parameters.bSkipCPUAmplification; }
     void SetForceHydraulicErosionDisabled(bool bDisabled);
     bool IsForceHydraulicErosionDisabled() const { return bForceHydraulicErosionDisabled; }
@@ -1251,10 +1272,10 @@ public:
         float DistanceRadians = TNumericLimits<float>::Max();
         FVector3d BoundaryTangent = FVector3d::ZeroVector;
         int32 SourcePlateID = INDEX_NONE;
-        int32 OpposingPlateID = INDEX_NONE;
-        bool bHasBoundary = false;
-        bool bIsDivergent = false;
-    };
+    int32 OpposingPlateID = INDEX_NONE;
+    bool bHasBoundary = false;
+    bool bIsDivergent = false;
+};
 
     /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
     const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
@@ -1331,7 +1352,10 @@ public:
      * This allows LOD changes during camera movement without destroying tectonic history.
      * Only regenerates render mesh and Voronoi mapping; preserves plates, stress, rifts, etc.
      */
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
     void SetRenderSubdivisionLevel(int32 NewLevel);
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    int32 GetRenderSubdivisionLevel() const { return Parameters.RenderSubdivisionLevel; }
 
     bool ShouldUseGPUAmplification() const;
     bool ApplyStageBUnifiedGPU(bool bRunOceanic, bool bRunContinental, PlanetaryCreation::GPU::FStageBUnifiedDispatchResult& OutResult);
@@ -1681,6 +1705,8 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
     FString ExportHeightmapVisualization(int32 ImageWidth = 2048, int32 ImageHeight = 1024);
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    TArray<FStageBVertexSample> GatherStageBVertexSamplesInBounds(double WestLongitudeDeg, double EastLongitudeDeg, double SouthLatitudeDeg, double NorthLatitudeDeg) const;
     void SetAllowUnsafeHeightmapExport(bool bInAllowUnsafe);
     bool IsUnsafeHeightmapExportAllowed() const { return bAllowUnsafeHeightmapExport; }
 
@@ -1980,6 +2006,7 @@ private:
     uint64 OceanicAmplificationDataSerial = 1;
     uint64 NextOceanicSnapshotId = 1;
     mutable uint64 ContinentalAmplificationCacheSerial = 0;
+    mutable uint64 ContinentalAmplificationCacheOverridesHash = 0;
     mutable int32 ContinentalAmplificationCacheTopologyVersion = INDEX_NONE;
     mutable int32 ContinentalAmplificationCacheSurfaceVersion = INDEX_NONE;
 

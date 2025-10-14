@@ -5,13 +5,14 @@
       "region": "Himalayan",
       "feature": "Everest-Lhotse massif",
       "tiles": [
-        "N27E086"
+        "N27E086",
+        "N28E086"
       ],
       "bounds": {
         "left": 86.3498611111464,
-        "bottom": 27.80013888888462,
+        "bottom": 27.800138888884625,
         "right": 86.94986111114648,
-        "top": 28.30013888888469
+        "top": 28.300138888884693
       },
       "pixel_size": {
         "x_deg": 0.0011718750000001554,
@@ -19,10 +20,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\H01.tif",
       "statistics": {
-        "min": 2986.02392578125,
-        "max": 8722.4951171875,
-        "mean": 5140.224757987697,
-        "stddev": 680.8481045752166
+        "min": 2987.7255859375,
+        "max": 8720.5400390625,
+        "mean": 5395.677326710895,
+        "stddev": 666.2620476365826
       }
     },
     {
@@ -30,7 +31,8 @@
       "region": "Himalayan",
       "feature": "Annapurna sanctuary",
       "tiles": [
-        "N28E083"
+        "N28E083",
+        "N28E084"
       ],
       "bounds": {
         "left": 83.399861111146,
@@ -44,10 +46,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\H02.tif",
       "statistics": {
-        "min": 392.9158935546875,
-        "max": 8108.5009765625,
-        "mean": 3825.1674491749536,
-        "stddev": 1442.498703746345
+        "min": 452.8299255371094,
+        "max": 8107.68603515625,
+        "mean": 3912.6845646497095,
+        "stddev": 1438.0783391766488
       }
     },
     {
@@ -55,16 +57,17 @@
       "region": "Himalayan",
       "feature": "Kangchenjunga saddle",
       "tiles": [
+        "N27E087",
         "N27E088"
       ],
       "bounds": {
-        "left": 87.99986111114663,
+        "left": 87.99986111114659,
         "bottom": 27.350138888884562,
-        "right": 88.69986111114672,
+        "right": 88.69986111114669,
         "top": 27.95013888888464
       },
       "pixel_size": {
-        "x_deg": 0.001367187500000172,
+        "x_deg": 0.0013671875000001998,
         "y_deg": -0.0011718750000001554
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\H03.tif",
@@ -105,7 +108,10 @@
       "region": "Himalayan",
       "feature": "Nanga Parbat massif",
       "tiles": [
-        "N35E074"
+        "N34E074",
+        "N34E075",
+        "N35E074",
+        "N35E075"
       ],
       "bounds": {
         "left": 74.3998611111448,
@@ -119,10 +125,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\H05.tif",
       "statistics": {
-        "min": 1067.6182861328125,
-        "max": 8027.93701171875,
-        "mean": 3730.714046479513,
-        "stddev": 1022.7578014570562
+        "min": 1068.6888427734375,
+        "max": 8021.83837890625,
+        "mean": 3781.7595326500013,
+        "stddev": 939.8958008868543
       }
     },
     {
@@ -130,24 +136,27 @@
       "region": "Himalayan",
       "feature": "Bhutan high ridge",
       "tiles": [
-        "N27E090"
+        "N27E089",
+        "N27E090",
+        "N28E089",
+        "N28E090"
       ],
       "bounds": {
-        "left": 89.99986111114686,
+        "left": 89.99986111114687,
         "bottom": 27.600138888884597,
-        "right": 90.69986111114694,
+        "right": 90.69986111114697,
         "top": 28.200138888884677
       },
       "pixel_size": {
-        "x_deg": 0.001367187500000172,
+        "x_deg": 0.0013671875000001998,
         "y_deg": -0.0011718750000001554
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\H06.tif",
       "statistics": {
-        "min": 1721.4395751953125,
-        "max": 5888.158203125,
-        "mean": 4243.276337630588,
-        "stddev": 770.9853177354269
+        "min": 1727.8177490234375,
+        "max": 7453.2548828125,
+        "mean": 4619.9014135738835,
+        "stddev": 906.7280907811466
       }
     },
     {
@@ -155,24 +164,27 @@
       "region": "Himalayan",
       "feature": "Nyainq\u00eantanglha range",
       "tiles": [
+        "N29E090",
+        "N29E091",
+        "N30E090",
         "N30E091"
       ],
       "bounds": {
-        "left": 90.99986111114703,
+        "left": 90.99986111114698,
         "bottom": 29.9001388888849,
-        "right": 91.69986111114711,
+        "right": 91.69986111114709,
         "top": 30.600138888884995
       },
       "pixel_size": {
-        "x_deg": 0.001367187500000172,
+        "x_deg": 0.0013671875000001998,
         "y_deg": -0.001367187500000186
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\H07.tif",
       "statistics": {
-        "min": 3917.3974609375,
-        "max": 5777.4052734375,
-        "mean": 4758.441099222266,
-        "stddev": 367.5249184109612
+        "min": 3751.212890625,
+        "max": 5776.64599609375,
+        "mean": 4688.654010812752,
+        "stddev": 408.2402823582948
       }
     },
     {
@@ -180,6 +192,7 @@
       "region": "Andean",
       "feature": "Cordillera Blanca",
       "tiles": [
+        "S10W078",
         "S09W078"
       ],
       "bounds": {
@@ -194,10 +207,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A01.tif",
       "statistics": {
-        "min": 1927.36083984375,
-        "max": 5875.8603515625,
-        "mean": 3516.9586186278357,
-        "stddev": 896.4093222258637
+        "min": 1101.04638671875,
+        "max": 6714.7119140625,
+        "mean": 3886.233257999178,
+        "stddev": 789.8999315342372
       }
     },
     {
@@ -205,6 +218,7 @@
       "region": "Andean",
       "feature": "Huayhuash knot",
       "tiles": [
+        "S11W077",
         "S10W077"
       ],
       "bounds": {
@@ -220,9 +234,9 @@
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A02.tif",
       "statistics": {
         "min": 1845.608642578125,
-        "max": 4634.36572265625,
-        "mean": 3642.1300351256505,
-        "stddev": 569.4486950451156
+        "max": 6421.91162109375,
+        "mean": 3765.9463972803205,
+        "stddev": 597.5663020225621
       }
     },
     {
@@ -230,6 +244,7 @@
       "region": "Andean",
       "feature": "Vilcabamba (Cusco)",
       "tiles": [
+        "S14W074",
         "S13W074"
       ],
       "bounds": {
@@ -244,10 +259,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A03.tif",
       "statistics": {
-        "min": 571.745361328125,
-        "max": 4324.43310546875,
-        "mean": 1859.863945708946,
-        "stddev": 808.7007683776562
+        "min": 571.9119262695312,
+        "max": 4558.59765625,
+        "mean": 2149.1603259376716,
+        "stddev": 937.731199833448
       }
     },
     {
@@ -255,24 +270,27 @@
       "region": "Andean",
       "feature": "Ausangate\u2013Sibinacocha",
       "tiles": [
+        "S15W072",
+        "S15W071",
+        "S14W072",
         "S14W071"
       ],
       "bounds": {
         "left": -71.40013888887451,
         "bottom": -14.599861111120997,
-        "right": -70.60013888887441,
+        "right": -70.6001388888744,
         "top": -13.899861111120906
       },
       "pixel_size": {
-        "x_deg": 0.0015625000000001887,
+        "x_deg": 0.0015625000000002165,
         "y_deg": -0.001367187500000179
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A04.tif",
       "statistics": {
-        "min": 4219.30224609375,
-        "max": 5657.11279296875,
-        "mean": 4810.464474978512,
-        "stddev": 282.8244735423329
+        "min": 3467.9892578125,
+        "max": 5655.98486328125,
+        "mean": 4513.561700062826,
+        "stddev": 377.03149600238595
       }
     },
     {
@@ -280,6 +298,7 @@
       "region": "Andean",
       "feature": "Lake Titicaca escarpment",
       "tiles": [
+        "S16W070",
         "S16W069"
       ],
       "bounds": {
@@ -296,8 +315,8 @@
       "statistics": {
         "min": 1598.8388671875,
         "max": 5038.1083984375,
-        "mean": 3618.377169214189,
-        "stddev": 709.8440826228396
+        "mean": 3936.073999196291,
+        "stddev": 456.24396016520717
       }
     },
     {
@@ -305,13 +324,16 @@
       "region": "Andean",
       "feature": "Nevado Sajama",
       "tiles": [
-        "S19W069"
+        "S19W070",
+        "S19W069",
+        "S18W070",
+        "S18W069"
       ],
       "bounds": {
         "left": -69.30013888887423,
-        "bottom": -18.59986111112152,
+        "bottom": -18.599861111121523,
         "right": -68.50013888887412,
-        "top": -17.899861111121428
+        "top": -17.89986111112143
       },
       "pixel_size": {
         "x_deg": 0.0015625000000002165,
@@ -319,10 +341,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A06.tif",
       "statistics": {
-        "min": 3781.86474609375,
-        "max": 6535.11181640625,
-        "mean": 4092.685104370117,
-        "stddev": 298.61037850068
+        "min": 3781.962646484375,
+        "max": 6528.70947265625,
+        "mean": 4304.065107706934,
+        "stddev": 388.17600303414594
       }
     },
     {
@@ -330,24 +352,25 @@
       "region": "Andean",
       "feature": "Potos\u00ed cordillera",
       "tiles": [
+        "S20W067",
         "S20W066"
       ],
       "bounds": {
         "left": -66.40013888887384,
         "bottom": -19.999861111121714,
-        "right": -65.60013888887374,
+        "right": -65.60013888887373,
         "top": -19.299861111121622
       },
       "pixel_size": {
-        "x_deg": 0.0015625000000001887,
+        "x_deg": 0.0015625000000002165,
         "y_deg": -0.001367187500000179
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A07.tif",
       "statistics": {
         "min": 3066.7109375,
-        "max": 4993.72021484375,
-        "mean": 4000.7802597042173,
-        "stddev": 362.1797004766546
+        "max": 5094.74951171875,
+        "mean": 4141.420372781344,
+        "stddev": 373.85724858323255
       }
     },
     {
@@ -355,17 +378,18 @@
       "region": "Andean",
       "feature": "Atacama Domeyko",
       "tiles": [
-        "S24W069"
+        "S24W069",
+        "S23W069"
       ],
       "bounds": {
         "left": -68.90013888887418,
-        "bottom": -23.6998611111222,
+        "bottom": -23.699861111122207,
         "right": -68.10013888887407,
-        "top": -22.999861111122108
+        "top": -22.99986111112211
       },
       "pixel_size": {
         "x_deg": 0.0015625000000002165,
-        "y_deg": -0.001367187500000179
+        "y_deg": -0.001367187500000186
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A08.tif",
       "statistics": {
@@ -380,24 +404,27 @@
       "region": "Andean",
       "feature": "Aconcagua",
       "tiles": [
+        "S34W071",
+        "S34W070",
+        "S33W071",
         "S33W070"
       ],
       "bounds": {
         "left": -70.20013888887435,
         "bottom": -33.099861111123445,
-        "right": -69.40013888887424,
+        "right": -69.40013888887425,
         "top": -32.39986111112336
       },
       "pixel_size": {
-        "x_deg": 0.0015625000000002165,
+        "x_deg": 0.0015625000000001887,
         "y_deg": -0.001367187500000172
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A09.tif",
       "statistics": {
-        "min": 1796.3199462890625,
-        "max": 6507.49658203125,
-        "mean": 3707.0103957770716,
-        "stddev": 724.5157995631605
+        "min": 1796.546142578125,
+        "max": 6893.2822265625,
+        "mean": 3839.780368979089,
+        "stddev": 717.6778583997254
       }
     },
     {
@@ -405,7 +432,8 @@
       "region": "Andean",
       "feature": "Central Chilean Andes",
       "tiles": [
-        "S35W071"
+        "S35W071",
+        "S35W070"
       ],
       "bounds": {
         "left": -70.60013888887441,
@@ -419,10 +447,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A10.tif",
       "statistics": {
-        "min": 673.8622436523438,
-        "max": 5142.88623046875,
-        "mean": 2755.8614930879944,
-        "stddev": 851.5672167961894
+        "min": 674.0547485351562,
+        "max": 5249.875,
+        "mean": 2934.7114227255806,
+        "stddev": 831.1869496073041
       }
     },
     {
@@ -430,7 +458,10 @@
       "region": "Andean",
       "feature": "Northern Patagonia icefield",
       "tiles": [
-        "S47W074"
+        "S48W074",
+        "S48W073",
+        "S47W074",
+        "S47W073"
       ],
       "bounds": {
         "left": -73.70013888887482,
@@ -444,10 +475,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\A11.tif",
       "statistics": {
-        "min": 12.943379402160645,
-        "max": 3984.555908203125,
-        "mean": 1186.234872449295,
-        "stddev": 581.7749953425367
+        "min": 13.065447807312012,
+        "max": 3977.302978515625,
+        "mean": 1179.4878675107102,
+        "stddev": 553.7698379645301
       }
     },
     {
@@ -455,24 +486,25 @@
       "region": "Ancient",
       "feature": "Great Smoky Mountains",
       "tiles": [
+        "N35W085",
         "N35W084"
       ],
       "bounds": {
         "left": -84.40013888887623,
         "bottom": 35.20013888888561,
-        "right": -83.60013888887613,
+        "right": -83.60013888887612,
         "top": 35.9001388888857
       },
       "pixel_size": {
-        "x_deg": 0.0015625000000001887,
+        "x_deg": 0.0015625000000002165,
         "y_deg": -0.001367187500000172
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\O01.tif",
       "statistics": {
-        "min": 228.6391143798828,
+        "min": 197.79550170898438,
         "max": 1678.884765625,
-        "mean": 675.057340378873,
-        "stddev": 311.20635760572736
+        "mean": 548.8573580176453,
+        "stddev": 307.65104732521985
       }
     },
     {
@@ -480,13 +512,14 @@
       "region": "Ancient",
       "feature": "Blue Ridge (Virginia)",
       "tiles": [
-        "N37W080"
+        "N37W080",
+        "N38W080"
       ],
       "bounds": {
         "left": -79.80013888887562,
-        "bottom": 37.40013888888589,
+        "bottom": 37.4001388888859,
         "right": -79.00013888887553,
-        "top": 38.100138888885986
+        "top": 38.10013888888599
       },
       "pixel_size": {
         "x_deg": 0.0015625000000001887,
@@ -494,10 +527,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\O02.tif",
       "statistics": {
-        "min": 136.27737426757812,
-        "max": 1268.002197265625,
-        "mean": 466.0807592188579,
-        "stddev": 200.8965837274348
+        "min": 136.40557861328125,
+        "max": 1271.090576171875,
+        "mean": 480.65423308720347,
+        "stddev": 194.86360301302017
       }
     },
     {
@@ -505,24 +538,25 @@
       "region": "Ancient",
       "feature": "Scottish Cairngorms",
       "tiles": [
-        "N56W004"
+        "N56W004",
+        "N57W004"
       ],
       "bounds": {
         "left": -3.9501388888655575,
-        "bottom": 56.60013888888844,
+        "bottom": 56.600138888888445,
         "right": -3.1001388888654446,
         "top": 57.30013888888853
       },
       "pixel_size": {
         "x_deg": 0.0016601562500002205,
-        "y_deg": -0.001367187500000186
+        "y_deg": -0.001367187500000172
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\O03.tif",
       "statistics": {
-        "min": 35.851341247558594,
-        "max": 1142.3763427734375,
-        "mean": 481.59846589210804,
-        "stddev": 212.7166922526665
+        "min": 35.86806869506836,
+        "max": 1302.09912109375,
+        "mean": 503.2166529317765,
+        "stddev": 214.52597887361088
       }
     },
     {
@@ -530,12 +564,15 @@
       "region": "Ancient",
       "feature": "Drakensberg high escarpment",
       "tiles": [
+        "S30E028",
+        "S30E029",
+        "S29E028",
         "S29E029"
       ],
       "bounds": {
-        "left": 28.999861111138785,
+        "left": 28.999861111138802,
         "bottom": -29.199861111122935,
-        "right": 29.799861111138892,
+        "right": 29.79986111113891,
         "top": -28.499861111122843
       },
       "pixel_size": {
@@ -544,10 +581,10 @@
       },
       "output_path": "C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\StageB_SRTM90\\cropped\\O05.tif",
       "statistics": {
-        "min": 956.6465454101562,
-        "max": 3209.064453125,
-        "mean": 1329.7596667649968,
-        "stddev": 377.7765242238929
+        "min": 956.87158203125,
+        "max": 3413.15380859375,
+        "mean": 1546.3308121301234,
+        "stddev": 583.8021245552411
       }
     }
   ]

@@ -477,7 +477,7 @@ bool UTectonicSimulationService::SplitPlate(int32 PlateID, const TPair<int32, in
     // For now, just use Voronoi-based tessellation from plate centroids
     // This is a simplified approach - proper incremental split would preserve icosphere connectivity
     BuildBoundaryAdjacencyMap(); // Rebuild boundaries for new plate count
-    GenerateRenderMesh();         // Regenerate render mesh
+    GenerateRenderMesh(TEXT("PlateSplit"));         // Regenerate render mesh
     BuildVoronoiMapping();        // Reassign vertices to plates (including new plate)
     ComputeVelocityField();
     InterpolateStressToVertices();
@@ -605,7 +605,7 @@ bool UTectonicSimulationService::MergePlates(int32 ConsumedPlateID, int32 Surviv
     // Trigger full re-tessellation
     // NOTE: We DON'T call GenerateIcospherePlates() here because that would reset to initial topology
     BuildBoundaryAdjacencyMap();
-    GenerateRenderMesh();
+    GenerateRenderMesh(TEXT("PlateMerge"));
     BuildVoronoiMapping();
     ComputeVelocityField();
     InterpolateStressToVertices();

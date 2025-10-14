@@ -707,9 +707,10 @@ bool FStageBParityUsesSnapshotTest::RunTest(const FString& Parameters)
         return false;
     }
 
-    const bool bDispatched = PlanetaryCreation::GPU::ApplyOceanicAmplificationGPU(*Service);
-    TestTrue(TEXT("GPU dispatch should succeed"), bDispatched);
-    if (!bDispatched)
+    PlanetaryCreation::GPU::FStageBUnifiedDispatchResult DispatchResult;
+    const bool bDispatched = Service->ApplyStageBUnifiedGPU(true, false, DispatchResult);
+    TestTrue(TEXT("Unified GPU dispatch should execute oceanic kernel"), bDispatched && DispatchResult.bExecutedOceanic);
+    if (!bDispatched || !DispatchResult.bExecutedOceanic)
     {
         return false;
     }

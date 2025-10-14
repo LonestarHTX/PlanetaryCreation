@@ -6,6 +6,13 @@
 #include "TectonicSimulationService.h"
 #include "TectonicPlaybackController.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformProcess.h"
+#include "HAL/FileManager.h"
+#include "Misc/Paths.h"
+#include "Misc/ScopedSlowTask.h"
+#include "Misc/MessageDialog.h"
+#include "Misc/DateTime.h"
+#include "Misc/ScopeExit.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SComboBox.h"
 #include "Widgets/Input/SCheckBox.h"
@@ -654,6 +661,15 @@ TSharedRef<SWidget> SPTectonicToolPanel::BuildStageBSection()
             .Text(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonLabel", "Prime GPU Stage B"))
             .ToolTipText(NSLOCTEXT("PlanetaryCreation", "PrimeStageBButtonTooltip", "Enable both Stage B passes, keep CPU fallbacks active, and switch the GPU path on in one click (resets simulation if Stage B settings change)."))
             .OnClicked(this, &SPTectonicToolPanel::HandlePrimeGPUStageBClicked)
+        ]
+        + SVerticalBox::Slot()
+        .AutoHeight()
+        .Padding(0.0f, 2.0f, 0.0f, 2.0f)
+        [
+            SNew(SButton)
+            .Text(NSLOCTEXT("PlanetaryCreation", "ExportHeightmapButtonLabel", "Export Heightmap..."))
+            .ToolTipText(NSLOCTEXT("PlanetaryCreation", "ExportHeightmapButtonTooltip", "Run the 512×256 heightmap export commandlet (applies Paper Ready if needed)."))
+            .OnClicked(this, &SPTectonicToolPanel::HandleExportHeightmapClicked)
         ]
         + SVerticalBox::Slot()
         .AutoHeight()
@@ -1510,86 +1526,206 @@ void SPTectonicToolPanel::ApplySurfaceProcessMutation(TFunctionRef<bool(FTectoni
 
 FReply SPTectonicToolPanel::HandlePaperReadyClicked()
 {
-    const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin();
-    if (!Controller)
+    ApplyPaperReadyPreset();
+    return FReply::Handled();
+}
+
+FReply SPTectonicToolPanel::HandleExportHeightmapClicked()
+{
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("[PaperReady] UsingExportButton"));
+
+	bool bReadyForExport = bPaperReadyApplied;
+    if (!bReadyForExport)
     {
+        bReadyForExport = ApplyPaperReadyPreset();
+        if (!bReadyForExport)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[PaperReady] Stage B is still not ready after applying the preset; export will proceed with current data."));
+			FMessageDialog::Open(EAppMsgType::Ok,
+				NSLOCTEXT("PlanetaryCreation", "ExportHeightmapStageBNotReady", "Stage B is still warming up. The export will proceed with the current data; verify results after completion."));
+		}
+	}
+
+	const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin();
+	if (!Controller)
+	{
+		UE_LOG(LogPlanetaryCreation, Error, TEXT("[HeightmapExport] Simulation controller unavailable."));
+		return FReply::Handled();
+	}
+
+	UTectonicSimulationService* Service = Controller->GetSimulationService();
+	if (!Service)
+	{
+		UE_LOG(LogPlanetaryCreation, Error, TEXT("[HeightmapExport] Simulation service unavailable."));
+		return FReply::Handled();
+	}
+
+	const FString ProjectDir = FPaths::ProjectDir();
+	const FString DocsDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(ProjectDir, TEXT("Docs/Validation")));
+	IFileManager::Get().MakeDirectory(*DocsDir, true);
+
+	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
+    const FString OutputPath = FPaths::Combine(DocsDir, FString::Printf(TEXT("Heightmap_512x256_%s.png"), *Timestamp));
+
+    const FString EngineExe = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::EngineDir(), TEXT("Binaries/Win64/UnrealEditor-Cmd.exe")));
+    const FString ProjectPath = FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath());
+    const FString ScriptPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Scripts/RunHeightmapExport.py")));
+
+    const FString EscapedOutput = OutputPath.Replace(TEXT("\""), TEXT("\\\""));
+    const FString ScriptArgs = FString::Printf(TEXT("--width=512 --height=256 --output=\\\"%s\\\""), *EscapedOutput);
+    const FString CommandLine = FString::Printf(
+        TEXT("\"%s\" -run=pythonscript -script=\"%s\" -scriptargs=\"%s\" -SetCVar=r.PlanetaryCreation.PaperDefaults=0,r.PlanetaryCreation.UseGPUAmplification=0,r.PlanetaryCreation.SkipCPUAmplification=0 -NullRHI -unattended -nop4 -nosplash"),
+        *ProjectPath,
+        *ScriptPath,
+        *ScriptArgs);
+
+	FScopedSlowTask SlowTask(0.0f, NSLOCTEXT("PlanetaryCreation", "ExportHeightmapProgress", "Exporting heightmap..."));
+	SlowTask.MakeDialog();
+
+	struct FEnvOverride
+	{
+		FString Name;
+		FString PreviousValue;
+	};
+
+	TArray<FEnvOverride> EnvOverrides;
+	EnvOverrides.Reserve(4);
+
+	auto OverrideEnvVar = [&EnvOverrides](const TCHAR* Name, const FString& Value)
+	{
+		FEnvOverride& Entry = EnvOverrides.AddDefaulted_GetRef();
+		Entry.Name = Name;
+		Entry.PreviousValue = FPlatformMisc::GetEnvironmentVariable(Name);
+		FPlatformMisc::SetEnvironmentVar(Name, *Value);
+	};
+
+	const int32 RenderSubdivisionLevel = Service->GetParameters().RenderSubdivisionLevel;
+	OverrideEnvVar(TEXT("PLANETARY_STAGEB_FORCE_CPU"), TEXT("1"));
+	OverrideEnvVar(TEXT("PLANETARY_STAGEB_FORCE_EXEMPLAR"), TEXT("O01"));
+	OverrideEnvVar(TEXT("PLANETARY_STAGEB_DISABLE_RANDOM_OFFSET"), TEXT("1"));
+	OverrideEnvVar(TEXT("PLANETARY_STAGEB_RENDER_LOD"), FString::FromInt(RenderSubdivisionLevel));
+
+	ON_SCOPE_EXIT
+	{
+		for (const FEnvOverride& Override : EnvOverrides)
+		{
+			FPlatformMisc::SetEnvironmentVar(*Override.Name, *Override.PreviousValue);
+		}
+	};
+
+	FProcHandle ProcHandle = FPlatformProcess::CreateProc(*EngineExe, *CommandLine, true, true, true, nullptr, 0, *ProjectDir, nullptr);
+	if (!ProcHandle.IsValid())
+	{
+		UE_LOG(LogPlanetaryCreation, Error, TEXT("[HeightmapExport] Failed to launch UnrealEditor-Cmd.exe"));
+        FMessageDialog::Open(EAppMsgType::Ok, NSLOCTEXT("PlanetaryCreation", "ExportHeightmapLaunchFailed", "Failed to launch the heightmap export commandlet. See log for details."));
         return FReply::Handled();
     }
 
-    if (UTectonicSimulationService* Service = Controller->GetSimulationService())
+    FPlatformProcess::WaitForProc(ProcHandle);
+
+    int32 ReturnCode = INDEX_NONE;
+    FPlatformProcess::GetProcReturnCode(ProcHandle, &ReturnCode);
+    FPlatformProcess::CloseProc(ProcHandle);
+
+    if (ReturnCode == 0)
     {
-        // Target the published paper defaults for deterministic captures.
-        FTectonicSimulationParameters Params = Service->GetParameters();
-
-        const int32 PaperSeed = 42;
-        Params.Seed = PaperSeed;
-        CachedSeed = PaperSeed;
-
-        Params.MinAmplificationLOD = FMath::Max(Params.MinAmplificationLOD, 5);
-        Params.RenderSubdivisionLevel = FMath::Max(Params.MinAmplificationLOD, 5);
-        Params.bEnableAutomaticLOD = false;
-        Params.bEnableOceanicAmplification = true;
-        Params.bEnableContinentalAmplification = true;
-        Params.bEnableHydraulicErosion = true;
-        Params.bEnableContinentalErosion = true;
-        Params.bEnableSedimentTransport = true;
-        Params.bEnableOceanicDampening = true;
-        Params.bSkipCPUAmplification = true;
-        Params.VisualizationMode = ETectonicVisualizationMode::Amplified;
-
-        CachedSubdivisionLevel = Params.SubdivisionLevel;
-
-        // Ensure runtime CVars mirror the preset expectations.
-        if (IConsoleVariable* PaperDefaultsVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.PaperDefaults")))
-        {
-            PaperDefaultsVar->Set(1, ECVF_SetByCode);
-        }
-        if (IConsoleVariable* UseGPUVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.UseGPUAmplification")))
-        {
-            UseGPUVar->Set(1, ECVF_SetByCode);
-        }
-        if (IConsoleVariable* StageBProfilingVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.StageBProfiling")))
-        {
-            StageBProfilingVar->Set(1, ECVF_SetByCode);
-        }
-
-        // Clear the STG-04 latch so erosion and dampening can execute.
-        Service->SetForceHydraulicErosionDisabled(false);
-
-#if UE_BUILD_DEVELOPMENT
-        Service->SetForceStageBGPUReplayForTests(false);
-#endif
-
-        Service->SetParameters(Params);
-
-        // Keep the preview visuals aligned with the preset.
-        Controller->SetPBRShadingEnabled(true);
-        Controller->SetGPUPreviewMode(true);
-
-        // Force Stage B to rebuild and wait for GPU readbacks so readiness flips green.
-        Service->ForceStageBAmplificationRebuild(TEXT("PaperReadyPreset"));
-        Service->ProcessPendingOceanicGPUReadbacks(true, nullptr);
-        Service->ProcessPendingContinentalGPUReadbacks(true, nullptr);
-
-        if (!Service->IsStageBAmplificationReady())
-        {
-            Service->AdvanceSteps(1);
-            Service->ProcessPendingOceanicGPUReadbacks(true, nullptr);
-            Service->ProcessPendingContinentalGPUReadbacks(true, nullptr);
-        }
-
-        Controller->RebuildPreview();
-        RefreshStageBReadinessFromService();
-        RefreshCachedPaletteMode();
-
-        const bool bStageBReady = Service->IsStageBAmplificationReady();
-        UE_LOG(LogPlanetaryCreation, Log, TEXT("[PaperReady] Applied (Seed=%d RenderLOD=%d StageBReady=%s)"),
-            Params.Seed,
-            Params.RenderSubdivisionLevel,
-            bStageBReady ? TEXT("true") : TEXT("false"));
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[HeightmapExport] Completed Path=%s"), *OutputPath);
+        FMessageDialog::Open(EAppMsgType::Ok,
+            FText::Format(NSLOCTEXT("PlanetaryCreation", "ExportHeightmapSuccess", "Heightmap exported to:\n{0}"), FText::FromString(OutputPath)));
+    }
+    else
+    {
+        UE_LOG(LogPlanetaryCreation, Error, TEXT("[HeightmapExport] Failed ReturnCode=%d Path=%s"), ReturnCode, *OutputPath);
+        FMessageDialog::Open(EAppMsgType::Ok,
+            FText::Format(NSLOCTEXT("PlanetaryCreation", "ExportHeightmapFailed", "Heightmap export failed with code {0}. See log for details."), FText::AsNumber(ReturnCode)));
     }
 
     return FReply::Handled();
+}
+
+bool SPTectonicToolPanel::ApplyPaperReadyPreset()
+{
+    const TSharedPtr<FTectonicSimulationController> Controller = ControllerWeak.Pin();
+    if (!Controller)
+    {
+        return false;
+    }
+
+    UTectonicSimulationService* Service = Controller->GetSimulationService();
+    if (!Service)
+    {
+        return false;
+    }
+
+    // Target the published paper defaults for deterministic captures.
+    FTectonicSimulationParameters Params = Service->GetParameters();
+
+    const int32 PaperSeed = 42;
+    Params.Seed = PaperSeed;
+    CachedSeed = PaperSeed;
+
+    Params.MinAmplificationLOD = FMath::Max(Params.MinAmplificationLOD, 5);
+    Params.RenderSubdivisionLevel = FMath::Max(Params.MinAmplificationLOD, 5);
+    Params.bEnableAutomaticLOD = false;
+    Params.bEnableOceanicAmplification = true;
+    Params.bEnableContinentalAmplification = true;
+    Params.bEnableHydraulicErosion = true;
+    Params.bEnableContinentalErosion = true;
+    Params.bEnableSedimentTransport = true;
+    Params.bEnableOceanicDampening = true;
+    Params.bSkipCPUAmplification = true;
+    Params.VisualizationMode = ETectonicVisualizationMode::Amplified;
+
+    CachedSubdivisionLevel = Params.SubdivisionLevel;
+
+    if (IConsoleVariable* PaperDefaultsVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.PaperDefaults")))
+    {
+        PaperDefaultsVar->Set(1, ECVF_SetByCode);
+    }
+    if (IConsoleVariable* UseGPUVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.UseGPUAmplification")))
+    {
+        UseGPUVar->Set(1, ECVF_SetByCode);
+    }
+    if (IConsoleVariable* StageBProfilingVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PlanetaryCreation.StageBProfiling")))
+    {
+        StageBProfilingVar->Set(1, ECVF_SetByCode);
+    }
+
+    Service->SetForceHydraulicErosionDisabled(false);
+
+#if UE_BUILD_DEVELOPMENT
+    Service->SetForceStageBGPUReplayForTests(false);
+#endif
+
+    Service->SetParameters(Params);
+
+    Controller->SetPBRShadingEnabled(true);
+    Controller->SetGPUPreviewMode(true);
+
+    Service->ForceStageBAmplificationRebuild(TEXT("PaperReadyPreset"));
+    Service->ProcessPendingOceanicGPUReadbacks(true, nullptr);
+    Service->ProcessPendingContinentalGPUReadbacks(true, nullptr);
+
+    if (!Service->IsStageBAmplificationReady())
+    {
+        Service->AdvanceSteps(1);
+        Service->ProcessPendingOceanicGPUReadbacks(true, nullptr);
+        Service->ProcessPendingContinentalGPUReadbacks(true, nullptr);
+    }
+
+    Controller->RebuildPreview();
+    RefreshStageBReadinessFromService();
+    RefreshCachedPaletteMode();
+
+    const bool bStageBReady = Service->IsStageBAmplificationReady();
+    bPaperReadyApplied = bStageBReady;
+
+    UE_LOG(LogPlanetaryCreation, Log, TEXT("[PaperReady] Applied (Seed=%d RenderLOD=%d StageBReady=%s)"),
+        Params.Seed,
+        Params.RenderSubdivisionLevel,
+        bStageBReady ? TEXT("true") : TEXT("false"));
+
+    return bStageBReady;
 }
 
 FReply SPTectonicToolPanel::HandlePrimeGPUStageBClicked()
@@ -1987,6 +2123,10 @@ void SPTectonicToolPanel::HandleStageBReadyChanged(bool bReady, EStageBAmplifica
 {
     bCachedStageBReady = bReady;
     CachedStageBReason = Reason;
+    if (!bReady)
+    {
+        bPaperReadyApplied = false;
+    }
 
     if (bReady)
     {

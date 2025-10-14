@@ -73,7 +73,10 @@
       "Bash(cmd.exe:*)",
       "Bash(timeout:*)",
       "Bash(xxd:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Read(//mnt/c/Program Files/Epic Games/UE_5.5/Engine/Source/Runtime/Core/Public/**)",
+      "Read(///**)",
+      "Bash(head:*)"
     ],
     "deny": [],
     "ask": []

@@ -20,9 +20,11 @@
 // =====================================================================================
 #include "Containers/BitArray.h"
 #include "Containers/StaticArray.h"
+#include "Containers/StringConv.h"
 
 DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformMisc.h"
 #include "HAL/PlatformFileManager.h"
 #include "Math/RandomStream.h"
 #include "Algo/Sort.h"
@@ -35,6 +37,7 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "RHIGPUReadback.h"
 #include "OceanicAmplificationGPU.h"
 #include "ExemplarTextureArray.h"
+#include "Hash/CityHash.h"
 #include "Engine/Texture2DArray.h"
 #include "ContinentalAmplificationTypes.h"
 #include <queue>
@@ -54,6 +57,25 @@ static void HandleUseGPUHydraulicChanged(IConsoleVariable* Variable);
 #endif
 
 #if WITH_EDITOR
+static bool GStageBForceCPUEnvCached = false;
+static bool GStageBForceCPUFromEnv = false;
+
+static bool ShouldForceCPUStageB()
+{
+    if (!GStageBForceCPUEnvCached)
+    {
+        const FString Value = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_FORCE_CPU"));
+        if (!Value.IsEmpty())
+        {
+            GStageBForceCPUFromEnv = Value.Equals(TEXT("1"), ESearchCase::IgnoreCase) ||
+                Value.Equals(TEXT("true"), ESearchCase::IgnoreCase) ||
+                Value.Equals(TEXT("yes"), ESearchCase::IgnoreCase);
+        }
+        GStageBForceCPUEnvCached = true;
+    }
+    return GStageBForceCPUFromEnv;
+}
+
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationUseGPUAmplification(
     TEXT("r.PlanetaryCreation.UseGPUAmplification"),
     1,
@@ -2190,6 +2212,29 @@ void UTectonicSimulationService::SetRenderSubdivisionLevel(int32 NewLevel)
 bool UTectonicSimulationService::ShouldUseGPUAmplification() const
 {
 #if WITH_EDITOR
+    if (ShouldForceCPUStageB())
+    {
+        static bool bLoggedForceCPU = false;
+        if (!bLoggedForceCPU)
+        {
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB][GPU] Forced CPU amplification via PLANETARY_STAGEB_FORCE_CPU=1"));
+            bLoggedForceCPU = true;
+        }
+        return false;
+    }
+
+    const bool bNullRHIActive = (GDynamicRHI == nullptr) || (FCString::Stristr(GDynamicRHI->GetName(), TEXT("Null")) != nullptr);
+    if (bNullRHIActive)
+    {
+        static bool bLoggedNullRHI = false;
+        if (!bLoggedNullRHI)
+        {
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB][GPU] Skipping GPU amplification because NullRHI is active (commandlet/automation fallback)."));
+            bLoggedNullRHI = true;
+        }
+        return false;
+    }
+
     return CVarPlanetaryCreationUseGPUAmplification.GetValueOnGameThread() != 0 &&
         Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
 #else
@@ -6914,6 +6959,7 @@ FExemplarMetadata* AccessExemplarMetadata(int32 Index);
 const FExemplarMetadata* AccessExemplarMetadataConst(int32 Index);
 bool LoadExemplarHeightData(FExemplarMetadata& Exemplar, const FString& ProjectContentDir);
 double SampleExemplarHeight(const FExemplarMetadata& Exemplar, double U, double V);
+int32 FindExemplarIndexById(const FString& ExemplarId);
 TArray<FExemplarMetadata*> GetExemplarsForTerrainType(EContinentalTerrainType TerrainType);
 double BlendContinentalExemplars(const FVector3d& Position, int32 PlateID, double BaseElevation_m,
     const TArray<FExemplarMetadata*>& MatchingExemplars, const TArray<FTectonicPlate>& Plates,
@@ -7763,8 +7809,21 @@ void UTectonicSimulationService::RebuildStageBForCurrentLOD()
     const bool bMeetsAmplificationLOD = Parameters.RenderSubdivisionLevel >= Parameters.MinAmplificationLOD;
     const bool bShouldRunOceanic = bMeetsAmplificationLOD && Parameters.bEnableOceanicAmplification;
     const bool bShouldRunContinental = bMeetsAmplificationLOD && Parameters.bEnableContinentalAmplification;
-    const bool bSkipCPUAmplification = Parameters.bSkipCPUAmplification;
     const bool bGpuAmplificationAvailable = ShouldUseGPUAmplification();
+    bool bSkipCPUAmplification = Parameters.bSkipCPUAmplification;
+
+    if (bSkipCPUAmplification && !bGpuAmplificationAvailable)
+    {
+        static int32 FallbackLogCount = 0;
+        if (FallbackLogCount < 3)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[StageB][Fallback] CPU amplification forced because GPU path is unavailable (SkipCPUAmplification=1 -> overriding to 0 for this rebuild)."));
+            ++FallbackLogCount;
+        }
+        bSkipCPUAmplification = false;
+    }
+
     bLastOceanicForcedCpuFallback = false;
 
     if (bShouldRunOceanic)
@@ -8334,12 +8393,241 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     LastContinentalCacheProfileMetrics = FContinentalCacheProfileMetrics();
 
     const FString ProjectContentDir = FPaths::ProjectContentDir();
+    const FString ForcedExemplarId = GetStageBForcedExemplarId();
+    FExemplarMetadata* ForcedMetadata = nullptr;
+    static bool bForcedMetadataLogged = false;
+    if (!ForcedExemplarId.IsEmpty())
+    {
+        if (!IsExemplarLibraryLoaded())
+        {
+            LoadExemplarLibraryJSON(ProjectContentDir);
+        }
+        const int32 ForcedIndex = FindExemplarIndexById(ForcedExemplarId);
+        UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB][Forced] Lookup id=%s index=%d"), *ForcedExemplarId, ForcedIndex);
+        if (ForcedIndex != INDEX_NONE)
+        {
+            ForcedMetadata = AccessExemplarMetadata(ForcedIndex);
+            if (ForcedMetadata && !ForcedMetadata->bDataLoaded)
+            {
+                LoadExemplarHeightData(*ForcedMetadata, ProjectContentDir);
+            }
+            if (ForcedMetadata && !bForcedMetadataLogged)
+            {
+                double LogLonPad = 0.0;
+                double LogLatPad = 0.0;
+                ForcedMetadata->ComputeForcedPadding(LogLonPad, LogLatPad);
+                
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[StageB][Forced] Metadata id=%s bounds=(%f,%f,%f,%f) hasBounds=%s LonPad=%.3f LatPad=%.3f"),
+                    *ForcedMetadata->ID,
+                    ForcedMetadata->WestLonDeg,
+                    ForcedMetadata->EastLonDeg,
+                    ForcedMetadata->SouthLatDeg,
+                    ForcedMetadata->NorthLatDeg,
+                    ForcedMetadata->bHasBounds ? TEXT("true") : TEXT("false"),
+                    LogLonPad,
+                    LogLatPad);
+                bForcedMetadataLogged = true;
+            }
+        }
+    }
+
     RefreshContinentalAmplificationCache();
     const FTectonicSimulationParameters SimParams = GetParameters();
 
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
+        if (ForcedMetadata && ForcedMetadata->bHasBounds)
+        {
+            const FVector3d NormalizedPos = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+            const double LonDeg = FMath::RadiansToDegrees(FMath::Atan2(NormalizedPos.Y, NormalizedPos.X));
+            const double LatDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(NormalizedPos.Z, -1.0, 1.0)));
+            const double West = ForcedMetadata->WestLonDeg;
+            const double East = ForcedMetadata->EastLonDeg;
+            const double South = ForcedMetadata->SouthLatDeg;
+            const double North = ForcedMetadata->NorthLatDeg;
+            const double LonRange = East - West;
+            const double LatRange = North - South;
+            if (FMath::Abs(LonRange) > KINDA_SMALL_NUMBER && FMath::Abs(LatRange) > KINDA_SMALL_NUMBER)
+            {
+                const auto WrapLongitudeToBounds = [](double LongitudeDeg, double WestDeg, double EastDeg) -> double
+                {
+                    const double Range = EastDeg - WestDeg;
+                    if (FMath::Abs(Range) <= KINDA_SMALL_NUMBER)
+                    {
+                        return LongitudeDeg;
+                    }
+
+                    const double AbsRange = FMath::Abs(Range);
+                    double Wrapped = LongitudeDeg;
+
+                    if (AbsRange < 359.0)
+                    {
+                        double NormalizedToWest = LongitudeDeg - WestDeg;
+                        double Modded = FMath::Fmod(NormalizedToWest, AbsRange);
+                        if (Modded < 0.0)
+                        {
+                            Modded += AbsRange;
+                        }
+                        Wrapped = WestDeg + Modded;
+                    }
+
+                    for (int32 Iter = 0; Iter < 12; ++Iter)
+                    {
+                        if (Wrapped < WestDeg)
+                        {
+                            Wrapped += 360.0;
+                            continue;
+                        }
+                        if (Wrapped > EastDeg)
+                        {
+                            Wrapped -= 360.0;
+                            continue;
+                        }
+                        break;
+                    }
+
+                    return Wrapped;
+                };
+
+                const auto WrapLatitudeToBounds = [](double LatitudeDeg, double SouthDeg, double NorthDeg) -> double
+                {
+                    const double Range = NorthDeg - SouthDeg;
+                    if (FMath::Abs(Range) <= KINDA_SMALL_NUMBER)
+                    {
+                        return LatitudeDeg;
+                    }
+
+                    const double AbsRange = FMath::Abs(Range);
+                    double Wrapped = LatitudeDeg;
+
+                    if (AbsRange < 180.0)
+                    {
+                        double NormalizedToSouth = LatitudeDeg - SouthDeg;
+                        double Modded = FMath::Fmod(NormalizedToSouth, AbsRange);
+                        if (Modded < 0.0)
+                        {
+                            Modded += AbsRange;
+                        }
+                        Wrapped = SouthDeg + Modded;
+                    }
+
+                    const double Minimum = FMath::Min(SouthDeg, NorthDeg);
+                    const double Maximum = FMath::Max(SouthDeg, NorthDeg);
+                    return FMath::Clamp(Wrapped, Minimum, Maximum);
+                };
+
+                const double WrappedLonDeg = WrapLongitudeToBounds(LonDeg, West, East);
+                const double WrappedLatDeg = WrapLatitudeToBounds(LatDeg, South, North);
+
+                // Use shared padding computation (50% of range, clamped to 1.5°-5° for seam safety)
+                double LonPad = 0.0;
+                double LatPad = 0.0;
+                ForcedMetadata->ComputeForcedPadding(LonPad, LatPad);
+                
+                const double PadToleranceDeg = FMath::Max(1.0e-3, static_cast<double>(KINDA_SMALL_NUMBER));
+                const double MinForcedLon = West - LonPad - PadToleranceDeg;
+                const double MaxForcedLon = East + LonPad + PadToleranceDeg;
+                const double MinForcedLat = South - LatPad - PadToleranceDeg;
+                const double MaxForcedLat = North + LatPad + PadToleranceDeg;
+
+                // Check primary wrap
+                bool bInsideForcedWindow =
+                    WrappedLonDeg >= MinForcedLon && WrappedLonDeg <= MaxForcedLon &&
+                    WrappedLatDeg >= MinForcedLat && WrappedLatDeg <= MaxForcedLat;
+
+                // If failed and near seam (lon near ±180° or crossing 0°), try ±360° alternatives
+                if (!bInsideForcedWindow)
+                {
+                    const bool bNearSeam = (FMath::Abs(LonDeg - 180.0) < 5.0) || 
+                                          (FMath::Abs(LonDeg + 180.0) < 5.0) ||
+                                          (FMath::Abs(LonDeg) < 5.0);
+                    
+                    if (bNearSeam)
+                    {
+                        // Try alternative wraps
+                        const double AltWrap1 = WrappedLonDeg + 360.0;
+                        const double AltWrap2 = WrappedLonDeg - 360.0;
+
+                        const bool bAlt1Inside =
+                            AltWrap1 >= MinForcedLon && AltWrap1 <= MaxForcedLon &&
+                            WrappedLatDeg >= MinForcedLat && WrappedLatDeg <= MaxForcedLat;
+
+                        const bool bAlt2Inside =
+                            AltWrap2 >= MinForcedLon && AltWrap2 <= MaxForcedLon &&
+                            WrappedLatDeg >= MinForcedLat && WrappedLatDeg <= MaxForcedLat;
+
+                        if (bAlt1Inside || bAlt2Inside)
+                        {
+                            bInsideForcedWindow = true;
+                        }
+                    }
+                }
+
+                double SampleU = (WrappedLonDeg - West) / LonRange;
+                double SampleV = (North - WrappedLatDeg) / LatRange;
+
+                SampleU = FMath::Frac(SampleU);
+                SampleV = FMath::Frac(SampleV);
+                if (SampleU < 0.0)
+                {
+                    SampleU += 1.0;
+                }
+                if (SampleV < 0.0)
+                {
+                    SampleV += 1.0;
+                }
+
+                const double ForcedHeight = SampleExemplarHeight(*ForcedMetadata, SampleU, SampleV);
+                VertexAmplifiedElevation[VertexIdx] = ForcedHeight;
+
+#if UE_BUILD_DEVELOPMENT
+                static int32 ForcedMissLogs = 0;
+                const double BoundsLatCenter = 0.5 * (South + North);
+                if (!bInsideForcedWindow && ForcedMissLogs < 128 &&
+                    FMath::Abs(LatDeg - BoundsLatCenter) <= 10.0)
+                {
+                    const bool bLonInside = WrappedLonDeg >= MinForcedLon && WrappedLonDeg <= MaxForcedLon;
+                    const bool bLatInside = WrappedLatDeg >= MinForcedLat && WrappedLatDeg <= MaxForcedLat;
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[StageB][ForcedMiss] Vertex=%d lon=%.4f wrappedLon=%.4f lat=%.4f wrappedLat=%.4f BoundsLon=[%.4f,%.4f]+/-%.3f BoundsLat=[%.4f,%.4f]+/-%.3f InsidePads=%s/%s"),
+                        VertexIdx,
+                        LonDeg,
+                        WrappedLonDeg,
+                        LatDeg,
+                        WrappedLatDeg,
+                        West,
+                        East,
+                        LonPad,
+                        South,
+                        North,
+                        LatPad,
+                        bLonInside ? TEXT("Y") : TEXT("N"),
+                        bLatInside ? TEXT("Y") : TEXT("N"));
+                    ++ForcedMissLogs;
+                }
+
+                static int32 ForcedApplyLogs = 0;
+                if (bInsideForcedWindow && ForcedApplyLogs < 16)
+                {
+                    UE_LOG(LogPlanetaryCreation, Display,
+                        TEXT("[StageB][ForcedApply] Vertex=%d lon=%.4f wrappedLon=%.4f lat=%.4f wrappedLat=%.4f U=%.5f V=%.5f Height=%.2f"),
+                        VertexIdx,
+                        LonDeg,
+                        WrappedLonDeg,
+                        LatDeg,
+                        WrappedLatDeg,
+                        SampleU,
+                        SampleV,
+                        ForcedHeight);
+                    ++ForcedApplyLogs;
+                }
+#endif
+                continue;
+            }
+        }
+
         const double BaseElevation_m = VertexAmplifiedElevation[VertexIdx]; // Use oceanic-amplified elevation as base
         const FContinentalAmplificationCacheEntry* CacheEntry =
             ContinentalAmplificationCacheEntries.IsValidIndex(VertexIdx)
@@ -10490,7 +10778,35 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         LastContinentalCacheBuildSeconds = 0.0;
     }
 
+    using namespace PlanetaryCreation::GPU;
+
     FContinentalAmplificationGPUInputs& Cache = ContinentalAmplificationGPUInputs;
+    const FString ForcedExemplarId = GetStageBForcedExemplarId();
+    const bool bDisableRandomOffset = StageBShouldDisableRandomOffset();
+    const bool bForceExemplarOverride = !ForcedExemplarId.IsEmpty();
+
+    auto CombineHash64 = [](uint64 A, uint64 B) -> uint64
+    {
+        return A ^ (B + 0x9e3779b97f4a7c15ull + (A << 6) + (A >> 2));
+    };
+
+    FExemplarTextureArray& ExemplarArray = GetExemplarTextureArray();
+    if (!ExemplarArray.IsInitialized())
+    {
+        const_cast<UTectonicSimulationService*>(this)->InitializeGPUExemplarResources();
+    }
+
+    const uint64 LibraryFingerprint = ExemplarArray.GetLibraryFingerprint();
+    uint64 ForcedIdHash = 0ull;
+    if (!ForcedExemplarId.IsEmpty())
+    {
+        FTCHARToUTF8 ForcedUtf8(*ForcedExemplarId);
+        ForcedIdHash = CityHash64(reinterpret_cast<const char*>(ForcedUtf8.Get()), ForcedUtf8.Length());
+    }
+    uint64 ForcedSettingsHash = 1469598103934665603ull;
+    ForcedSettingsHash = CombineHash64(ForcedSettingsHash, ForcedIdHash);
+    ForcedSettingsHash = CombineHash64(ForcedSettingsHash, bDisableRandomOffset ? 1ull : 0ull);
+    ForcedSettingsHash = CombineHash64(ForcedSettingsHash, LibraryFingerprint);
 
     const int32 VertexCount = VertexAmplifiedElevation.Num();
     if (VertexCount <= 0)
@@ -10502,9 +10818,11 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         Cache.ExemplarWeights.Reset();
         Cache.RandomUVOffsets.Reset();
         Cache.WrappedUVs.Reset();
+        Cache.SampleHeights.Reset();
         Cache.CachedDataSerial = OceanicAmplificationDataSerial;
         Cache.CachedTopologyVersion = TopologyVersion;
         Cache.CachedSurfaceVersion = SurfaceDataVersion;
+        Cache.ForcedSettingsHash = ForcedSettingsHash;
         if (bCaptureMetrics)
         {
             LastContinentalCacheProfileMetrics = LocalMetrics;
@@ -10516,7 +10834,8 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
     const bool bUpToDate = (Cache.CachedDataSerial == OceanicAmplificationDataSerial &&
         Cache.CachedTopologyVersion == TopologyVersion &&
         Cache.CachedSurfaceVersion == SurfaceDataVersion &&
-        Cache.BaselineElevation.Num() == VertexCount);
+        Cache.BaselineElevation.Num() == VertexCount &&
+        Cache.ForcedSettingsHash == ForcedSettingsHash);
 
     if (bUpToDate)
     {
@@ -10536,14 +10855,7 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
     Cache.RandomUVOffsets.SetNum(VertexCount);
     Cache.WrappedUVs.SetNum(VertexCount);
     Cache.SampleHeights.SetNum(VertexCount);
-
-    using namespace PlanetaryCreation::GPU;
-
-    FExemplarTextureArray& ExemplarArray = GetExemplarTextureArray();
-    if (!ExemplarArray.IsInitialized())
-    {
-        const_cast<UTectonicSimulationService*>(this)->InitializeGPUExemplarResources();
-    }
+    Cache.ForcedSettingsHash = ForcedSettingsHash;
     const FString ProjectContentDirLocal = FPaths::ProjectContentDir();
     if (!IsExemplarLibraryLoaded())
     {
@@ -10599,7 +10911,63 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         }
     }
 
+    int32 ForcedAtlasIndex = INDEX_NONE;
+    if (bForceExemplarOverride)
+    {
+        for (const FExemplarTextureArray::FExemplarInfo& Info : ExemplarInfo)
+        {
+            if (Info.ID.Equals(ForcedExemplarId, ESearchCase::IgnoreCase))
+            {
+                ForcedAtlasIndex = Info.ArrayIndex;
+                break;
+            }
+        }
+
+        static bool bLoggedMissingForceExemplarGPU = false;
+        if (ForcedAtlasIndex == INDEX_NONE)
+        {
+            if (!bLoggedMissingForceExemplarGPU)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[StageB][Continental] Forced exemplar '%s' not found in GPU exemplar library"),
+                    *ForcedExemplarId);
+                bLoggedMissingForceExemplarGPU = true;
+            }
+        }
+        else
+        {
+            bLoggedMissingForceExemplarGPU = false;
+        }
+    }
+
+    TArray<int32> ForcedIndices;
+    if (ForcedAtlasIndex != INDEX_NONE)
+    {
+        ForcedIndices.Add(ForcedAtlasIndex);
+    }
+
+    int32 ForcedLibraryIndex = INDEX_NONE;
+    const FExemplarMetadata* ForcedMetadata = nullptr;
+    if (ForcedAtlasIndex != INDEX_NONE)
+    {
+        ForcedLibraryIndex = ExemplarInfo[ForcedAtlasIndex].LibraryIndex;
+        if (ForcedLibraryIndex >= 0)
+        {
+            ForcedMetadata = AccessExemplarMetadataConst(ForcedLibraryIndex);
+        }
+        else
+        {
+            ForcedLibraryIndex = INDEX_NONE;
+        }
+    }
+
     const FTectonicSimulationParameters SimParams = GetParameters();
+
+#if UE_BUILD_DEVELOPMENT
+    static int32 ForcedOverrideSampleLogs = 0;
+    static int32 ForcedOverrideMissLogs = 0;
+    constexpr int32 MaxForcedOverrideLogs = 8;
+#endif
 
     TMap<int32, const FTectonicPlate*> PlateLookup;
     PlateLookup.Reserve(Plates.Num());
@@ -10620,8 +10988,8 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
 
         if (const FPlateBoundarySummary** Cached = BoundarySummaryCache.Find(PlateID))
         {
-            return *Cached;
-        }
+        return *Cached;
+    }
 
         const FPlateBoundarySummary* Summary = GetPlateBoundarySummary(PlateID);
         BoundarySummaryCache.Add(PlateID, Summary);
@@ -10762,7 +11130,7 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         const FTectonicPlate* PlatePtr = PlateLookup.FindRef(PlateID);
 
         const bool bIsContinental = PlatePtr && PlatePtr->CrustType == ECrustType::Continental;
-        if (!bIsContinental)
+        if (!bIsContinental && !bForceExemplarOverride)
         {
 #if UE_BUILD_DEVELOPMENT
             if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
@@ -10811,8 +11179,11 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             LocalMetrics.ClassificationSeconds += FPlatformTime::Seconds() - ClassificationStart;
         }
 
-        const TArray<int32>* ExemplarListPtr = GetExemplarListForTerrain(TerrainType);
-        const TArray<int32>& ExemplarList = ExemplarListPtr ? *ExemplarListPtr : AncientIndices;
+        const TArray<int32>* DefaultExemplarListPtr = GetExemplarListForTerrain(TerrainType);
+        const TArray<int32>* ExemplarListPtr = (ForcedAtlasIndex != INDEX_NONE) ? &ForcedIndices : DefaultExemplarListPtr;
+        const TArray<int32>& ExemplarList = (ExemplarListPtr && ExemplarListPtr->Num() > 0)
+            ? *ExemplarListPtr
+            : (DefaultExemplarListPtr && DefaultExemplarListPtr->Num() > 0 ? *DefaultExemplarListPtr : AncientIndices);
 
         const uint32 ExemplarCount = FMath::Min<uint32>(MaxExemplarBlendCount, static_cast<uint32>(ExemplarList.Num()));
         if (ExemplarCount > 0)
@@ -10847,6 +11218,10 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             PackedWeights = FVector4f(Weights[0], Weights[1], Weights[2], TotalWeight);
 
             RandomOffsetDouble = ComputeContinentalRandomOffset(VertexPosition, SimParams.Seed);
+            if (bDisableRandomOffset || bForceExemplarOverride)
+            {
+                RandomOffsetDouble = FVector2d::ZeroVector;
+            }
             RandomOffset = FVector2f(static_cast<float>(RandomOffsetDouble.X), static_cast<float>(RandomOffsetDouble.Y));
 
             PackedInfo = static_cast<uint32>(TerrainType) | (ExemplarCount << 8);
@@ -10868,9 +11243,11 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         Cache.RandomUVOffsets[VertexIdx] = RandomOffset;
 
         const FVector3d NormalizedPos = VertexPosition.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        const double LonRadians = FMath::Atan2(NormalizedPos.Y, NormalizedPos.X);
+        const double LatRadians = FMath::Asin(FMath::Clamp(NormalizedPos.Z, -1.0, 1.0));
         FVector2d BaseUV(
-            0.5 + (FMath::Atan2(NormalizedPos.Y, NormalizedPos.X) / TwoPi),
-            0.5 - (FMath::Asin(NormalizedPos.Z) / PI));
+            0.5 + (LonRadians / TwoPi),
+            0.5 - (LatRadians / PI));
 
         FVector2d LocalUV = BaseUV - FVector2d(0.5, 0.5);
         LocalUV += FVector2d(RandomOffsetDouble.X, RandomOffsetDouble.Y);
@@ -10879,7 +11256,7 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
         double FoldDistance = TNumericLimits<double>::Max();
         bool bHasFoldRotation = TryComputeFoldDirection(
             VertexPosition,
-            PlatePtr->PlateID,
+            PlatePtr ? PlatePtr->PlateID : INDEX_NONE,
             Plates,
             Boundaries,
             BoundarySummary,
@@ -10907,8 +11284,51 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             }
         }
 
+        if (bForceExemplarOverride)
+        {
+            bHasFoldRotation = false;
+        }
+
         FVector2d RotatedUV = bHasFoldRotation ? RotateVector2D(LocalUV, FoldAngle) : LocalUV;
         FVector2d FinalUV = RotatedUV + FVector2d(0.5, 0.5);
+        const double LonDegrees = FMath::RadiansToDegrees(LonRadians);
+        const double LatDegrees = FMath::RadiansToDegrees(LatRadians);
+        bool bInsideForcedBounds = false;
+
+        if (bForceExemplarOverride && ForcedMetadata && ForcedMetadata->bHasBounds)
+        {
+            const double West = ForcedMetadata->WestLonDeg;
+            const double East = ForcedMetadata->EastLonDeg;
+            const double South = ForcedMetadata->SouthLatDeg;
+            const double North = ForcedMetadata->NorthLatDeg;
+            const double LonRange = East - West;
+            const double LatRange = North - South;
+
+            if (FMath::Abs(LonRange) > KINDA_SMALL_NUMBER && FMath::Abs(LatRange) > KINDA_SMALL_NUMBER)
+            {
+                double ForcedU = (LonDegrees - West) / LonRange;
+                double ForcedV = (North - LatDegrees) / LatRange;
+
+                ForcedU = FMath::Frac(ForcedU);
+                ForcedV = FMath::Frac(ForcedV);
+                if (ForcedU < 0.0)
+                {
+                    ForcedU += 1.0;
+                }
+                if (ForcedV < 0.0)
+                {
+                    ForcedV += 1.0;
+                }
+
+                FinalUV.X = ForcedU;
+                FinalUV.Y = ForcedV;
+
+                bInsideForcedBounds =
+                    LonDegrees >= West && LonDegrees <= East &&
+                    LatDegrees >= South && LatDegrees <= North;
+            }
+        }
+
         FinalUV.X = FMath::Frac(FinalUV.X);
         FinalUV.Y = FMath::Frac(FinalUV.Y);
         if (FinalUV.X < 0.0)
@@ -10920,7 +11340,51 @@ void UTectonicSimulationService::RefreshContinentalAmplificationGPUInputs() cons
             FinalUV.Y += 1.0;
         }
 
-        Cache.WrappedUVs[VertexIdx] = FVector2f(static_cast<float>(FinalUV.X), static_cast<float>(FinalUV.Y));
+        const double WrappedU = FinalUV.X;
+        const double WrappedV = FinalUV.Y;
+        Cache.WrappedUVs[VertexIdx] = FVector2f(static_cast<float>(WrappedU), static_cast<float>(WrappedV));
+
+#if UE_BUILD_DEVELOPMENT
+        if (bForceExemplarOverride && ForcedMetadata && ForcedLibraryIndex != INDEX_NONE)
+        {
+            const bool bLogInside = bInsideForcedBounds && ForcedOverrideSampleLogs < MaxForcedOverrideLogs;
+            const bool bLogOutside = !bInsideForcedBounds && ForcedOverrideMissLogs < MaxForcedOverrideLogs;
+            if (bLogInside || bLogOutside)
+            {
+                FExemplarMetadata* MutableMetadata = AccessExemplarMetadata(ForcedLibraryIndex);
+                double LoggedHeight = 0.0;
+                if (MutableMetadata)
+                {
+                    if (!MutableMetadata->bDataLoaded)
+                    {
+                        LoadExemplarHeightData(*MutableMetadata, ProjectContentDirLocal);
+                    }
+                    LoggedHeight = SampleExemplarHeight(*MutableMetadata, WrappedU, WrappedV);
+                }
+
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[StageB][ForcedSample] Vertex=%d Plate=%d InsideBounds=%s Lon=%.4f Lat=%.4f UV=(%.5f,%.5f) Height=%.2f"),
+                    VertexIdx,
+                    PlateID,
+                    bInsideForcedBounds ? TEXT("true") : TEXT("false"),
+                    LonDegrees,
+                    LatDegrees,
+                    WrappedU,
+                    WrappedV,
+                    LoggedHeight);
+
+                if (bLogInside)
+                {
+                    ++ForcedOverrideSampleLogs;
+                }
+                else
+                {
+                    ++ForcedOverrideMissLogs;
+                }
+            }
+        }
+#endif
+
 #if UE_BUILD_DEVELOPMENT
         if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
         {
@@ -11099,18 +11563,22 @@ void UTectonicSimulationService::BumpOceanicAmplificationSerial()
     ++OceanicAmplificationDataSerial;
     InvalidateOceanicAmplificationFloatInputs();
     ContinentalAmplificationGPUInputs.CachedDataSerial = 0;
+    ContinentalAmplificationGPUInputs.ForcedSettingsHash = 0;
     ContinentalAmplificationCacheSerial = 0;
+    ContinentalAmplificationCacheOverridesHash = 0;
 }
 
 void UTectonicSimulationService::RefreshContinentalAmplificationCache() const
 {
     const int32 VertexCount = VertexAmplifiedElevation.Num();
+    const FContinentalAmplificationGPUInputs& GPUInputs = GetContinentalAmplificationGPUInputs();
     if (VertexCount <= 0)
     {
         ContinentalAmplificationCacheEntries.Reset();
         ContinentalAmplificationCacheSerial = OceanicAmplificationDataSerial;
         ContinentalAmplificationCacheTopologyVersion = TopologyVersion;
         ContinentalAmplificationCacheSurfaceVersion = SurfaceDataVersion;
+        ContinentalAmplificationCacheOverridesHash = GPUInputs.ForcedSettingsHash;
         return;
     }
 
@@ -11118,14 +11586,13 @@ void UTectonicSimulationService::RefreshContinentalAmplificationCache() const
         ContinentalAmplificationCacheSerial == OceanicAmplificationDataSerial &&
         ContinentalAmplificationCacheTopologyVersion == TopologyVersion &&
         ContinentalAmplificationCacheSurfaceVersion == SurfaceDataVersion &&
-        ContinentalAmplificationCacheEntries.Num() == VertexCount;
+        ContinentalAmplificationCacheEntries.Num() == VertexCount &&
+        ContinentalAmplificationCacheOverridesHash == GPUInputs.ForcedSettingsHash;
 
     if (bUpToDate)
     {
         return;
     }
-
-    const FContinentalAmplificationGPUInputs& GPUInputs = GetContinentalAmplificationGPUInputs();
 
     using namespace PlanetaryCreation::GPU;
 
@@ -11220,6 +11687,7 @@ void UTectonicSimulationService::RefreshContinentalAmplificationCache() const
     ContinentalAmplificationCacheSerial = OceanicAmplificationDataSerial;
     ContinentalAmplificationCacheTopologyVersion = TopologyVersion;
     ContinentalAmplificationCacheSurfaceVersion = SurfaceDataVersion;
+    ContinentalAmplificationCacheOverridesHash = GPUInputs.ForcedSettingsHash;
 }
 
 double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
@@ -11231,8 +11699,11 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
     int32 Seed)
 {
     double AmplifiedElevation = BaseElevation_m;
+    const bool bTraceBlend = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND")).Len() > 0;
+    const FString ForcedExemplarId = GetStageBForcedExemplarId();
+    const bool bForceExemplarOverride = !ForcedExemplarId.IsEmpty();
 
-    if (!CacheEntry.bHasCachedData || CacheEntry.ExemplarCount == 0)
+    if ((!CacheEntry.bHasCachedData || CacheEntry.ExemplarCount == 0) && !bForceExemplarOverride)
     {
         return AmplifiedElevation;
     }
@@ -11272,7 +11743,32 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
 
     const uint64 CurrentCacheSerial = ContinentalAmplificationCacheSerial;
     const bool bDebugRequested = (DebugInfo != nullptr);
-    const bool bBlendCacheValid = BlendCacheEntry && BlendCacheEntry->CachedSerial == CurrentCacheSerial && !bDebugRequested;
+    const bool bBlendCacheValid = BlendCacheEntry && BlendCacheEntry->CachedSerial == CurrentCacheSerial && !bDebugRequested && !bForceExemplarOverride;
+
+    FExemplarMetadata* ForcedMetadata = nullptr;
+    int32 ForcedLibraryIndex = INDEX_NONE;
+    if (bForceExemplarOverride)
+    {
+        ForcedLibraryIndex = FindExemplarIndexById(ForcedExemplarId);
+        ForcedMetadata = AccessExemplarMetadata(ForcedLibraryIndex);
+
+        if (bTraceBlend)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[StageB][BlendTrace] Vertex=%d Stage=Setup ForcedId=%s MetadataFound=%s"),
+                VertexIdx,
+                *ForcedExemplarId,
+                ForcedMetadata ? TEXT("true") : TEXT("false"));
+        }
+
+        if (!ForcedMetadata)
+        {
+            return AmplifiedElevation;
+        }
+    }
+
+    double SampleUForDebug = WrappedU;
+    double SampleVForDebug = WrappedV;
 
     if (bBlendCacheValid)
     {
@@ -11294,15 +11790,180 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
 
         double WeightedSum = 0.0;
 
-        for (uint32 SampleIdx = 0; SampleIdx < CacheEntry.ExemplarCount; ++SampleIdx)
+        struct FSampleSpec
         {
-            const uint32 LibraryIndex = CacheEntry.ExemplarIndices[SampleIdx];
-            if (LibraryIndex == MAX_uint32)
+            FExemplarMetadata* Metadata = nullptr;
+            double Weight = 0.0;
+            uint32 LibraryIndex = MAX_uint32;
+        };
+
+        TArray<FSampleSpec, TInlineAllocator<3>> SampleSpecs;
+
+        if (bForceExemplarOverride && ForcedMetadata)
+        {
+            SampleSpecs.Add({ ForcedMetadata, 1.0, ForcedLibraryIndex >= 0 ? static_cast<uint32>(ForcedLibraryIndex) : MAX_uint32 });
+        }
+        else
+        {
+            for (uint32 SampleIdx = 0; SampleIdx < CacheEntry.ExemplarCount; ++SampleIdx)
             {
-                continue;
+                const uint32 LibraryIndex = CacheEntry.ExemplarIndices[SampleIdx];
+                if (LibraryIndex == MAX_uint32)
+                {
+                    continue;
+                }
+
+                FExemplarMetadata* Exemplar = AccessExemplarMetadata(static_cast<int32>(LibraryIndex));
+                if (!Exemplar)
+                {
+                    continue;
+                }
+
+                const double Weight = static_cast<double>(CacheEntry.Weights[SampleIdx]);
+                if (Weight <= 0.0)
+                {
+                    continue;
+                }
+
+                SampleSpecs.Add({ Exemplar, Weight, LibraryIndex });
+            }
+        }
+
+        if (SampleSpecs.Num() == 0)
+        {
+            return AmplifiedElevation;
+        }
+
+        const FVector3d NormalizedPos = Position.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZAxisVector);
+        const double LonRadians = FMath::Atan2(NormalizedPos.Y, NormalizedPos.X);
+        const double LatRadians = FMath::Asin(FMath::Clamp(NormalizedPos.Z, -1.0, 1.0));
+        const double LonDegrees = FMath::RadiansToDegrees(LonRadians);
+        const double LatDegrees = FMath::RadiansToDegrees(LatRadians);
+
+        double SampleU = WrappedU;
+        double SampleV = WrappedV;
+        if (bForceExemplarOverride && ForcedMetadata && ForcedMetadata->bHasBounds)
+        {
+            const bool bWrappedUvValid =
+                FMath::IsFinite(SampleU) && FMath::IsFinite(SampleV) &&
+                SampleU >= 0.0 && SampleU <= 1.0 &&
+                SampleV >= 0.0 && SampleV <= 1.0;
+
+            if (!bWrappedUvValid)
+            {
+                const double LonRange = ForcedMetadata->EastLonDeg - ForcedMetadata->WestLonDeg;
+                const double LatRange = ForcedMetadata->NorthLatDeg - ForcedMetadata->SouthLatDeg;
+                if (FMath::Abs(LonRange) > KINDA_SMALL_NUMBER && FMath::Abs(LatRange) > KINDA_SMALL_NUMBER)
+                {
+                    auto WrapLongitudeToBounds = [](double LongitudeDeg, double WestDeg, double EastDeg) -> double
+                    {
+                        const double Range = EastDeg - WestDeg;
+                        if (FMath::Abs(Range) <= KINDA_SMALL_NUMBER)
+                        {
+                            return LongitudeDeg;
+                        }
+
+                        const double AbsRange = FMath::Abs(Range);
+                        double Wrapped = LongitudeDeg;
+
+                        if (AbsRange < 359.0)
+                        {
+                            double NormalizedToWest = LongitudeDeg - WestDeg;
+                            double Modded = FMath::Fmod(NormalizedToWest, AbsRange);
+                            if (Modded < 0.0)
+                            {
+                                Modded += AbsRange;
+                            }
+                            Wrapped = WestDeg + Modded;
+                        }
+
+                        for (int32 Iter = 0; Iter < 12; ++Iter)
+                        {
+                            if (Wrapped < WestDeg)
+                            {
+                                Wrapped += 360.0;
+                                continue;
+                            }
+                            if (Wrapped > EastDeg)
+                            {
+                                Wrapped -= 360.0;
+                                continue;
+                            }
+                            break;
+                        }
+                        return Wrapped;
+                    };
+
+                    auto WrapLatitudeToBounds = [](double LatitudeDeg, double SouthDeg, double NorthDeg) -> double
+                    {
+                        const double Range = NorthDeg - SouthDeg;
+                        if (FMath::Abs(Range) <= KINDA_SMALL_NUMBER)
+                        {
+                            return LatitudeDeg;
+                        }
+
+                        const double AbsRange = FMath::Abs(Range);
+                        double Wrapped = LatitudeDeg;
+
+                        if (AbsRange < 180.0)
+                        {
+                            double NormalizedToSouth = LatitudeDeg - SouthDeg;
+                            double Modded = FMath::Fmod(NormalizedToSouth, AbsRange);
+                            if (Modded < 0.0)
+                            {
+                                Modded += AbsRange;
+                            }
+                            Wrapped = SouthDeg + Modded;
+                        }
+
+                        const double Minimum = FMath::Min(SouthDeg, NorthDeg);
+                        const double Maximum = FMath::Max(SouthDeg, NorthDeg);
+                        return FMath::Clamp(Wrapped, Minimum, Maximum);
+                    };
+
+                    const double WrappedLonDeg = WrapLongitudeToBounds(LonDegrees, ForcedMetadata->WestLonDeg, ForcedMetadata->EastLonDeg);
+                    const double WrappedLatDeg = WrapLatitudeToBounds(LatDegrees, ForcedMetadata->SouthLatDeg, ForcedMetadata->NorthLatDeg);
+
+                    double LonPad = 0.0;
+                    double LatPad = 0.0;
+                    ForcedMetadata->ComputeForcedPadding(LonPad, LatPad);
+
+                    const double PadToleranceDeg = FMath::Max(1.0e-3, static_cast<double>(KINDA_SMALL_NUMBER));
+                    const double MinForcedLon = ForcedMetadata->WestLonDeg - LonPad - PadToleranceDeg;
+                    const double MaxForcedLon = ForcedMetadata->EastLonDeg + LonPad + PadToleranceDeg;
+                    const double MinForcedLat = ForcedMetadata->SouthLatDeg - LatPad - PadToleranceDeg;
+                    const double MaxForcedLat = ForcedMetadata->NorthLatDeg + LatPad + PadToleranceDeg;
+
+                    const double ClampedLon = FMath::Clamp(WrappedLonDeg, MinForcedLon, MaxForcedLon);
+                    const double ClampedLat = FMath::Clamp(WrappedLatDeg, MinForcedLat, MaxForcedLat);
+
+                    SampleU = (ClampedLon - ForcedMetadata->WestLonDeg) / LonRange;
+                    SampleV = (ForcedMetadata->NorthLatDeg - ClampedLat) / LatRange;
+
+                    if (bTraceBlend)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Verbose,
+                            TEXT("[StageB][BlendTrace] Vertex=%d ForcedUVFallback Lon=%.6f Lat=%.6f U=%.6f V=%.6f"),
+                            VertexIdx,
+                            WrappedLonDeg,
+                            LatDegrees,
+                            SampleU,
+                            SampleV);
+                    }
+                }
             }
 
-            FExemplarMetadata* Exemplar = AccessExemplarMetadata(static_cast<int32>(LibraryIndex));
+            SampleU = FMath::Clamp(SampleU, 0.0, 1.0);
+            SampleV = FMath::Clamp(SampleV, 0.0, 1.0);
+        }
+
+        SampleUForDebug = SampleU;
+        SampleVForDebug = SampleV;
+
+        for (int32 SpecIdx = 0; SpecIdx < SampleSpecs.Num(); ++SpecIdx)
+        {
+            FSampleSpec& Spec = SampleSpecs[SpecIdx];
+            FExemplarMetadata* Exemplar = Spec.Metadata;
             if (!Exemplar)
             {
                 continue;
@@ -11313,47 +11974,62 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
                 continue;
             }
 
-            const double Weight = static_cast<double>(CacheEntry.Weights[SampleIdx]);
+            const double Weight = Spec.Weight;
             if (Weight <= 0.0)
             {
                 continue;
             }
 
-            int32 PixelX = 0;
-            int32 PixelY = 0;
-            uint16 RawValue = 0;
-            if (Exemplar->Width_px > 0 && Exemplar->Height_px > 0)
-            {
-                PixelX = FMath::Clamp(static_cast<int32>(WrappedU * static_cast<double>(Exemplar->Width_px)), 0, Exemplar->Width_px - 1);
-                PixelY = FMath::Clamp(static_cast<int32>(WrappedV * static_cast<double>(Exemplar->Height_px)), 0, Exemplar->Height_px - 1);
-                const int32 PixelIndex = PixelY * Exemplar->Width_px + PixelX;
-                if (Exemplar->HeightData.IsValidIndex(PixelIndex))
-                {
-                    RawValue = Exemplar->HeightData[PixelIndex];
-                }
-            }
-            const int32 FlippedPixelY = (Exemplar->Height_px > 0) ? (Exemplar->Height_px - 1 - PixelY) : PixelY;
-
-            const double SampledHeight = SampleExemplarHeight(*Exemplar, WrappedU, WrappedV);
+            const double SampledHeight = SampleExemplarHeight(*Exemplar, SampleU, SampleV);
             WeightedSum += SampledHeight * Weight;
             TotalWeight += Weight;
+
+            if (bTraceBlend)
+            {
+                const TCHAR* ExemplarId = Exemplar->ID.IsEmpty() ? TEXT("<Unknown>") : *Exemplar->ID;
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[StageB][BlendTrace] Vertex=%d SampleIdx=%u Exemplar=%s U=%.6f V=%.6f Sample=%.3f Weight=%.3f Base=%.3f"),
+                    VertexIdx,
+                    SpecIdx,
+                    ExemplarId,
+                    SampleU,
+                    SampleV,
+                    SampledHeight,
+                    Weight,
+                    BaseElevation_m);
+            }
 
 #if UE_BUILD_DEVELOPMENT
             if (DebugInfo)
             {
-                DebugInfo->ExemplarIndices[SampleIdx] = LibraryIndex;
-                DebugInfo->SampleHeights[SampleIdx] = SampledHeight;
-                DebugInfo->Weights[SampleIdx] = Weight;
+                DebugInfo->ExemplarIndices[SpecIdx] = Spec.LibraryIndex;
+                DebugInfo->SampleHeights[SpecIdx] = SampledHeight;
+                DebugInfo->Weights[SpecIdx] = Weight;
             }
 
             const int32 DebugVertexIndex = GetStageBUnifiedDebugVertexIndex();
             if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
             {
+                int32 PixelX = 0;
+                int32 PixelY = 0;
+                uint16 RawValue = 0;
+                if (Exemplar->Width_px > 0 && Exemplar->Height_px > 0)
+                {
+                    PixelX = FMath::Clamp(static_cast<int32>(SampleU * static_cast<double>(Exemplar->Width_px)), 0, Exemplar->Width_px - 1);
+                    PixelY = FMath::Clamp(static_cast<int32>(SampleV * static_cast<double>(Exemplar->Height_px)), 0, Exemplar->Height_px - 1);
+                    const int32 PixelIndex = PixelY * Exemplar->Width_px + PixelX;
+                    if (Exemplar->HeightData.IsValidIndex(PixelIndex))
+                    {
+                        RawValue = Exemplar->HeightData[PixelIndex];
+                    }
+                }
+                const int32 FlippedPixelY = (Exemplar->Height_px > 0) ? (Exemplar->Height_px - 1 - PixelY) : PixelY;
+
                 UE_LOG(LogPlanetaryCreation, Display,
                     TEXT("[ContinentalCPU][Sample] Vertex %d SampleIdx=%u Atlas=%u Pixel=(%d,%d) PixelFlipped=(%d,%d) Raw=0x%04x Height=%.3f Weight=%.3f"),
                     DebugVertexIndex,
-                    SampleIdx,
-                    LibraryIndex,
+                    SpecIdx,
+                    Spec.LibraryIndex,
                     PixelX,
                     PixelY,
                     PixelX,
@@ -11370,16 +12046,29 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
             BlendedHeight = WeightedSum / TotalWeight;
         }
 
-        if (CacheEntry.ExemplarCount > 0)
+        if (SampleSpecs.Num() > 0)
         {
-            const uint32 ReferenceIndex = CacheEntry.ExemplarIndices[0];
-            if (ReferenceIndex != MAX_uint32)
+            FExemplarMetadata* RefExemplar = SampleSpecs[0].Metadata;
+            if (!RefExemplar && SampleSpecs[0].LibraryIndex != MAX_uint32)
             {
-                const FExemplarMetadata* RefExemplar = AccessExemplarMetadataConst(static_cast<int32>(ReferenceIndex));
-                if (RefExemplar)
+                RefExemplar = AccessExemplarMetadata(static_cast<int32>(SampleSpecs[0].LibraryIndex));
+            }
+
+            if (RefExemplar)
+            {
+                ReferenceMean = RefExemplar->ElevationMean_m;
+                bHasReferenceMean = true;
+
+                if (bTraceBlend)
                 {
-                    ReferenceMean = RefExemplar->ElevationMean_m;
-                    bHasReferenceMean = true;
+                    const TCHAR* RefId = RefExemplar->ID.IsEmpty() ? TEXT("<Unknown>") : *RefExemplar->ID;
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[StageB][BlendTrace] Vertex=%d Reference=%s RefMean=%.3f TotalWeight=%.3f Blended=%.3f"),
+                        VertexIdx,
+                        RefId,
+                        ReferenceMean,
+                        TotalWeight,
+                        BlendedHeight);
                 }
             }
         }
@@ -11393,29 +12082,39 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
         }
     }
 
+    double EffectiveBase = BaseElevation_m;
+    double DetailScale = (BaseElevation_m > 1000.0)
+        ? (ReferenceMean != 0.0 ? (BaseElevation_m / ReferenceMean) : 0.0)
+        : 0.5;
+
+    if (bForceExemplarOverride && bHasReferenceMean)
+    {
+        EffectiveBase = ReferenceMean;
+        DetailScale = 1.0;
+    }
+
+    double Detail = 0.0;
     if (bHasReferenceMean)
     {
-        const double DetailScale = (BaseElevation_m > 1000.0)
-            ? (ReferenceMean != 0.0 ? (BaseElevation_m / ReferenceMean) : 0.0)
-            : 0.5;
-        const double Detail = (BlendedHeight - ReferenceMean) * DetailScale;
-        AmplifiedElevation += Detail;
+        Detail = (BlendedHeight - ReferenceMean) * DetailScale;
+        AmplifiedElevation = EffectiveBase + Detail;
+    }
+    else
+    {
+        AmplifiedElevation = BlendedHeight;
     }
 
 #if UE_BUILD_DEVELOPMENT
     const int32 DebugVertexIndex = GetStageBUnifiedDebugVertexIndex();
     if (DebugVertexIndex != INDEX_NONE && VertexIdx == DebugVertexIndex)
     {
-        const double DetailScaleDbg = (BaseElevation_m > 1000.0)
-            ? (ReferenceMean != 0.0 ? (BaseElevation_m / ReferenceMean) : 0.0)
-            : 0.5;
         UE_LOG(LogPlanetaryCreation, Display,
             TEXT("[ContinentalCPU] Vertex %d Base=%.3f Blended=%.3f RefMean=%.3f DetailScale=%.3f Result=%.3f TotalWeight=%.3f"),
             DebugVertexIndex,
             BaseElevation_m,
             BlendedHeight,
             ReferenceMean,
-            DetailScaleDbg,
+            DetailScale,
             AmplifiedElevation,
             TotalWeight);
     }
@@ -11425,11 +12124,27 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
         DebugInfo->TotalWeight = TotalWeight;
         DebugInfo->BlendedHeight = BlendedHeight;
         DebugInfo->CpuResult = AmplifiedElevation;
-        DebugInfo->UValue = static_cast<double>(CacheEntry.WrappedUV.X);
-        DebugInfo->VValue = static_cast<double>(CacheEntry.WrappedUV.Y);
+        DebugInfo->UValue = bForceExemplarOverride ? SampleUForDebug : WrappedU;
+        DebugInfo->VValue = bForceExemplarOverride ? SampleVForDebug : WrappedV;
         DebugInfo->ReferenceMean = ReferenceMean;
     }
 #endif
+
+    if (bTraceBlend)
+    {
+        const TCHAR* ModeLabel = bForceExemplarOverride ? TEXT("ForcedOverride") : (bHasReferenceMean ? TEXT("Detail") : TEXT("Bypass"));
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[StageB][BlendTrace] Vertex=%d Mode=%s Base=%.3f Blended=%.3f RefMean=%.3f DetailScale=%.3f Detail=%.3f Result=%.3f TotalWeight=%.3f"),
+            VertexIdx,
+            ModeLabel,
+            BaseElevation_m,
+            BlendedHeight,
+            ReferenceMean,
+            DetailScale,
+            Detail,
+            AmplifiedElevation,
+            TotalWeight);
+    }
 
     return AmplifiedElevation;
 }

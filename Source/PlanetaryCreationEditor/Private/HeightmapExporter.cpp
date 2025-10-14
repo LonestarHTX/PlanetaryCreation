@@ -3,6 +3,7 @@
 
 #include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
+#include "ContinentalAmplificationTypes.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Modules/ModuleManager.h"
@@ -51,6 +52,30 @@ namespace
     constexpr double BytesToMiB(uint64 Bytes)
     {
         return static_cast<double>(Bytes) / (1024.0 * 1024.0);
+    }
+
+    bool ShouldTraceHeightmapTileProgress()
+    {
+#if !UE_BUILD_SHIPPING
+        static bool bCached = false;
+        static bool bTrace = false;
+        if (!bCached)
+        {
+            const FString Value = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_TRACE_TILE_PROGRESS"));
+            if (!Value.IsEmpty())
+            {
+                bTrace =
+                    Value.Equals(TEXT("1"), ESearchCase::IgnoreCase) ||
+                    Value.Equals(TEXT("true"), ESearchCase::IgnoreCase) ||
+                    Value.Equals(TEXT("yes"), ESearchCase::IgnoreCase) ||
+                    Value.Equals(TEXT("log"), ESearchCase::IgnoreCase);
+            }
+            bCached = true;
+        }
+        return bTrace;
+#else
+        return false;
+#endif
     }
 
     struct FHeightmapRescueAggregation
@@ -131,6 +156,7 @@ namespace
             default:
                 break;
             }
+
         }
     };
 
@@ -483,7 +509,9 @@ namespace
         TArray<uint64>& RowTraversalSums,
         TArray<uint8>& RowMaxTraversalSteps,
         FHeightmapRescueAggregation& RescueAggregation,
-        TArray<int32>& RowLastTriangles)
+        TArray<int32>& RowLastTriangles,
+        TArray<double>* RawElevationBuffer,
+        int32 RawBufferWidth)
     {
         FHeightmapTileBuffer Tile;
         Tile.SampleStartX = SampleStartX;
@@ -580,8 +608,16 @@ namespace
 #endif
 
         const double TileStartSeconds = FPlatformTime::Seconds();
+        const bool bTraceTileProgress = ShouldTraceHeightmapTileProgress();
+        double LastTraceSeconds = TileStartSeconds;
 
-        auto TryFallbackSample = [&](const FVector2d& BaseUV, FHeightmapSampler::FSampleInfo& InOutInfo, double& InOutElevation, bool& bOutExpandedAttempted, bool& bOutExpandedHit, EHeightmapFallbackMode& OutMode) -> bool
+        auto TryFallbackSample = [&](const FVector2d& BaseUV,
+                                     FHeightmapSampler::FSampleInfo& InOutInfo,
+                                     double& InOutElevation,
+                                     bool& bOutExpandedAttempted,
+                                     bool& bOutExpandedHit,
+                                     EHeightmapFallbackMode& OutMode,
+                                     bool bDebugSample) -> bool
         {
             OutMode = EHeightmapFallbackMode::None;
             bOutExpandedAttempted = false;
@@ -602,8 +638,28 @@ namespace
 
             const FVector2d BaseSanitized = SanitizeUV(BaseUV);
 
+            if (bDebugSample)
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[HeightmapExport][TileTrace] FallbackStart UV=(%.6f,%.6f) Sanitized=(%.6f,%.6f) Triangle=%d Hit=%d"),
+                    BaseUV.X,
+                    BaseUV.Y,
+                    BaseSanitized.X,
+                    BaseSanitized.Y,
+                    InOutInfo.TriangleIndex,
+                    InOutInfo.bHit ? 1 : 0);
+            }
+
             if (!BaseSanitized.Equals(BaseUV, KINDA_SMALL_NUMBER))
             {
+                if (bDebugSample)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] FallbackSanitizeAttempt UV=(%.6f,%.6f)"),
+                        BaseSanitized.X,
+                        BaseSanitized.Y);
+                }
+
                 FHeightmapSampler::FSampleInfo SanitizedInfo;
                 const double SanitizedElevation = Sampler.SampleElevationAtUV(BaseSanitized, &SanitizedInfo);
                 if (SanitizedInfo.bHit)
@@ -611,7 +667,20 @@ namespace
                     InOutInfo = SanitizedInfo;
                     InOutElevation = SanitizedElevation;
                     OutMode = EHeightmapFallbackMode::Sanitized;
+                    if (bDebugSample)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[HeightmapExport][TileTrace] FallbackSanitizeHit Triangle=%d Steps=%d Elevation=%.6f"),
+                            SanitizedInfo.TriangleIndex,
+                            SanitizedInfo.Steps,
+                            SanitizedElevation);
+                    }
                     return true;
+                }
+                if (bDebugSample)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] FallbackSanitizeMiss"));
                 }
             }
 
@@ -620,11 +689,33 @@ namespace
                 const FVector2d Sanitized = SanitizeUV(CandidateUV);
                 if (Sanitized.Equals(BaseSanitized, KINDA_SMALL_NUMBER))
                 {
+                    if (bDebugSample)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[HeightmapExport][TileTrace] FallbackCandidateSkipped Mode=%d UV=(%.6f,%.6f) Reason=SanitizedMatch"),
+                            static_cast<int32>(Mode),
+                            CandidateUV.X,
+                            CandidateUV.Y);
+                    }
                     return false;
                 }
 
                 FHeightmapSampler::FSampleInfo CandidateInfo;
                 const double CandidateElevation = Sampler.SampleElevationAtUV(Sanitized, &CandidateInfo);
+                if (bDebugSample)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] FallbackCandidateResult Mode=%d UV=(%.6f,%.6f) Sanitized=(%.6f,%.6f) Hit=%d Triangle=%d Steps=%d Elev=%.6f"),
+                        static_cast<int32>(Mode),
+                        CandidateUV.X,
+                        CandidateUV.Y,
+                        Sanitized.X,
+                        Sanitized.Y,
+                        CandidateInfo.bHit ? 1 : 0,
+                        CandidateInfo.TriangleIndex,
+                        CandidateInfo.Steps,
+                        CandidateElevation);
+                }
                 if (!CandidateInfo.bHit)
                 {
                     return false;
@@ -637,6 +728,14 @@ namespace
                     bOutExpandedHit = true;
                 }
                 OutMode = Mode;
+                if (bDebugSample)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] FallbackCandidateHit Mode=%d Triangle=%d Steps=%d"),
+                        static_cast<int32>(Mode),
+                        CandidateInfo.TriangleIndex,
+                        CandidateInfo.Steps);
+                }
                 return true;
             };
 
@@ -698,6 +797,11 @@ namespace
                 }
             }
 
+            if (bDebugSample)
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[HeightmapExport][TileTrace] FallbackFailed"));
+            }
             return false;
         };
 
@@ -712,6 +816,29 @@ namespace
             const double V = (static_cast<double>(GlobalY) + 0.5) * InvHeight;
             const int32 TileRowOffset = LocalY * Tile.SampleWidth * 4;
 
+            if (bTraceTileProgress && ((LocalY & 31) == 0 || LocalY == Tile.SampleHeight - 1))
+            {
+                const double NowSeconds = FPlatformTime::Seconds();
+                if ((NowSeconds - LastTraceSeconds) >= 0.5 || LocalY == 0 || LocalY == Tile.SampleHeight - 1)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] Sample=(%d,%d)->(%d,%d) Core=(%d,%d)->(%d,%d) LocalRow=%d/%d GlobalY=%d Elapsed=%.2fs"),
+                        Tile.SampleStartX,
+                        Tile.SampleStartY,
+                        Tile.SampleEndX,
+                        Tile.SampleEndY,
+                        Tile.CoreStartX,
+                        Tile.CoreStartY,
+                        Tile.CoreEndX,
+                        Tile.CoreEndY,
+                        LocalY,
+                        Tile.SampleHeight,
+                        GlobalY,
+                        NowSeconds - TileStartSeconds);
+                    LastTraceSeconds = NowSeconds;
+                }
+            }
+
             for (int32 LocalX = 0; LocalX < Tile.SampleWidth; ++LocalX)
             {
                 const int32 GlobalX = Tile.SampleStartX + LocalX;
@@ -725,6 +852,28 @@ namespace
 
                 const double U = (static_cast<double>(GlobalX) + 0.5) * InvWidth;
                 const FVector2d UV(U, V);
+                const bool bDebugPixel = bTraceTileProgress && (LocalY == 0) && (LocalX == 0);
+                const bool bRowTrace = bTraceTileProgress && (LocalY == 0) && ((LocalX % 32) == 0);
+                const double PixelStartSeconds = bDebugPixel ? FPlatformTime::Seconds() : 0.0;
+
+                if (bDebugPixel)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] SampleBegin Global=(%d,%d) UV=(%.6f,%.6f) Contributes=%d"),
+                        GlobalX,
+                        GlobalY,
+                        U,
+                        V,
+                        bContributes ? 1 : 0);
+                }
+                else if (bRowTrace)
+                {
+                    UE_LOG(LogPlanetaryCreation, Verbose,
+                        TEXT("[HeightmapExport][TileTrace] RowProgress Global=(%d,%d) Contributes=%d"),
+                        GlobalX,
+                        GlobalY,
+                        bContributes ? 1 : 0);
+                }
 
                 FHeightmapSampler::FSampleInfo SampleInfo;
                 double Elevation = 0.0;
@@ -741,13 +890,41 @@ namespace
                         {
                             bUsedHint = true;
                             FallbackMode = EHeightmapFallbackMode::Hint;
+                            if (bDebugPixel)
+                            {
+                                UE_LOG(LogPlanetaryCreation, Log,
+                                    TEXT("[HeightmapExport][TileTrace] SeamHintHit Triangle=%d Steps=%d Elev=%.6f"),
+                                    SampleInfo.TriangleIndex,
+                                    SampleInfo.Steps,
+                                    Elevation);
+                            }
+                        }
+                        else if (bDebugPixel)
+                        {
+                            UE_LOG(LogPlanetaryCreation, Log,
+                                TEXT("[HeightmapExport][TileTrace] SeamHintMiss Triangle=%d"),
+                                SeamHint.Triangle);
                         }
                     }
                 }
 
                 if (!bUsedHint)
                 {
+                    if (bDebugPixel)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[HeightmapExport][TileTrace] SampleInitialAttempt"));
+                    }
                     Elevation = Sampler.SampleElevationAtUV(UV, &SampleInfo);
+                    if (bDebugPixel)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[HeightmapExport][TileTrace] SampleInitialResult Hit=%d Triangle=%d Steps=%d Elev=%.6f"),
+                            SampleInfo.bHit ? 1 : 0,
+                            SampleInfo.TriangleIndex,
+                            SampleInfo.Steps,
+                            Elevation);
+                    }
                 }
 
                 const bool bInitialHit = SampleInfo.bHit;
@@ -768,7 +945,13 @@ namespace
                     if (bContributes)
                     {
                         bFallbackAttempted = true;
-                        bFinalHit = TryFallbackSample(UV, SampleInfo, Elevation, bExpandedAttempted, bExpandedHit, FallbackMode);
+                        if (bDebugPixel)
+                        {
+                            UE_LOG(LogPlanetaryCreation, Log,
+                                TEXT("[HeightmapExport][TileTrace] FallbackInvoked Triangle=%d"),
+                                SampleInfo.TriangleIndex);
+                        }
+                        bFinalHit = TryFallbackSample(UV, SampleInfo, Elevation, bExpandedAttempted, bExpandedHit, FallbackMode, bDebugPixel);
 
                         if (bExpandedAttempted)
                         {
@@ -786,6 +969,14 @@ namespace
                                 Elevation = ClampedElevation;
                                 FallbackMode = EHeightmapFallbackMode::Sanitized;
                                 bExpandedHit = false;
+                                if (bDebugPixel)
+                                {
+                                    UE_LOG(LogPlanetaryCreation, Log,
+                                        TEXT("[HeightmapExport][TileTrace] ClampReuseCurrent Triangle=%d Steps=%d Elev=%.6f"),
+                                        SampleInfo.TriangleIndex,
+                                        SampleInfo.Steps,
+                                        Elevation);
+                                }
                             }
                         }
 
@@ -804,7 +995,7 @@ namespace
                     }
                     else
                     {
-                        bFinalHit = TryFallbackSample(UV, SampleInfo, Elevation, bExpandedAttempted, bExpandedHit, FallbackMode);
+                        bFinalHit = TryFallbackSample(UV, SampleInfo, Elevation, bExpandedAttempted, bExpandedHit, FallbackMode, bDebugPixel);
                     }
                 }
 
@@ -823,6 +1014,14 @@ namespace
                             FallbackMode = EHeightmapFallbackMode::RowReuse;
                             bExpandedHit = false;
                             bFallbackAttempted = true;
+                            if (bDebugPixel)
+                            {
+                                UE_LOG(LogPlanetaryCreation, Log,
+                                    TEXT("[HeightmapExport][TileTrace] ClampReuseRow Triangle=%d Steps=%d Elev=%.6f"),
+                                    SampleInfo.TriangleIndex,
+                                    SampleInfo.Steps,
+                                    Elevation);
+                            }
                         }
                     }
                 }
@@ -853,6 +1052,16 @@ namespace
                     bExpandedAttempted,
                     bExpandedHit);
 
+                if (bDebugPixel)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] SampleFinalResult FinalHit=%d FallbackMode=%d ExpandedAttempt=%d ExpandedHit=%d"),
+                        (bFinalHit && SampleInfo.bHit) ? 1 : 0,
+                        static_cast<int32>(FallbackMode),
+                        bExpandedAttempted ? 1 : 0,
+                        bExpandedHit ? 1 : 0);
+                }
+
                 if (bContributes)
                 {
                     if (bFinalHit && SampleInfo.bHit)
@@ -862,6 +1071,15 @@ namespace
                     else
                     {
                         RowLastTriangles[GlobalY] = INDEX_NONE;
+                        if (bTraceTileProgress)
+                        {
+                            UE_LOG(LogPlanetaryCreation, Verbose,
+                                TEXT("[HeightmapExport][TileTrace] Miss Global=(%d,%d) Triangle=%d FallbackMode=%d"),
+                                GlobalX,
+                                GlobalY,
+                                SampleInfo.TriangleIndex,
+                                static_cast<int32>(FallbackMode));
+                        }
                     }
 
                     RowTraversalSums[GlobalY] += static_cast<uint64>(ClampedSteps);
@@ -949,13 +1167,53 @@ namespace
                 }
 #endif
 
+                if (RawElevationBuffer)
+                {
+                    const int64 RawIndex = static_cast<int64>(GlobalY) * static_cast<int64>(RawBufferWidth) + GlobalX;
+                    if (RawElevationBuffer->IsValidIndex(static_cast<int32>(RawIndex)))
+                    {
+                        (*RawElevationBuffer)[static_cast<int32>(RawIndex)] = Elevation;
+                    }
+                }
+
                 const FColor PixelColor = Palette.Sample(Elevation);
                 const int32 PixelIndex = TileRowOffset + (LocalX * 4);
                 Tile.RGBA[PixelIndex + 0] = PixelColor.R;
                 Tile.RGBA[PixelIndex + 1] = PixelColor.G;
                 Tile.RGBA[PixelIndex + 2] = PixelColor.B;
                 Tile.RGBA[PixelIndex + 3] = 255;
+
+                if (bDebugPixel)
+                {
+                    const double PixelDuration = FPlatformTime::Seconds() - PixelStartSeconds;
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] SampleComplete Duration=%.4fs Elev=%.6f"),
+                        PixelDuration,
+                        Elevation);
+                }
             }
+
+                if (bTraceTileProgress)
+                {
+                    const int32 RowWidth = Tile.CoreEndX - Tile.CoreStartX;
+                    const uint32 RowHits = RowSuccessCounts.IsValidIndex(GlobalY) ? RowSuccessCounts[GlobalY] : 0u;
+                    const int32 RowMisses = RowWidth - static_cast<int32>(RowHits);
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] RowComplete LocalRow=%d/%d GlobalY=%d Hits=%u Misses=%d"),
+                        LocalY,
+                        Tile.SampleHeight,
+                        GlobalY,
+                        RowHits,
+                        RowMisses);
+                }
+
+                if (bTraceTileProgress && (LocalY == 0 || ((LocalY + 1) % 32 == 0) || LocalY == Tile.SampleHeight - 1))
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] RowComplete LocalRow=%d/%d"),
+                        LocalY,
+                        Tile.SampleHeight);
+                }
         }
 
 #if !UE_BUILD_SHIPPING
@@ -1112,6 +1370,25 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     double SamplerSetupMs = 0.0;
     double SamplingMs = 0.0;
     double EncodeMs = 0.0;
+    const FString RawHeightExportPath = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_RAW_EXPORT"));
+    const bool bWriteRawHeights = !RawHeightExportPath.IsEmpty();
+    const bool bTileTrace = ShouldTraceHeightmapTileProgress();
+    TArray<double> RawHeightSamples;
+    if (bWriteRawHeights)
+    {
+        const int64 ExpectedSamples = static_cast<int64>(ImageWidth) * static_cast<int64>(ImageHeight);
+        if (ExpectedSamples <= 0 || ExpectedSamples > MAX_int32)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[HeightmapExport][Raw] Requested raw export but dimensions %dx%d are unsupported."),
+                ImageWidth,
+                ImageHeight);
+        }
+        else
+        {
+            RawHeightSamples.Init(std::numeric_limits<double>::quiet_NaN(), static_cast<int32>(ExpectedSamples));
+        }
+    }
 
 #if !UE_BUILD_SHIPPING
     auto ToMegabytesSigned = [](int64 Bytes) -> double
@@ -1352,6 +1629,15 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
         }
     }
 
+    const bool bForceExemplarOverride = !GetStageBForcedExemplarId().IsEmpty();
+    if (!bStageBReady && bForceExemplarOverride && VertexAmplifiedElevation.Num() == RenderVertices.Num())
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[HeightmapExport][StageBRescue] Stage B not flagged ready but forced exemplar override is active; using amplified buffer anyway."));
+        bStageBReady = true;
+        ReadyReason = EStageBAmplificationReadyReason::None;
+    }
+
     const bool bAmplifiedArrayValid = (VertexAmplifiedElevation.Num() == RenderVertices.Num());
     bool bAmplifiedAvailable = bStageBReady && bAmplifiedArrayValid;
     if (bStageBReady && !bAmplifiedArrayValid)
@@ -1567,6 +1853,7 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
         const int32 TilesY = FMath::Max(1, FMath::DivideAndRoundUp(ImageHeight, TileHeight));
         const int32 TotalTiles = TilesX * TilesY;
         int32 TileCounter = 0;
+        TArray<double>* RawBufferPtr = bWriteRawHeights ? &RawHeightSamples : nullptr;
 
         for (int32 TileY = 0; TileY < TilesY; ++TileY)
         {
@@ -1628,10 +1915,46 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
                     RowTraversalSums,
                     RowMaxTraversalSteps,
                     RescueAggregation,
-                    RowLastTriangles);
+                    RowLastTriangles,
+                    RawBufferPtr,
+                    ImageWidth);
+
+                if (bTileTrace)
+                {
+                    const int32 CoreWidth = TileBuffer.CoreEndX - TileBuffer.CoreStartX;
+                    const int32 CoreHeight = TileBuffer.CoreEndY - TileBuffer.CoreStartY;
+                    const int64 CorePixels = static_cast<int64>(CoreWidth) * static_cast<int64>(CoreHeight);
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[HeightmapExport][TileTrace] TileSummary Tile=%d/%d CoreHits=%d CoreMiss=%d FallbackSuccess=%d FallbackFail=%d Expanded=%d/%d CorePixels=%lld"),
+                        TileCounter,
+                        TotalTiles,
+                        TileBuffer.CoreFinalHitCount,
+                        TileBuffer.CoreFinalMissCount,
+                        TileBuffer.CoreFallbackSuccessCount,
+                        TileBuffer.CoreFallbackFailureCount,
+                        TileBuffer.CoreExpandedSuccessCount,
+                        TileBuffer.CoreExpandedAttemptCount,
+                        CorePixels);
+                    if (CorePixels > 0 && TileBuffer.CoreFinalHitCount == 0)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning,
+                            TEXT("[HeightmapExport][TileTrace] Tile %d/%d produced zero hits; rows will rely entirely on rescues."),
+                            TileCounter,
+                            TotalTiles);
+                    }
+                }
 
                 if (TileX > 0)
                 {
+                    if (bTileTrace)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[HeightmapExport][TileTrace] SeamFixStart TileX=%d CoreStartX=%d CoreEndX=%d"),
+                            TileX,
+                            TileBuffer.CoreStartX,
+                            TileBuffer.CoreEndX);
+                    }
+
                     UE_LOG(LogPlanetaryCreation, Verbose,
                         TEXT("[HeightmapExport][SeamFix] Evaluating seam for TileX=%d TileY=%d"),
                         TileX,
@@ -1865,6 +2188,13 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
                             DeltaAfter,
                             LeftTriForLog,
                             RightResampleInfo.TriangleIndex);
+                    }
+
+                    if (bTileTrace)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Log,
+                            TEXT("[HeightmapExport][TileTrace] SeamFixEnd TileX=%d"),
+                            TileX);
                     }
                 }
 
@@ -2190,6 +2520,53 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     }
 #endif
 
+    if (bWriteRawHeights && RawHeightSamples.Num() == ImageWidth * ImageHeight)
+    {
+        const FString RawDirectory = FPaths::GetPath(RawHeightExportPath);
+        bool bRawWriteFailed = false;
+        if (!RawDirectory.IsEmpty() && !IFileManager::Get().MakeDirectory(*RawDirectory, true))
+        {
+            UE_LOG(LogPlanetaryCreation, Error,
+                TEXT("[HeightmapExport][Raw] Failed to create raw output directory: %s"),
+                *RawDirectory);
+            bRawWriteFailed = true;
+        }
+
+        if (!bRawWriteFailed)
+        {
+            FString RawCsv;
+            const int32 EstimatedCharsPerValue = 16;
+            RawCsv.Reserve(ImageHeight * ImageWidth * EstimatedCharsPerValue);
+
+            for (int32 Y = 0; Y < ImageHeight; ++Y)
+            {
+                const int32 RowOffset = Y * ImageWidth;
+                for (int32 X = 0; X < ImageWidth; ++X)
+                {
+                    RawCsv += FString::SanitizeFloat(RawHeightSamples[RowOffset + X]);
+                    if (X + 1 < ImageWidth)
+                    {
+                        RawCsv += TEXT(",");
+                    }
+                }
+                RawCsv += TEXT("\n");
+            }
+
+            if (!FFileHelper::SaveStringToFile(RawCsv, *RawHeightExportPath))
+            {
+                UE_LOG(LogPlanetaryCreation, Error,
+                    TEXT("[HeightmapExport][Raw] Failed to write raw height data to %s"),
+                    *RawHeightExportPath);
+            }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, Log,
+                    TEXT("[HeightmapExport][Raw] Wrote height samples to %s"),
+                    *RawHeightExportPath);
+            }
+        }
+    }
+
     EncodeMs = (FPlatformTime::Seconds() - EncodeStartSeconds) * 1000.0;
     const double TotalMs = (FPlatformTime::Seconds() - ExportStartSeconds) * 1000.0;
 
@@ -2293,6 +2670,90 @@ FString UTectonicSimulationService::ExportHeightmapVisualization(int32 ImageWidt
     UE_LOG(LogPlanetaryCreation, Log, TEXT("Elevation range: %.1f m (blue) to %.1f m (red)"), MinElevation, MaxElevation);
 
     return OutputPath;
+}
+
+TArray<FStageBVertexSample> UTectonicSimulationService::GatherStageBVertexSamplesInBounds(
+    double WestLongitudeDeg,
+    double EastLongitudeDeg,
+    double SouthLatitudeDeg,
+    double NorthLatitudeDeg) const
+{
+    TArray<FStageBVertexSample> Samples;
+
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount <= 0 || VertexAmplifiedElevation.Num() != VertexCount)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[StageB][VertexSlice] Unable to gather samples: Vertices=%d AmplifiedCount=%d"),
+            VertexCount,
+            VertexAmplifiedElevation.Num());
+        return Samples;
+    }
+
+    const auto NormalizeLon360 = [](double Degrees) -> double
+    {
+        double Normalized = FMath::Fmod(Degrees, 360.0);
+        if (Normalized < 0.0)
+        {
+            Normalized += 360.0;
+        }
+        return Normalized;
+    };
+
+    const double NormalizedWest = NormalizeLon360(WestLongitudeDeg);
+    const double NormalizedEast = NormalizeLon360(EastLongitudeDeg);
+    const bool bWrapLongitude = NormalizedEast < NormalizedWest;
+    const double LatitudeSouth = FMath::Clamp(FMath::Min(SouthLatitudeDeg, NorthLatitudeDeg), -90.0, 90.0);
+    const double LatitudeNorth = FMath::Clamp(FMath::Max(SouthLatitudeDeg, NorthLatitudeDeg), -90.0, 90.0);
+    const double LatitudeEpsilon = 1e-4;
+    const double LongitudeEpsilon = 1e-4;
+
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const FVector3d& Position = RenderVertices[VertexIdx];
+        const FVector3d Normalized = Position.GetSafeNormal(UE_DOUBLE_SMALL_NUMBER, FVector3d::ZeroVector);
+        if (Normalized.IsNearlyZero())
+        {
+            continue;
+        }
+
+        const double LongitudeDeg = FMath::RadiansToDegrees(FMath::Atan2(Normalized.Y, Normalized.X));
+        const double LatitudeDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Normalized.Z, -1.0, 1.0)));
+
+        const double NormalizedLon = NormalizeLon360(LongitudeDeg);
+        const bool bLongitudeInRange = bWrapLongitude
+            ? (NormalizedLon >= NormalizedWest - LongitudeEpsilon || NormalizedLon <= NormalizedEast + LongitudeEpsilon)
+            : (NormalizedLon >= NormalizedWest - LongitudeEpsilon && NormalizedLon <= NormalizedEast + LongitudeEpsilon);
+
+        if (!bLongitudeInRange)
+        {
+            continue;
+        }
+
+        if (LatitudeDeg < LatitudeSouth - LatitudeEpsilon || LatitudeDeg > LatitudeNorth + LatitudeEpsilon)
+        {
+            continue;
+        }
+
+        FStageBVertexSample& Sample = Samples.AddDefaulted_GetRef();
+        Sample.VertexIndex = VertexIdx;
+        Sample.LongitudeDeg = LongitudeDeg;
+        Sample.LatitudeDeg = LatitudeDeg;
+        Sample.ElevationMeters = VertexAmplifiedElevation[VertexIdx];
+    }
+
+    if (Samples.Num() == 0)
+    {
+        UE_LOG(LogPlanetaryCreation, Warning,
+            TEXT("[StageB][VertexSlice] Bounds (%f,%f)x(%f,%f) captured zero vertices at LOD=%d"),
+            WestLongitudeDeg,
+            EastLongitudeDeg,
+            SouthLatitudeDeg,
+            NorthLatitudeDeg,
+            Parameters.RenderSubdivisionLevel);
+    }
+
+    return Samples;
 }
 
 void UTectonicSimulationService::SetAllowUnsafeHeightmapExport(bool bInAllowUnsafe)

@@ -6,6 +6,7 @@
 #include "TectonicSimulationService.h"
 #include "HAL/IConsoleManager.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"
+#include "OceanicAmplificationGPU.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGPUContinentalAmplificationTest,
     "PlanetaryCreation.Milestone6.GPU.ContinentalParity",
@@ -165,9 +166,10 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         Service->ResetContinentalGPUDispatchStats();
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUContinentalParity] Dispatching GPU continental amplification (snapshot path)"));
 
-        const bool bSnapshotDispatch = Service->ApplyContinentalAmplificationGPU();
-        TestTrue(TEXT("ApplyContinentalAmplificationGPU (snapshot) succeeded"), bSnapshotDispatch);
-        if (!bSnapshotDispatch)
+        PlanetaryCreation::GPU::FStageBUnifiedDispatchResult SnapshotDispatch;
+        const bool bSnapshotDispatch = Service->ApplyStageBUnifiedGPU(false, true, SnapshotDispatch);
+        TestTrue(TEXT("Unified GPU continental dispatch (snapshot) succeeded"), bSnapshotDispatch && SnapshotDispatch.bExecutedContinental);
+        if (!bSnapshotDispatch || !SnapshotDispatch.bExecutedContinental)
         {
             CVarGPUAmplification->Set(OriginalValue, ECVF_SetByCode);
             return false;
@@ -200,9 +202,10 @@ bool FGPUContinentalAmplificationTest::RunTest(const FString& Parameters)
         CVarGPUAmplification->Set(1, ECVF_SetByCode);
         Service->ResetContinentalGPUDispatchStats();
 
-        const bool bFallbackDispatch = Service->ApplyContinentalAmplificationGPU();
-        TestTrue(TEXT("ApplyContinentalAmplificationGPU (fallback) succeeded"), bFallbackDispatch);
-        if (!bFallbackDispatch)
+        PlanetaryCreation::GPU::FStageBUnifiedDispatchResult FallbackDispatch;
+        const bool bFallbackDispatch = Service->ApplyStageBUnifiedGPU(false, true, FallbackDispatch);
+        TestTrue(TEXT("Unified GPU continental dispatch (fallback) succeeded"), bFallbackDispatch && FallbackDispatch.bExecutedContinental);
+        if (!bFallbackDispatch || !FallbackDispatch.bExecutedContinental)
         {
             CVarGPUAmplification->Set(OriginalValue, ECVF_SetByCode);
             return false;

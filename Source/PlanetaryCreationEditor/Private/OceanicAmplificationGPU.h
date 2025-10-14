@@ -6,17 +6,25 @@ class UTectonicSimulationService;
 
 namespace PlanetaryCreation::GPU
 {
-    /**
-     * Attempts to execute Stage B oceanic amplification on the GPU.
-     * @return true if the GPU path ran and produced output, false to fall back to CPU.
-     */
-    bool ApplyOceanicAmplificationGPU(UTectonicSimulationService& Service);
+    struct FStageBUnifiedDispatchResult
+    {
+        bool bOceanicRequested = false;
+        bool bContinentalRequested = false;
+        bool bExecutedOceanic = false;
+        bool bExecutedContinental = false;
+        double OceanicDispatchSeconds = 0.0;
+        double ContinentalDispatchSeconds = 0.0;
+    };
 
     /**
-     * Attempts to execute Stage B continental amplification on the GPU.
-     * @return true if the GPU path ran and produced output, false to fall back to CPU.
+     * Dispatches the unified Stage B GPU pipeline for the requested crust types.
+     * @param Service Simulation service providing cached buffers and dispatch bookkeeping.
+     * @param bDispatchOceanic When true, runs the oceanic kernel.
+     * @param bDispatchContinental When true, runs the continental kernel.
+     * @param OutResult Filled with execution flags and CPU-side dispatch durations.
+     * @return true if at least one requested kernel executed successfully.
      */
-    bool ApplyContinentalAmplificationGPU(UTectonicSimulationService& Service);
+    bool ApplyStageBUnifiedGPU(UTectonicSimulationService& Service, bool bDispatchOceanic, bool bDispatchContinental, FStageBUnifiedDispatchResult& OutResult);
 
     /**
      * GPU preview path: Writes Stage B oceanic amplification directly to PF_R16F texture.

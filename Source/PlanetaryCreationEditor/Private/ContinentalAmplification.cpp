@@ -6,6 +6,8 @@
 #include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationService.h"
 #include "ContinentalAmplificationTypes.h"
+#include "HAL/IConsoleManager.h"
+#include "HAL/PlatformMisc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -17,6 +19,89 @@
 
 namespace
 {
+    static FString GStageBForceExemplarId;
+    static FAutoConsoleVariableRef CVarStageBForceExemplarId(
+        TEXT("r.PlanetaryCreation.StageBForceExemplarId"),
+        GStageBForceExemplarId,
+        TEXT("Optional exemplar ID to force Stage B to sample exclusively. Leave empty to use normal terrain-type matching."),
+        ECVF_Default);
+
+    static int32 GStageBDisableRandomOffset = 0;
+    static FAutoConsoleVariableRef CVarStageBDisableRandomOffset(
+        TEXT("r.PlanetaryCreation.StageBDisableRandomOffset"),
+        GStageBDisableRandomOffset,
+        TEXT("Set to 1 to disable random UV offsets when sampling exemplars for deterministic comparisons."),
+        ECVF_Default);
+
+    FString GetForcedExemplarId()
+    {
+        FString ForcedId = GStageBForceExemplarId;
+        FString EnvValue = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_FORCE_EXEMPLAR"));
+        EnvValue.TrimStartAndEndInline();
+
+        if (ForcedId.IsEmpty() && !EnvValue.IsEmpty())
+        {
+            ForcedId = EnvValue;
+        }
+
+        ForcedId.TrimStartAndEndInline();
+
+#if UE_BUILD_DEVELOPMENT
+        static FString LastLoggedCVarValue;
+        static FString LastLoggedEnvValue;
+        static FString LastLoggedEffectiveValue;
+        if (!GStageBForceExemplarId.Equals(LastLoggedCVarValue, ESearchCase::CaseSensitive) ||
+            !EnvValue.Equals(LastLoggedEnvValue, ESearchCase::CaseSensitive) ||
+            !ForcedId.Equals(LastLoggedEffectiveValue, ESearchCase::CaseSensitive))
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB][ExemplarOverride] CVar='%s' Env='%s' Effective='%s'"),
+                *GStageBForceExemplarId,
+                *EnvValue,
+                *ForcedId);
+            LastLoggedCVarValue = GStageBForceExemplarId;
+            LastLoggedEnvValue = EnvValue;
+            LastLoggedEffectiveValue = ForcedId;
+        }
+#endif
+
+        return ForcedId;
+    }
+
+    bool ShouldDisableRandomOffset()
+    {
+        FString EnvValue = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_DISABLE_RANDOM_OFFSET"));
+        EnvValue.TrimStartAndEndInline();
+
+        const bool bEnvDisabled = EnvValue.Equals(TEXT("1"), ESearchCase::IgnoreCase) ||
+            EnvValue.Equals(TEXT("true"), ESearchCase::IgnoreCase) ||
+            EnvValue.Equals(TEXT("yes"), ESearchCase::IgnoreCase);
+
+        const bool bDisabled = (GStageBDisableRandomOffset != 0) || bEnvDisabled;
+
+#if UE_BUILD_DEVELOPMENT
+        static bool bLoggedRandomOffsetState = false;
+        static int32 LastLoggedCVarValue = 0;
+        static FString LastLoggedEnvValue;
+        static bool bLastLoggedDisabled = false;
+        if (!bLoggedRandomOffsetState ||
+            LastLoggedCVarValue != GStageBDisableRandomOffset ||
+            !EnvValue.Equals(LastLoggedEnvValue, ESearchCase::CaseSensitive) ||
+            bLastLoggedDisabled != bDisabled)
+        {
+            UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB][RandomOffset] CVar=%d Env='%s' Disabled=%s"),
+                GStageBDisableRandomOffset,
+                *EnvValue,
+                bDisabled ? TEXT("true") : TEXT("false"));
+            LastLoggedCVarValue = GStageBDisableRandomOffset;
+            LastLoggedEnvValue = EnvValue;
+            bLastLoggedDisabled = bDisabled;
+            bLoggedRandomOffsetState = true;
+        }
+#endif
+
+        return bDisabled;
+    }
+
     constexpr double TwoPi = 2.0 * PI;
 
     FVector2d RotateVector2D(const FVector2d& Value, double AngleRadians)
@@ -185,6 +270,18 @@ const FExemplarMetadata* AccessExemplarMetadataConst(int32 Index)
     return ExemplarLibrary.IsValidIndex(Index) ? &ExemplarLibrary[Index] : nullptr;
 }
 
+int32 FindExemplarIndexById(const FString& ExemplarId)
+{
+    for (int32 Index = 0; Index < ExemplarLibrary.Num(); ++Index)
+    {
+        if (ExemplarLibrary[Index].ID.Equals(ExemplarId, ESearchCase::IgnoreCase))
+        {
+            return Index;
+        }
+    }
+    return INDEX_NONE;
+}
+
 #if UE_BUILD_DEVELOPMENT
 static thread_local FContinentalAmplificationDebugInfo* GContinentalAmplificationDebugInfo = nullptr;
 
@@ -263,6 +360,39 @@ bool LoadExemplarLibraryJSON(const FString& ProjectContentDir)
         const TSharedPtr<FJsonObject>& ResolutionObj = ExemplarObj->GetObjectField(TEXT("resolution"));
         Exemplar.Width_px = static_cast<int32>(ResolutionObj->GetNumberField(TEXT("width_px")));
         Exemplar.Height_px = static_cast<int32>(ResolutionObj->GetNumberField(TEXT("height_px")));
+
+        const TSharedPtr<FJsonObject>* BoundsObj = nullptr;
+        if (ExemplarObj->TryGetObjectField(TEXT("bounds"), BoundsObj) && BoundsObj && (*BoundsObj).IsValid())
+        {
+            const TSharedPtr<FJsonObject>& Bounds = *BoundsObj;
+            auto TryGetNumber = [&](const TCHAR* Key, double& OutValue) -> bool
+            {
+                if (!Bounds.IsValid())
+                {
+                    return false;
+                }
+                if (Bounds->HasField(Key))
+                {
+                    OutValue = Bounds->GetNumberField(Key);
+                    return true;
+                }
+                return false;
+            };
+
+            double West = 0.0, East = 0.0, South = 0.0, North = 0.0;
+            const bool bWest = TryGetNumber(TEXT("west"), West);
+            const bool bEast = TryGetNumber(TEXT("east"), East);
+            const bool bSouth = TryGetNumber(TEXT("south"), South);
+            const bool bNorth = TryGetNumber(TEXT("north"), North);
+            if (bWest && bEast && bSouth && bNorth)
+            {
+                Exemplar.WestLonDeg = West;
+                Exemplar.EastLonDeg = East;
+                Exemplar.SouthLatDeg = South;
+                Exemplar.NorthLatDeg = North;
+                Exemplar.bHasBounds = true;
+            }
+        }
 
         ExemplarLibrary.Add(Exemplar);
     }
@@ -447,6 +577,29 @@ TArray<FExemplarMetadata*> GetExemplarsForTerrainType(ETerrainType TerrainType)
 {
     TArray<FExemplarMetadata*> MatchingExemplars;
 
+    const FString ForcedId = GetForcedExemplarId();
+    if (!ForcedId.IsEmpty())
+    {
+        static bool bLoggedMissingForceExemplar = false;
+        for (FExemplarMetadata& Exemplar : ExemplarLibrary)
+        {
+            if (Exemplar.ID.Equals(ForcedId, ESearchCase::IgnoreCase))
+            {
+                MatchingExemplars.Add(&Exemplar);
+                bLoggedMissingForceExemplar = false;
+                break;
+            }
+        }
+
+        if (MatchingExemplars.Num() == 0 && !bLoggedMissingForceExemplar)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning, TEXT("r.PlanetaryCreation.StageBForceExemplarId=\"%s\" not found in exemplar library"), *ForcedId);
+            bLoggedMissingForceExemplar = true;
+        }
+
+        return MatchingExemplars;
+    }
+
     for (FExemplarMetadata& Exemplar : ExemplarLibrary)
     {
         // Map regions to terrain types
@@ -488,10 +641,33 @@ double BlendContinentalExemplars(
     int32 Seed)
 {
     double AmplifiedElevation = BaseElevation_m;
+    const bool bTraceBlend = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND")).Len() > 0;
+    const FString ForcedExemplarId = GetStageBForcedExemplarId();
+    const bool bForceExemplarOverride = !ForcedExemplarId.IsEmpty();
 
-    if (MatchingExemplars.Num() == 0)
+    if (MatchingExemplars.Num() == 0 && !bForceExemplarOverride)
     {
         return AmplifiedElevation;
+    }
+
+    if (bForceExemplarOverride && !IsExemplarLibraryLoaded())
+    {
+        LoadExemplarLibraryJSON(ProjectContentDir);
+    }
+
+    FExemplarMetadata* ForcedMetadata = nullptr;
+    if (bForceExemplarOverride)
+    {
+        const int32 ForcedIndex = FindExemplarIndexById(ForcedExemplarId);
+        ForcedMetadata = AccessExemplarMetadata(ForcedIndex);
+        if (bTraceBlend)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalBlend] Stage=Setup Plate=%d ForcedId=%s MetadataFound=%s"),
+                PlateID,
+                *ForcedExemplarId,
+                ForcedMetadata ? TEXT("true") : TEXT("false"));
+        }
     }
 
     for (FExemplarMetadata* Exemplar : MatchingExemplars)
@@ -506,6 +682,12 @@ double BlendContinentalExemplars(
     FVector2d ComputedOffset = ComputeContinentalRandomOffset(Position, Seed);
     double RandomOffsetU = ComputedOffset.X;
     double RandomOffsetV = ComputedOffset.Y;
+
+    if (ShouldDisableRandomOffset())
+    {
+        RandomOffsetU = 0.0;
+        RandomOffsetV = 0.0;
+    }
 
 #if UE_BUILD_DEVELOPMENT
     const bool bOverrideRandomOffset = GContinentalAmplificationDebugInfo && GContinentalAmplificationDebugInfo->bUseOverrideRandomOffset;
@@ -567,6 +749,11 @@ double BlendContinentalExemplars(
     }
 
     FVector2d RotatedUV = bHasFoldRotation ? RotateVector2D(LocalUV, FoldAngle) : LocalUV;
+    if (!GetStageBForcedExemplarId().IsEmpty())
+    {
+        bHasFoldRotation = false;
+        RotatedUV = LocalUV;
+    }
     FVector2d FinalUV = RotatedUV + FVector2d(0.5, 0.5);
     double U = FMath::Frac(FinalUV.X);
     double V = FMath::Frac(FinalUV.Y);
@@ -579,6 +766,30 @@ double BlendContinentalExemplars(
         V += 1.0;
     }
 
+    if (ForcedMetadata && ForcedMetadata->bHasBounds)
+    {
+        const double LonDegrees = FMath::RadiansToDegrees(FMath::Atan2(NormalizedPos.Y, NormalizedPos.X));
+        const double LatDegrees = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(NormalizedPos.Z, -1.0, 1.0)));
+        const double LonRange = ForcedMetadata->EastLonDeg - ForcedMetadata->WestLonDeg;
+        const double LatRange = ForcedMetadata->NorthLatDeg - ForcedMetadata->SouthLatDeg;
+        if (FMath::Abs(LonRange) > KINDA_SMALL_NUMBER && FMath::Abs(LatRange) > KINDA_SMALL_NUMBER)
+        {
+            U = FMath::Clamp((LonDegrees - ForcedMetadata->WestLonDeg) / LonRange, 0.0, 1.0);
+            V = FMath::Clamp((ForcedMetadata->NorthLatDeg - LatDegrees) / LatRange, 0.0, 1.0);
+        }
+
+        if (bTraceBlend)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalBlend] Stage=ForcedUV Plate=%d Lon=%.4f Lat=%.4f U=%.6f V=%.6f"),
+                PlateID,
+                LonDegrees,
+                LatDegrees,
+                U,
+                V);
+        }
+    }
+
 #if UE_BUILD_DEVELOPMENT
     if (GContinentalAmplificationDebugInfo)
     {
@@ -587,9 +798,19 @@ double BlendContinentalExemplars(
     }
 #endif
 
+    TArray<FExemplarMetadata*> EffectiveExemplars;
+    if (ForcedMetadata)
+    {
+        EffectiveExemplars.Add(ForcedMetadata);
+    }
+    if (EffectiveExemplars.Num() == 0)
+    {
+        EffectiveExemplars = MatchingExemplars;
+    }
+
     double BlendedHeight = 0.0;
     double TotalWeight = 0.0;
-    const int32 MaxExemplarsToBlend = FMath::Min(3, MatchingExemplars.Num());
+    const int32 MaxExemplarsToBlend = FMath::Min(3, EffectiveExemplars.Num());
 
 #if UE_BUILD_DEVELOPMENT
     if (GContinentalAmplificationDebugInfo)
@@ -606,7 +827,7 @@ double BlendContinentalExemplars(
 
     for (int32 ExemplarIndex = 0; ExemplarIndex < MaxExemplarsToBlend; ++ExemplarIndex)
     {
-        FExemplarMetadata* Exemplar = MatchingExemplars[ExemplarIndex];
+        FExemplarMetadata* Exemplar = EffectiveExemplars[ExemplarIndex];
         if (!Exemplar || !Exemplar->bDataLoaded)
         {
             continue;
@@ -617,6 +838,20 @@ double BlendContinentalExemplars(
 
         BlendedHeight += SampledHeight * Weight;
         TotalWeight += Weight;
+
+        if (bTraceBlend)
+        {
+            const TCHAR* ExemplarId = Exemplar->ID.IsEmpty() ? TEXT("<Unknown>") : *Exemplar->ID;
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalBlend] Stage=Sample Plate=%d Exemplar=%s U=%.6f V=%.6f Sample=%.3f Weight=%.3f Base=%.3f"),
+                PlateID,
+                ExemplarId,
+                U,
+                V,
+                SampledHeight,
+                Weight,
+                BaseElevation_m);
+        }
 
 #if UE_BUILD_DEVELOPMENT
         if (GContinentalAmplificationDebugInfo)
@@ -637,11 +872,27 @@ double BlendContinentalExemplars(
         BlendedHeight /= TotalWeight;
     }
 
-    if (MatchingExemplars.Num() > 0 && MatchingExemplars[0] && MatchingExemplars[0]->bDataLoaded)
+    if (EffectiveExemplars.Num() > 0 && EffectiveExemplars[0] && EffectiveExemplars[0]->bDataLoaded)
     {
-        const FExemplarMetadata& RefExemplar = *MatchingExemplars[0];
+        const FExemplarMetadata& RefExemplar = *EffectiveExemplars[0];
         const double DetailScale = (BaseElevation_m > 1000.0) ? (BaseElevation_m / RefExemplar.ElevationMean_m) : 0.5;
         const double Detail = (BlendedHeight - RefExemplar.ElevationMean_m) * DetailScale;
+
+        if (bTraceBlend)
+        {
+            const TCHAR* RefId = RefExemplar.ID.IsEmpty() ? TEXT("<Unknown>") : *RefExemplar.ID;
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[ContinentalBlend] Stage=Blend Plate=%d RefExemplar=%s Base=%.3f Blended=%.3f RefMean=%.3f DetailScale=%.3f Detail=%.3f TotalWeight=%.3f"),
+                PlateID,
+                RefId,
+                BaseElevation_m,
+                BlendedHeight,
+                RefExemplar.ElevationMean_m,
+                DetailScale,
+                Detail,
+                TotalWeight);
+        }
+
         AmplifiedElevation += Detail;
 
 #if UE_BUILD_DEVELOPMENT
@@ -665,6 +916,15 @@ double BlendContinentalExemplars(
         GContinentalAmplificationDebugInfo->CpuResult = AmplifiedElevation;
     }
 #endif
+
+    if (bTraceBlend)
+    {
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[ContinentalBlend] Stage=Result Plate=%d Base=%.3f Amplified=%.3f"),
+            PlateID,
+            BaseElevation_m,
+            AmplifiedElevation);
+    }
 
     return AmplifiedElevation;
 }
@@ -748,4 +1008,14 @@ double ComputeContinentalAmplification(
     }
 
     return AmplifiedElevation;
+}
+
+FString GetStageBForcedExemplarId()
+{
+    return GetForcedExemplarId();
+}
+
+bool StageBShouldDisableRandomOffset()
+{
+    return ShouldDisableRandomOffset();
 }

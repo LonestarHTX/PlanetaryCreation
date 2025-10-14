@@ -52,6 +52,7 @@ namespace PlanetaryCreation::GPU
 		 */
 		int32 GetTextureWidth() const { return TextureWidth; }
 		int32 GetTextureHeight() const { return TextureHeight; }
+		uint64 GetLibraryFingerprint() const { return LibraryFingerprint; }
 
 		/**
 		 * Get exemplar metadata by index (for shader parameter setup)
@@ -63,6 +64,7 @@ namespace PlanetaryCreation::GPU
 			float ElevationMin_m;
 			float ElevationMax_m;
 			float ElevationMean_m;
+			float ElevationStdDev_m;
 			int32 ArrayIndex;  // Index in Texture2DArray
 			int32 LibraryIndex = INDEX_NONE;  // Index within CPU exemplar library (may include skipped textures)
 #if UE_BUILD_DEVELOPMENT
@@ -81,6 +83,7 @@ namespace PlanetaryCreation::GPU
 		int32 TextureWidth = 512;   // Common resolution for all exemplars
 		int32 TextureHeight = 512;  // Common resolution for all exemplars
 		TArray<FExemplarInfo> ExemplarInfo;
+		uint64 LibraryFingerprint = 0;
 
 		// Load PNG16 and decode to uint16 array
 		bool LoadPNG16(const FString& FilePath, TArray<uint16>& OutData, int32& OutWidth, int32& OutHeight);

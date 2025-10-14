@@ -8,7 +8,9 @@ This document lays out the end-to-end execution plan required to return **Planet
 
 > **Status:** ✅ Finished. These items form the safety net for all subsequent work and must remain green in CI.
 
-- Heightmap exporter tiling + Stage B rescue (100 % coverage, seam ≤0.5 m).
+ - Heightmap exporter tiling + Stage B rescue (100 % coverage, seam ≤0.5 m).
+ - Heightmap export safety gates: default cap at 512×256 under NullRHI; pixel-count guard with explicit `--force-large-export` override; large resolutions use tiling path.
+ - Known crash hazard documented: never approve 4096×2048 exports on dev hardware without explicit confirmation and guard flags.
 - Stage B snapshot discipline (dispatch hashes, read-back accept/drop gates, float SoA invalidation).
 - Quantitative metrics automation (`PlanetaryCreation.QuantitativeMetrics.Export`).
 - Stage B heartbeat & rescue telemetry documented (`Docs/Validation/README.md`, `Docs/heightmap_export_review.md`).
@@ -19,12 +21,12 @@ This document lays out the end-to-end execution plan required to return **Planet
 
 ## Phase 1 — Visual Parity Restoration
 
-### Phase 1.0 — Paper Profiling Baseline
+### Phase 1.0 — Paper Profiling Baseline ✅ *Completed 2025-10-12*
 - Capture Unreal Insights trace of current Stage B pipeline (LOD 7, real hardware).
 - Recreate Figure 9 from the paper line-by-line; note any passes the paper is running on GPU vs CPU.
 - Record results in `Docs/heightmap_export_review.md` before making changes.
 
-### Phase 1.1 — Ridge Direction Lifecycle & Coverage
+### Phase 1.1 — Ridge Direction Lifecycle & Coverage ✅ *Completed 2025-10-12*
 
 | Owners | Summary | Deliverables | Definition of Done |
 | --- | --- | --- | --- |
@@ -35,13 +37,17 @@ This document lays out the end-to-end execution plan required to return **Planet
 2. **Persist:** across simulation steps, terrane transport/orogeny, hydraulic erosion, Stage B amplification.
 3. **Invalidate:** plate rifting, convergence surgery, render subdivision change, tessellation delta, exemplar atlas swap.
 4. **Usage order:** Cached tangent → Age gradient → Plate motion. Counters logged per step: `[RidgeDir] CacheHit`, `GradientFallback`, `MotionFallback`.
-5. **Monitoring:** `[StageB][RidgeDiag]` logs every step; automation suite fails if cache hit <95 % or motion fallback >0.5 %.
+5. **Monitoring & Gates:** Automation fails if cache_hit <99 %, gradient_fallback >1 %, or motion_fallback >0.1 %. Include fixtures for ridge triple-junctions and age discontinuities to exercise cache rebuild paths.
 
 **Execution Notes**
-- Implement cache rebuild scheduling relative to `ComputeRidgeDirections()`; ensure incremental updates during terrane extraction/reattachment.
+- Implement cache rebuild scheduling relative to `ComputeRidgeDirections()`; ensure incremental updates during terrane extraction/reattachment:
+  1. **Extraction:** mark affected vertex IDs as *stale* (retain cache entries).  
+  2. **Transport:** keep snapshot tangents frozen while terranes move.  
+  3. **Reattachment:** rebuild tangents for reattached vertices using new plate assignment.  
+  4. **Validation:** log `[RidgeDir][Terrane]` pre/post reattachment; automation fails if post-hit-rate <90 %.
 - Capture ridge tangent heatmaps pre/post fix; archive under `Docs/Validation/ParityFigures/`.
 
-### Phase 1.2 — Unified Stage B GPU Pipeline
+### Phase 1.2 — Unified Stage B GPU Pipeline ✅ *Completed 2025-10-13*
 
 | Owners | Summary | Deliverables | Definition of Done |
 | --- | --- | --- | --- |
@@ -50,10 +56,16 @@ This document lays out the end-to-end execution plan required to return **Planet
 **Execution Notes**
 1. Shader unification:
    - Integrate oceanic Gabor noise (current `OceanicAmplificationPreview.usf`) and continental exemplar sampling into `StageB_Unified.usf`.
-   - Route by crust mask: `Oceanic → Gabor`, `Continental → exemplar blend`, handle transition zones (age <10 My).
+   - Use a **split dispatch**: build compacted indirect-args buffers for oceanic vs continental work and launch separate kernels to avoid warp divergence; transition-zone handling (age <10 My) lives in the continental kernel and may short-circuit to the oceanic math.
+   - Batch continental work by exemplar ID when possible to improve atlas locality; start with an 8×8 thread group and tune after profiling (persisting threads/work queues if clustering pays off).
+   - **Transition Zone Strategy:**  
+     - Option A (default): apply Gabor noise only for crustAge <10 My.  
+     - Option B: blend Gabor/Exemplar (`weight = age/10`).  
+     - Option C: exemplar with reduced amplitude (`scale = age/10`).  
+     - Evaluate during Phase 1.0 profiling; document selection and rationale.
 2. Exemplar data:
    - Pack catalogued SRTM90 exemplars into a texture atlas or array; stream to GPU.
-   - Expose sampler bindings in `FStageB_UnifiedParameters`.
+   - Precompute per-exemplar normalization (mean/variance) and sampling metadata (LUTs, bounds); select mip levels by footprint; expose sampler bindings in `FStageB_UnifiedParameters`.
 3. CPU fallback remains unchanged; GPU path ONLY executes when mask indicates oceanic/continental as appropriate.
 4. Automation suite adds `PlanetaryCreation.StageB.UnifiedGPUParity` (CPU vs GPU comparison) and updates GPU preview parity.
 
@@ -64,12 +76,120 @@ This document lays out the end-to-end execution plan required to return **Planet
 
 ---
 
+### Phase 1.3 — “Paper Ready” Preset ✅ *Completed 2025-10-13*
+
+| Owners | Summary | Deliverables | Definition of Done |
+| --- | --- | --- | --- |
+| STG (lead), OPS | Provide a one-click preset that applies all paper-parity settings in the editor. | Toolbar/menu action, subsystem hook, documentation update. | Clicking “Paper Ready” sets paper defaults, enables Stage B amplification, clears hydraulic latch, rebuilds Stage B to Ready=1, and logs `[PaperReady] Applied`. |
+
+**Execution Notes**
+- Add a button/command in the Tectonic Tool window labeled “Paper Ready.”
+- When triggered it must:
+  1. Apply the paper defaults profile (seed, render subdivision/LOD, amplification toggles, CVars).
+  2. Enable both oceanic & continental amplification; clear the STG‑04 hydraulic latch.
+  3. Reset Stage B, run the readiness warm-up, and confirm `[StageB][Ready]` reports true.
+  4. Disable any dev-only overrides (e.g., `ForceStageBGPUReplayForTests`).
+  5. Emit `[PaperReady] Applied` in logs for automation hooks.
+- Documentation: update `Docs/Automation_QuickStart.md` and tooling notes so parity validation references the preset.
+- Optional: expose a commandlet wrapper (`Scripts/ApplyPaperReady.ps1`) for automated runs.
+
+**Exit Criteria:** One click yields the paper parity configuration; automation detects the log entry; docs reference the new workflow.
+
+---
+
+### Phase 1.4 — Exemplar Fidelity Audit ✅ *Completed 2025-10-14*
+
+| Owners | Summary | Deliverables | Definition of Done |
+| --- | --- | --- | --- |
+| ALG (lead), QLT | Prove Stage B can replay real SRTM exemplars without distortion. | Forced exemplar export scripts, comparison artifacts (`Docs/Validation/ExemplarAudit`), automation gate. | Stage B export matches the reference DEM within guardrails (mean ≤50 m, interior ≤100 m), automation hooked into CI, docs updated. |
+
+**Results**
+- Forced exemplar overrides now survive commandlet runs (PowerShell wrappers hydrate env vars via `ProcessStartInfo`).
+- `Scripts/analyze_exemplar_fidelity.py` exposes guardrails (mean 50 m / interior 100 m, perimeter warning 750 m) and emits unmasked metrics by default.
+- Automation test `PlanetaryCreation.StageB.ExemplarFidelity` exercises the forced run under NullRHI and warns on perimeter spikes.
+- Final “Victory” artifacts: `O01_stageb_20251014_122639.csv`, `O01_metrics_20251014_VICTORY.csv`, `O01_comparison_20251014_VICTORY.png`. Docs refreshed in `Docs/Validation/ExemplarAudit/README.md`, `Docs/heightmap_export_review.md`, and the Phase 1.4 implementation log.
+
+**Follow-ups**
+- A single perimeter sample still reverts to the 228 m baseline (~1.4 km spike). Edge conditioning is scheduled under Phase 1.5.
+- Oceanic exemplar parity, time-lapse durability, and weight/audit tooling graduate to Phase 1.5 so they ship alongside the Stage B hygiene work.
+
+---
+
+### Phase 1.5 — Stage B Hygiene & Detail Recovery *(In Progress)*
+
+| Owners | Summary | Deliverables | Definition of Done |
+| --- | --- | --- | --- |
+| STG (lead), ALG, QLT, OPS | Finish Stage B amplification polish: ridge/fold caches, anisotropic kernels, tuned erosion, and exemplar parity extensions. | STG-05‒08 implementations + validation PNGs, QLT-05‒07 automation, OPS rollout docs/scripts. | Free-run terrain (50–100 My) shows paper-level mountain/ridge detail, automation suites green, documentation/workflows updated. |
+
+**Scope**
+1. **Ridge tangent cache validation (STG-05)** — ≥99 % population, diagnostics logged, automation asserting cache hit thresholds.
+2. **Fold direction & orogeny classes (STG-06)** — Generate classifications, log coverage, expose data for anisotropic kernels.
+3. **Anisotropic amplification kernels (STG-07)** — Integrate continental/oceanic kernels, capture Day 5 PNG, ensure Stage B profile timings stay within budget.
+4. **Post-amplification erosion tune (STG-08)** — Re-enable conservative hydraulic erosion once kernels validated; log metrics to prove anisotropy survives.
+5. **Exemplar parity extensions** — Edge conditioning to eliminate the remaining perimeter spike; run forced audits on additional exemplars (continental + oceanic) at LOD 6/7; execute time-lapse durability checks, cache weight logging, and PNG roundtrip validation.
+6. **Automation & metrics (QLT-05‒07)** — Ridge transect, orogeny alignment, CPU/GPU UV parity harness integrated into CI with the new guardrails.
+7. **Tooling polish (OPS-01/02)** — Script enhancements (`ExportHeightmap4096.py`, analyzer wrappers) and design checklist updates to support wider rollout.
+8. **Legacy GPU parity test alignment** — Update or retire `PlanetaryCreation.Milestone6.GPU.ContinentalParity` to use the unified parity harness and snapshot semantics; fail until <0.1 m delta.
+
+**Dependencies**
+- Ridge tangent cache lifecycle from Phase 1.1 must remain green.
+- Exemplar audit tooling from Phase 1.4 (RunExportHeightmap512.ps1 / RunExemplarAnalyzer.ps1) is the baseline for additional captures.
+- Coordinate with Phase 2 CSR work so shared data structures (SoA, amplification buffers) stay compatible.
+
+**Exit Criteria**
+- Stage B free-run “Paper Ready” workflow produces detailed ridges/mountains consistent with the paper after 50–100 My.
+- Automation thresholds (mean 50 m / interior 100 m) hold across all forced exemplar suites without masking; perimeter spikes eliminated.
+- LOD 6 and LOD 7 forced exports archived for at least one continental and one oceanic exemplar.
+- Docs updated with new captures, metrics, and any tuned presets. Remaining gaps (if any) escalated before Phase 2 starts.
+
+---
+
+### Phase 2.0 — Dampening Decision Gate
+
+- **Trigger:** Complete Phase 1.0 profiling and confirm the paper’s dampening implementation (CPU vs GPU).
+- **Decision Owner:** STG (lead) with ALG/GPU consultation.
+- **Options:**
+  1. **CPU CSR refit** — Target ≤8 ms. Lowest implementation cost.  
+  2. **GPU port (with CSR)** — Target ≤5 ms. Higher complexity but matches paper if GPU-based.  
+  3. **Hybrid** — CSR adjacency on CPU, dampening kernel on GPU.
+- **Criteria:**  
+  - If paper shows CPU dampening reaching 5 ms → pursue option 1.  
+  - If paper confirms GPU dampening → pursue option 2.  
+  - If unclear → prototype option 1 first; escalate to option 2 if target missed.
+- **Documentation:** Record decision and rationale in `Docs/heightmap_export_review.md` under “Phase 2 Decision Log”.
+
+---
+
 ## Phase 2 — Performance Parity
 
 | Workstream | Owners | Summary | Deliverables | Definition of Done |
 | --- | --- | --- | --- | --- |
 | CSR/SoA Neighbor Refit | ALG (lead), STG | Replace scattered neighbor loops (sediment + dampening) with CSR/SoA representation and `ParallelFor`. | CSR builder, refactored passes, Insights markers, perf report. | Stage B step time meets target table (below); automation fails on regression. |
 | Performance Accounting | QLT, STG | Produce pass-by-pass performance table and monitor budget compliance. | Updated Stage B heartbeat telemetry, performance tables in docs. | Perf budget table maintained in `Docs/heightmap_export_review.md`; once targets met, Stage B frame budget satisfied. |
+
+### Phase 2.1 — Continental GPU Optimisation
+
+| Owners | Summary | Deliverables | Definition of Done |
+| --- | --- | --- | --- |
+| STG (lead), GPU, ALG | Reduce continental amplification cost (currently ~26 ms) via exemplar-routing optimisations. | Profiling report, exemplar scheduling improvements, shader updates, automation gates. | Continental pass ≤20 ms with no parity regression; automation asserts <0.1 m CPU/GPU delta. |
+
+**Execution Notes**
+- Profile current continental GPU kernel (Nsight, Insights) to identify bottlenecks (texture cache misses, divergence).
+- Introduce exemplar batching: cluster work by exemplar ID / mip, drive persistent-thread work queues if necessary.
+- Evaluate alternate sampling strategies (gather4, manual filtering) and normalization LUT usage.
+- Add counters for exemplar cache hits/miss, reuse metrics, and log them in `[StageB][Profile]`.
+- Extend automation with `PlanetaryCreation.StageB.ContinentalGPUProfiler` (non-blocking alert) and fail if CPU/GPU height delta exceeds 0.1 m.
+
+### Current Test Hardware *(record during Phase 1.0 — source of truth: Docs/heightmap_export_review.md)*
+
+| Component | Spec | Paper Reference |
+| --- | --- | --- |
+| GPU | NVIDIA GeForce RTX 3080 (10 GB, driver 32.0.15.8142) | GTX 1080 (8 TFLOPS FP32) |
+| CPU | AMD Ryzen 9 7950X (16 cores / 32 threads @ 4.5 GHz) | Paper era ≈ i7‑6700K |
+| RAM | 64 GB DDR5 | ≥16 GB |
+| OS | Windows 10 Pro (build 26100) | Paper likely Windows 10 |
+
+> **Normalization:** Scale performance expectations relative to GTX 1080 when hardware differs (e.g., RTX 3060 ≈1.5× GTX 1080).
 
 ### Target Budget Table (to be updated as work progresses)
 
@@ -88,14 +208,15 @@ This document lays out the end-to-end execution plan required to return **Planet
 
 ### Execution Notes
 1. **Data Structure PR:** Build CSR neighbor lists at simulation reset and whenever topology changes. Maintain separate arrays for oceanic/continental to reduce branching.
-2. **Algorithm PR:** Rework sediment and dampening loops to use CSR with `ParallelFor` (balanced chunking). Remove per-vertex TMap lookups and dynamic allocations.
-3. Instrumentation:
+2. **Algorithm PR:** Implement diffusion/dampening as **Jacobi ping-pong** (two buffers) using the CSR adjacency; this guarantees deterministic ordering under `ParallelFor`. Remove per-vertex TMap lookups and dynamic allocations. (If GPU path later requires color sets, reuse the same ping-pong structure.)
+3. Instrumentation & Invariants:
    - Add Unreal Insights markers: `[StageB][CSR] Sediment`, `[StageB][CSR] Dampening`.
    - Update `[StageB][Profile]` logs with CSR timings.
+   - Add CI checks for **mass conservation** and **L∞ error** against a high-precision reference step.
 4. Documentation & Automation:
    - Update perf tables in `Docs/heightmap_export_review.md`.
    - Extend `Scripts/RunStageBHeartbeat.ps1` to report CSR metrics.
-   - Automation guard fails if passes exceed table targets.
+   - Automation guard fails if passes exceed table targets or invariant checks trip.
 
 **Exit Criteria:** Insights trace shows Stage B frame budget compliant with target table; automation fails on regressions; perf documentation updated.
 
@@ -110,6 +231,12 @@ This document lays out the end-to-end execution plan required to return **Planet
 | Automation Command Builder | OPS | Simplify UnrealEditor-Cmd usage (CVars, `-TestExit`, logging). | `Scripts/Invoke-UnrealAutomation.ps1` that handles CVars, log capture, and test filters. | Automations triggered with a single command; no manual escaping. |
 | Documentation Unification | OPS | Centralize automation/export instructions. | `Docs/Automation_QuickStart.md` with tested examples; other docs link here. | All docs point to single quick-start; instructions match scripts. |
 
+**Execution Notes**
+- Attempt Python binding exposure for the subsystem methods (time-box to 3 working days).  
+- **Fallback:** If bindings are still blocked after day 3, pivot Phase 3 deliverables to PowerShell/Python wrapper scripts that encapsulate CVar management and command invocation; document the decision in the plan tracker.
+- Build a small CLI test suite that exercises the wrapper scripts (export resolutions, automation filters) and run it in CI to catch regressions.
+ - Memory safety for long runs: execute Milestone suites in batches (e.g., M3, then M4, then M5 subsets, then M6 GPU subsets) to avoid OOM; increase paging file size on CI agents where needed. Document run profiles in `Docs/Automation_QuickStart.md`.
+
 **Exit Criteria:** Common automation/export tasks are single-command operations; teams no longer hand-edit CVars or command lines.
 
 ---
@@ -120,28 +247,38 @@ This document lays out the end-to-end execution plan required to return **Planet
 | --- | --- | --- | --- | --- |
 | Visual Re-capture | VIS, ALG | Produce updated parity figures mirroring the paper. | PNG comparisons + commentary stored under `Docs/Validation/ParityFigures/`. | Numerical tolerances (below) met; reviewers sign off. |
 | Quantitative Metrics Refresh | QLT | Regenerate metrics after final changes, compare to baseline. | New CSV snapshot + changelog entry in `Docs/Validation/README.md`. | Metrics fall within tolerance bands. |
-| Performance Report | STG, QLT | Summarize Stage B timings post-refit. | Insights summary + textual report attached to `Docs/heightmap_export_review.md`. | Stage B step time ≤90 ms; full tick ≤150 ms. |
+| Performance Report | STG, QLT | Summarize Stage B timings post-refit. | Insights summary + textual report attached to `Docs/heightmap_export_review.md`. | Stage B step time ≤40 ms; full tick ≤150 ms (40–60 ms treated as yellow alert). |
 | Final Review | MNG (lead), All | Verify goals, archive decisions, close plan. | Addendum in `Docs/realignment_review.md`, checklist in `Docs/PlanningAgentPlan.md` marked complete. | All deliverables archived; no open parity tasks. |
+
+### Phase 4.0 — SSIM Baseline Calibration
+- Measure SSIM between the published paper figure (PNG extracted from PDF) and its highest-quality available copy.  
+- If the paper asset is lossy (SSIM <0.98), reduce the parity SSIM target by 0.03 (e.g., baseline 0.93 ⇒ target 0.90).  
+- Document calibration results in `Docs/Validation/ParityFigures/README.md`.
 
 ### Acceptance Criteria (Numerical)
 
 **Visual Parity**
-- 1024×512 export: Mean pixel delta vs reference (paper Figure 8) < 2 grayscale levels (~16 m elevation).
-- 4096×2048 export: SSIM > 0.95; transform faults clearly visible (≥3 faults confirmed).
+- 1024×512 export: Mean absolute elevation delta vs reference (paper Figure 8 or forced exemplar) < 2 grayscale levels (~16 m).
+- 4096×2048 export: SSIM ≥ calibrated target from Phase 4.0 (default 0.95 if paper assets are lossless).
+- Seam continuity: equirectangular seam/pole deltas under the continuity threshold used by `FHeightmapSeamContinuityTest`.
+- Transform faults clearly visible (≥3 confirmed) along major ridges at 1024×512 (qualitative checklist archived).
+- Non-blocking alert: surface if metrics creep within 10% of thresholds to prompt manual review.
 
 **Quantitative Metrics**
-- Ridge/trench ratio: 1.8 ± 0.2.
-- Hypsometric curve: mean absolute deviation <5 % vs paper Figure 7.
-- Terrane drift: ≥1 extracted terrane per 50 My simulation; drift ≤5 %.
+- Ridge/trench length ratio: 1.8 ± 0.2 (paper ≈1.9).
+- Hypsometric curve: mean absolute deviation < 5% vs paper Figure 7.
+- Terrane area preservation: < 5% drift over extract→transport→reattach; belt/orogeny alignment tests pass.
 
 **Performance**
-- Stage B step time (LOD 7): ≤90 ms on reference hardware (GTX 1080-equivalent).
-- Full simulation tick: ≤150 ms.
+- Stage B step time (LOD 7): ≤ 40 ms on current hardware (normalize against GTX 1080 if needed). Treat 40–60 ms as yellow alert but >40 ms blocks Phase 4 sign‑off.
+- Full simulation tick: ≤ 150 ms.
 
 **Automation**
-- Milestone 3 suite: 100 % pass.
-- Milestone 6 GPU parity: 100 % pass, height delta <0.1 m.
-- Stage B rescue not triggered in final parity runs (Fail=0).
+- Milestone 3 suite: 100% pass.
+- Unified GPU parity: 100% pass, < 0.1 m CPU/GPU delta; legacy `…GPU.ContinentalParity` aligned or retired.
+- Exemplar fidelity: mean ≤ 50 m; interior ≤ 100 m; perimeter spikes eliminated post edge‑conditioning.
+- Stage B rescue not triggered in final parity runs (Fail=0); CI fails on any `[StageB][RescueSummary]` with `Fail > 0` or `FallbackAttempts > 0`.
+- CI executes suites in memory‑safe batches; GPU suites gated behind explicit allow flag.
 
 ### Validation Checklist
 - ✅ Milestone 3 suite + supervised exports (512×256, 1024×512, 2048×1024, 4096×2048) with logs archived.
@@ -150,7 +287,19 @@ This document lays out the end-to-end execution plan required to return **Planet
 - ✅ Performance metrics meet numerical targets.
 - ✅ Visual comparisons archived with tolerance calculations.
 
-**Exit Criteria:** Updated parity appendix (visual + numeric), performance report, and `Docs/realignment_review.md` addendum describing outcomes and future work. Once complete, the parity milestone is officially closed.
+**Phase 4 Closure Checklist** *(tracked in `Docs/PlanningAgentPlan.md`)*  
+☐ Phase 1.1: Ridge cache hit rate ≥99% (logs + automation; heatmaps archived)  
+☐ Phase 1.2: Unified GPU parity delta <0.1 m (automation green)  
+☐ Phase 1.3: “Paper Ready” preset used in captures; log markers present  
+☐ Phase 1.4: Exemplar fidelity thresholds met; artifacts under `Docs/Validation/ExemplarAudit/`  
+☐ Phase 1.5: Hygiene complete; perimeter spikes removed; ridge/fold/anisotropy validated  
+☐ Phase 2: Performance targets met (table updated, automation green)  
+☐ Phase 3: One‑command export/automation workflows operational (wrapper tests green)  
+☐ Phase 4.0: SSIM calibration recorded; parity gates adjusted if required  
+☐ Phase 4: Visual parity (pixel delta, SSIM) documented; quantitative metrics within tolerance (CSV archived)  
+☐ Phase 4: Performance report (Insights summary) published; final addendum in `Docs/realignment_review.md`
+
+**Exit Criteria:** Checklist above completed and signed off; parity appendix, performance report, and addendum archived. Milestone formally closed once recorded in PlanningAgentPlan.md.
 
 ---
 
@@ -159,18 +308,18 @@ This document lays out the end-to-end execution plan required to return **Planet
 ```
 Phase 0 (complete)
    ├─> Phase 1.1 (Ridge Lifecycle) ──┐
-   │      └─> Phase 1.2 (Unified GPU) ──┐
-   │              └─> Phase 4 (Parity Verification)
+   │      └─> Phase 1.2 (Unified GPU) ──> Phase 1.5 (Stage B Hygiene) ──┐
+   │                                       └─> Phase 4 (Parity Verification)
    │
-   └─> Phase 2 (CSR Performance) ─────┘
+   └─> Phase 2 (CSR Performance) ────────────────┘
           └─> Phase 4 (Performance Check)
 
-Phase 3 (Automation Tooling) –– runs in parallel, supports Phase 4
+Phase 3 (Automation Tooling) –– runs in parallel, supports Phases 1.5 & 4
 ```
 
-**Critical Path:** Phase 1.1 → Phase 1.2 → Phase 4 (visual/GPU parity).  
-**Parallel Work:** Phase 2 can begin after Phase 1.1 plans are defined (ensure CSR changes don’t break ridge cache).  
-**Support Work:** Phase 3 improves tooling; not blocking but reduces friction for Phase 4.
+**Critical Path:** Phase 1.1 → Phase 1.2 → Phase 1.5 → Phase 4 (visual/GPU parity).  
+**Parallel Work:** Phase 2 can begin after Phase 1.1 plans are defined (ensure CSR changes don’t break ridge cache or Stage B hygiene assumptions).  
+**Support Work:** Phase 3 improves tooling; not blocking but reduces friction for Phases 1.5 and 4.
 
 --- 
 
@@ -178,8 +327,9 @@ Phase 3 (Automation Tooling) –– runs in parallel, supports Phase 4
 
 - **Automation Discipline:** Run `Scripts/RunMilestone3Tests.ps1 -ArchiveLogs` and supervised exports after each major PR. Archive logs under `Saved/Logs/Automation`. Keep `Docs/agent_logs/MNG-Guide.md` current.
 - **Telemetry Logging:** Preserve `[StageB][RescueSummary]`, `[StageB][Profile]`, ridge diagnostics, and CSR timings in production logs.
-- **Artifact Storage:** All parity figures, CSVs, and Insights traces live under `Docs/Validation/` (with dated filenames).
+- **Artifact Storage:** All parity figures, CSVs, and Insights traces live under `Docs/Validation/` (with dated filenames). For any export above the NullRHI baseline, add a note about guardrails used (tiling, force flags) and any risks.
 - **Communication:** Weekly (or ad-hoc) sync using the plan tracker in `Docs/PlanningAgentPlan.md`; ensure blockers/risks logged.
+- **Versioning Discipline:** Maintain a single `StageBTopologyVersion` / parameter hash that all caches (ridge, CSR, unified GPU buffers) validate before use.
 
 ---
 
@@ -189,7 +339,8 @@ Phase 3 (Automation Tooling) –– runs in parallel, supports Phase 4
 | --- | --- | --- |
 | Ridge cache integration introduces new fallbacks | Visual regressions, parity drift | Add coverage automation & counters; run supervised exports before merging. |
 | CSR refit destabilises Stage B | Performance or correctness regressions | Stage rollout via feature flag; capture before/after Insights; involve QLT early. |
-| CVar manifest drift | Ops confusion, mismatched automation | Enforce manifest validation at startup; generate docs auto-magically. |
+| Unified GPU pipeline divergence | Poor occupancy / cache thrash | Use split dispatch + exemplar clustering; profile with Nsight/Insights before shipping. |
+| Automation tooling regressions | Broken export/automation scripts | Maintain wrapper test suite; document scripts in Automation QuickStart; fall back to manual commands if wrappers fail. |
 | Time overruns | Schedule slip | Keep phases strictly scoped; gate merges with automation + doc sign-off. |
 
 ---

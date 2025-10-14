@@ -129,6 +129,7 @@ private:
 
     void ApplySurfaceProcessMutation(TFunctionRef<bool(FTectonicSimulationParameters&)> Mutator, const TCHAR* ChangeLabel) const;
     FReply HandlePaperReadyClicked();
+    FReply HandleExportHeightmapClicked();
     FReply HandlePrimeGPUStageBClicked();
 
     // Milestone 5 Task 1.3: Undo/Redo controls
@@ -160,6 +161,7 @@ private:
     void HandleStageBReadyChanged(bool bReady, EStageBAmplificationReadyReason Reason);
     void RefreshCachedPaletteMode();
     void BindStageBReadyDelegate();
+    bool ApplyPaperReadyPreset();
 
     TWeakPtr<FTectonicSimulationController> ControllerWeak;
 
@@ -182,4 +184,5 @@ private:
     EHeightmapPaletteMode CachedPaletteMode = EHeightmapPaletteMode::AbsoluteHypsometric;
     FText CachedPaletteStatusText;
     FDelegateHandle StageBReadyDelegateHandle;
+    bool bPaperReadyApplied = false;
 };

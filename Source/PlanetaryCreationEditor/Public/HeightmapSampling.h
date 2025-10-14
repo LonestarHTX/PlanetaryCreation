@@ -5,6 +5,7 @@
 #include "SphericalKDTree.h"
 
 class UTectonicSimulationService;
+struct FExemplarMetadata;
 
 /**
  * Helper that samples the current render mesh at arbitrary equirectangular UVs.
@@ -58,6 +59,9 @@ public:
 
     FMemoryStats GetMemoryStats() const;
 
+    /** Retrieve the vertex indices for a triangle previously returned in sample info. */
+    bool GetTriangleVertexIndices(int32 TriangleIndex, int32 (&OutVertices)[3]) const;
+
 private:
     struct FTriangleData
     {
@@ -67,6 +71,7 @@ private:
 
     /** Convert UV coordinates to a unit-length direction vector. */
     static FVector3d UVToDirection(const FVector2d& InUV);
+    static FVector3d UVToDirectionRaw(const FVector2d& InUV, double LongitudeOffsetRadians);
 
     /** Compute barycentric coordinates of Direction relative to TriangleIndex. */
     bool ComputeTriangleBarycentrics(int32 TriangleIndex, const FVector3d& Direction, FVector3d& OutBary) const;
@@ -84,9 +89,21 @@ private:
     const TArray<double>& AmplifiedElevation;
     const TArray<float>* SnapshotAmplifiedElevation = nullptr;
 
+    bool bUseForcedExemplarOverride = false;
+    const FExemplarMetadata* ForcedExemplarMetadata = nullptr;
+    double ForcedWestDeg = 0.0;
+    double ForcedEastDeg = 0.0;
+    double ForcedSouthDeg = 0.0;
+    double ForcedNorthDeg = 0.0;
+    double ForcedLonRange = 0.0;
+    double ForcedLatRange = 0.0;
+    double ForcedLonPad = 0.0;
+    double ForcedLatPad = 0.0;
+
     TArray<FTriangleData> TriangleData;
     TArray<FVector3d> TriangleDirections;
     TArray<int32> TriangleIds;
+    TArray<int32> SeamTriangleIndices;
 
     FSphericalKDTree TriangleSearch;
 

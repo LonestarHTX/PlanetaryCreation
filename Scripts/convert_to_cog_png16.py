@@ -28,15 +28,41 @@ def convert_to_cog(src_path: Path, dst_path: Path) -> None:
         with rasterio.open(dst_path, 'w', **profile) as dst:
             dst.write(src.read())
 
-    print(f"✔ COG: {dst_path.name}")
+    print(f"[OK] COG: {dst_path.name}")
 
 
 def convert_to_png16(src_path: Path, dst_path: Path, min_elev: float, max_elev: float) -> None:
-    """Convert GeoTIFF to 16-bit PNG scaled from elevation range to 0-65535."""
+    """Convert GeoTIFF to 16-bit PNG scaled from elevation range to 0-65535.
+    
+    Handles nodata values by masking them out before scaling. Nodata pixels
+    are set to 0 (minimum elevation) in the output PNG16.
+    """
     dst_path.parent.mkdir(parents=True, exist_ok=True)
 
     with rasterio.open(src_path) as src:
         data = src.read(1)
+        nodata_value = src.nodata
+
+        # Create mask for valid data
+        if nodata_value is not None:
+            valid_mask = data != nodata_value
+            num_nodata = (~valid_mask).sum()
+            total_pixels = data.size
+            nodata_pct = (num_nodata / total_pixels) * 100.0
+            
+            if num_nodata > 0:
+                print(f"[WARNING] {num_nodata}/{total_pixels} pixels ({nodata_pct:.1f}%) are nodata (value={nodata_value})")
+                
+                if nodata_pct > 10.0:
+                    print(f"   [ERROR] Nodata percentage exceeds 10% threshold.")
+                    print(f"   [ERROR] This exemplar should NOT be used - corrupt source data!")
+                    print(f"   [ERROR] Download fresh SRTM tiles or use alternative exemplar.")
+                
+                # Replace nodata with min_elev for scaling
+                # This is a fallback - ideally nodata should be interpolated or exemplar rejected
+                data = np.where(valid_mask, data, min_elev)
+        else:
+            nodata_pct = 0.0
 
         # Scale from [min_elev, max_elev] to [0, 65535]
         if max_elev > min_elev:
@@ -57,7 +83,10 @@ def convert_to_png16(src_path: Path, dst_path: Path, min_elev: float, max_elev: 
         with rasterio.open(dst_path, 'w', **profile) as dst:
             dst.write(scaled, 1)
 
-    print(f"✔ PNG16: {dst_path.name} (scaled {min_elev:.1f}m → {max_elev:.1f}m)")
+    if nodata_pct > 0:
+        print(f"[OK] PNG16: {dst_path.name} (scaled {min_elev:.1f}m - {max_elev:.1f}m, {nodata_pct:.1f}% nodata)")
+    else:
+        print(f"[OK] PNG16: {dst_path.name} (scaled {min_elev:.1f}m - {max_elev:.1f}m)")
 
 
 def main():
@@ -98,7 +127,7 @@ def main():
 
         print()  # Blank line between exemplars
 
-    print(f"\n✅ Conversion complete!")
+    print(f"\n[COMPLETE] Conversion complete!")
     print(f"   COG files: {cog_dir}")
     print(f"   PNG16 files: {png16_dir}")
 

@@ -122,5 +122,17 @@ namespace StageB
         EStageBAmplificationReadyReason ReadyReasonAtStart = EStageBAmplificationReadyReason::None;
         EStageBAmplificationReadyReason ReadyReasonAtFinish = EStageBAmplificationReadyReason::None;
     };
+
+    struct FStageB_UnifiedParameters
+    {
+        float OceanicFaultAmplitude = 150.0f;
+        float OceanicFaultFrequency = 0.05f;
+        float OceanicAgeFalloff = 0.02f;
+        float TransitionAgeMy = 10.0f;
+        float ContinentalMinDetailScale = 0.5f;
+        float ContinentalNormalizationEpsilon = 1.0e-3f;
+        float OceanicVarianceScale = 1.5f;
+        float ExtraVarianceAmplitude = 150.0f;
+    };
 } // namespace StageB
 } // namespace PlanetaryCreation

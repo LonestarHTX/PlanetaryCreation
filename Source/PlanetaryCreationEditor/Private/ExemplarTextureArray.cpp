@@ -2,6 +2,8 @@
 
 #include "ExemplarTextureArray.h"
 #include "PlanetaryCreationLogging.h"
+#include "Hash/CityHash.h"
+#include "Containers/StringConv.h"
 
 #include "Engine/Texture2DArray.h"
 #include "IImageWrapper.h"
@@ -18,6 +20,11 @@
 
 namespace PlanetaryCreation::GPU
 {
+	static FORCEINLINE uint64 CombineHash64(uint64 A, uint64 B)
+	{
+		return A ^ (B + 0x9e3779b97f4a7c15ull + (A << 6) + (A >> 2));
+	}
+
 	FExemplarTextureArray::~FExemplarTextureArray()
 	{
 		Shutdown();
@@ -32,6 +39,7 @@ namespace PlanetaryCreation::GPU
 		}
 
 		UE_LOG(LogPlanetaryCreation, Log, TEXT("[ExemplarGPU] Initializing Texture2DArray from ExemplarLibrary.json"));
+		LibraryFingerprint = 0;
 
 		// Load ExemplarLibrary.json
 		const FString JsonPath = ProjectContentDir / TEXT("PlanetaryCreation/Exemplars/ExemplarLibrary.json");
@@ -106,6 +114,7 @@ namespace PlanetaryCreation::GPU
 
 		ExemplarCount = ExemplarData.Num();
 		ExemplarInfo.Reserve(ExemplarCount);
+		LibraryFingerprint = 1469598103934665603ull;
 
 		UE_LOG(LogPlanetaryCreation, Log, TEXT("[ExemplarGPU] Loaded %d PNG16 exemplars, creating Texture2DArray (%dx%d)"),
 			ExemplarCount, TextureWidth, TextureHeight);
@@ -159,16 +168,51 @@ namespace PlanetaryCreation::GPU
 				ResizedData = Data.RawData;
 			}
 
+		double SumElevation = 0.0;
+		double SumElevationSquared = 0.0;
+        const double ElevationRange = static_cast<double>(Data.Info.ElevationMax_m - Data.Info.ElevationMin_m);
+		const double ElevationMin = static_cast<double>(Data.Info.ElevationMin_m);
+		const int32 SampleCount = ResizedData.Num();
+		for (uint16 SampleValue : ResizedData)
+		{
+			const double Normalized = static_cast<double>(SampleValue) / 65535.0;
+			const double Elevation = ElevationMin + Normalized * ElevationRange;
+			SumElevation += Elevation;
+			SumElevationSquared += Elevation * Elevation;
+		}
+
 		// Copy into Texture2DArray slice
 		uint8* SliceData = MipData + (i * SliceSize);
 		FMemory::Memcpy(SliceData, ResizedData.GetData(), SliceSize);
 
 		FExemplarInfo& Info = ExemplarInfo.Add_GetRef(Data.Info);
+		if (SampleCount > 0)
+		{
+			const double Mean = SumElevation / static_cast<double>(SampleCount);
+			const double MeanSquare = SumElevationSquared / static_cast<double>(SampleCount);
+			const double Variance = FMath::Max(MeanSquare - Mean * Mean, 0.0);
+			Info.ElevationStdDev_m = static_cast<float>(FMath::Sqrt(Variance));
+		}
+		else
+		{
+			Info.ElevationStdDev_m = 0.0f;
+		}
 #if UE_BUILD_DEVELOPMENT
 		Info.DebugHeightData = ResizedData;
 		Info.DebugWidth = TextureWidth;
 		Info.DebugHeight = TextureHeight;
 #endif
+		{
+			FTCHARToUTF8 IdUtf8(*Info.ID);
+			FTCHARToUTF8 RegionUtf8(*Info.Region);
+			uint64 HashValue = 1469598103934665603ull;
+			HashValue = CombineHash64(HashValue, CityHash64(reinterpret_cast<const char*>(IdUtf8.Get()), static_cast<size_t>(IdUtf8.Length())));
+			HashValue = CombineHash64(HashValue, CityHash64(reinterpret_cast<const char*>(RegionUtf8.Get()), static_cast<size_t>(RegionUtf8.Length())));
+			HashValue = CombineHash64(HashValue, CityHash64(reinterpret_cast<const char*>(&Info.ElevationMin_m), sizeof(float) * 3));
+			HashValue = CombineHash64(HashValue, static_cast<uint64>(Info.LibraryIndex >= 0 ? Info.LibraryIndex : 0));
+			HashValue = CombineHash64(HashValue, static_cast<uint64>(Info.ArrayIndex));
+			LibraryFingerprint = CombineHash64(LibraryFingerprint, HashValue);
+		}
 		UE_LOG(LogPlanetaryCreation, Verbose, TEXT("[ExemplarGPU]   [%d] %s (%s) elev=[%.0f, %.0f]m"),
 			i, *Data.Info.ID, *Data.Info.Region, Data.Info.ElevationMin_m, Data.Info.ElevationMax_m);
 	}
@@ -211,6 +255,7 @@ namespace PlanetaryCreation::GPU
 		ExemplarInfo.Empty();
 		ExemplarCount = 0;
 		bInitialized = false;
+		LibraryFingerprint = 0;
 	}
 
 	bool FExemplarTextureArray::LoadPNG16(const FString& FilePath, TArray<uint16>& OutData, int32& OutWidth, int32& OutHeight)

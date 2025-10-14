@@ -41,10 +41,18 @@ function Get-OT-Url {
 }
 
 function Download-OT-Tile {
-    param([string]$code, [string]$label)
+    param(
+        [string]$code,
+        [string]$label
+    )
     $bbox = Parse-TileCode $code
     $url  = Get-OT-Url $bbox
     $outfile = Join-Path $OutDir ("{0}_{1}_{2}_{3}_{4}.tif" -f $code,$bbox.south,$bbox.north,$bbox.west,$bbox.east)
+
+    if (Test-Path $outfile) {
+        Write-Host "[SKIP] $label -> $code (already exists)"
+        return
+    }
 
     Write-Host "[DL] $label -> $code  bbox=($($bbox.south),$($bbox.west))-($($bbox.north),$($bbox.east))"
 
@@ -57,44 +65,52 @@ function Download-OT-Tile {
             if ($head -match '<!DOCTYPE|<html') { throw "Server returned an HTML error page." }
         }
     } catch {
-        if (Test-Path $outfile) { Remove-Item $outfile -Force }
+        # Remove only if we just created an empty/partial file
+        if (Test-Path $outfile) {
+            try {
+                Remove-Item $outfile -Force -ErrorAction Stop
+            } catch {
+                Write-Host ("[WARN] Failed to clean partial file for {0}: {1}" -f $code, $_.Exception.Message)
+            }
+        }
         Write-Host "[ERROR] $($code): $($_.Exception.Message)"
         return
     }
 }
 
-# --- your tiles ---
-$tiles = @(
-    @{ Code="H01"; Name="Himalayan - Everest-Lhotse massif"; CodeStr="N27E086" }
-    @{ Code="H02"; Name="Himalayan - Annapurna sanctuary";   CodeStr="N28E083" }
-    @{ Code="H03"; Name="Himalayan - Kangchenjunga saddle";  CodeStr="N27E088" }
-    @{ Code="H04"; Name="Himalayan - Baltoro glacier / K2";  CodeStr="N35E076" }
-    @{ Code="H05"; Name="Himalayan - Nanga Parbat massif";   CodeStr="N35E074" }
-    @{ Code="H06"; Name="Himalayan - Bhutan high ridge";     CodeStr="N27E090" }
-    @{ Code="H07"; Name="Himalayan - Nyainqentanglha range"; CodeStr="N30E091" }
+# --- derive tile codes from catalog ---
+$catalogPath = Join-Path $PSScriptRoot "..\Docs\StageB_SRTM_Exemplar_Catalog.csv"
+if (-not (Test-Path $catalogPath)) {
+    throw "Catalog not found: $catalogPath"
+}
 
-    @{ Code="A01"; Name="Andean - Cordillera Blanca";        CodeStr="S09W078" }
-    @{ Code="A02"; Name="Andean - Huayhuash knot";           CodeStr="S10W077" }
-    @{ Code="A03"; Name="Andean - Vilcabamba (Cusco)";       CodeStr="S13W074" }
-    @{ Code="A04"; Name="Andean - Ausangate-Sibinacocha";    CodeStr="S14W071" }
-    @{ Code="A05"; Name="Andean - Lake Titicaca escarpment"; CodeStr="S16W069" }
-    @{ Code="A06"; Name="Andean - Nevado Sajama";            CodeStr="S19W069" }
-    @{ Code="A07"; Name="Andean - Potosi cordillera";        CodeStr="S20W066" }
-    @{ Code="A08"; Name="Andean - Atacama Domeyko";          CodeStr="S24W069" }
-    @{ Code="A09"; Name="Andean - Aconcagua";                CodeStr="S33W070" }
-    @{ Code="A10"; Name="Andean - Central Chilean Andes";    CodeStr="S35W071" }
-    @{ Code="A11"; Name="Andean - Northern Patagonia icefield"; CodeStr="S47W074" }
+$tileMap = @{}  # code -> list of exemplar labels
 
-    @{ Code="O01"; Name="Ancient - Great Smoky Mountains";   CodeStr="N35W084" }
-    @{ Code="O02"; Name="Ancient - Blue Ridge (Virginia)";   CodeStr="N37W080" }
-    @{ Code="O03"; Name="Ancient - Scottish Cairngorms";     CodeStr="N56W004" }
-    @{ Code="O04"; Name="Ancient - Scandinavian Jotunheimen";CodeStr="N60E008" }
-    @{ Code="O05"; Name="Ancient - Drakensberg escarpment";  CodeStr="S29E029" }
-    @{ Code="O06"; Name="Ancient - Middle Urals";            CodeStr="N60E058" }
-)
+Import-Csv -Path $catalogPath | ForEach-Object {
+    $id = ($_.id).Trim()
+    if (-not $id -or $id.StartsWith("#")) { return }
 
-foreach ($t in $tiles) {
-    Download-OT-Tile -code $t.CodeStr -label ("{0} ({1})" -f $t.Code, $t.Name)
+    $feature = ($_.feature).Trim()
+    $region = ($_.region).Trim()
+    $label = if ($feature) { "$id ($region - $feature)" } else { "$id ($region)" }
+
+    $codes = ($_.tiles -split '[;,]') | ForEach-Object { $_.Trim().ToUpper() } | Where-Object { $_ }
+    foreach ($code in $codes) {
+        if (-not $tileMap.ContainsKey($code)) {
+            $tileMap[$code] = New-Object System.Collections.Generic.List[string]
+        }
+        $tileMap[$code].Add($label)
+    }
+}
+
+if ($tileMap.Count -eq 0) {
+    throw "No tile codes resolved from catalog: $catalogPath"
+}
+
+foreach ($code in ($tileMap.Keys | Sort-Object)) {
+    $labels = $tileMap[$code] | Sort-Object
+    $labelText = $labels -join ", "
+    Download-OT-Tile -code $code -label $labelText
 }
 
 Write-Host "All tiles processed. Files saved to $OutDir"

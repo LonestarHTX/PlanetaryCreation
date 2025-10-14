@@ -7,6 +7,12 @@ Tiled exporter outputs for comparison and automation.
 | `Tiled_512x256.png` | Tile pipeline (NullRHI) – matches `Baseline_512x256.png`. |
 | `Heightmap_2048x1024.png` | Post-fix signature + seam repair; opens cleanly, 99.923 % coverage. |
 | `Heightmap_4096x2048.png` | Supervised real-RHI run (seam aggregate 0.072 m/0.500 m, coverage 99.844 %). |
+| `StageB_O01_512x256.png` | Forced exemplar export (Stage B globe, 512×256, NullRHI). |
+| `ExemplarAudit/O01_comparison.png` | Stage B vs SRTM O01 (Stage B, source, diff heatmap). |
+| `ExemplarAudit/O01_metrics.csv` | Numerical comparison (mean/max Δ, hypsometric curve, slope histogram). |
+| `ExemplarAudit/O01_stageb_20251014_003719.csv` | Stage B raw sample (LOD 7, seam fallback fix, NullRHI). |
+| `ExemplarAudit/O01_metrics_20251014_003719.csv` | Analyzer output via `RunExemplarAnalyzer.ps1` (mean Δ ≈ 341 m). |
+| `ExemplarAudit/O01_comparison_20251014_003719.png` | Stage B vs O01 diff after seam sampling patch. |
 
 ## Milestone 3 Automation Flow
 - Run the full regression harness (geometry + quantitative metrics) with<br>
@@ -27,6 +33,8 @@ Tiled exporter outputs for comparison and automation.
 
 ## Supervised Export Helpers
 - `Scripts/ExportHeightmap1024.py` and `Scripts/ExportHeightmap4096Force.py` run inside the editor commandlet and temporarily set `r.PlanetaryCreation.AllowUnsafeHeightmapExport` to `1` before restoring it to `0`. Both scripts call `UTectonicSimulationService::export_heightmap_visualization()` with the specified resolution and log the output path or error.
+- `Scripts/RunExportHeightmap512.ps1` accepts optional `-RawExportPath` (defaults to a timestamp under `Docs/Validation/ExemplarAudit`) and `-TimeoutSeconds` so forced exemplar captures stop clobbering prior CSVs and can auto-terminate hung runs.
+- `Scripts/RunExemplarAnalyzer.ps1` convenience wrapper sets the analyzer environment variables and launches the commandlet with `analyze_exemplar_fidelity.py`; pass `-TileId`, `-StageCsv`, `-MetricsCsv`, and `-ComparisonPng` to align exports and metrics in one step.
 - Launch them from WSL with `powershell.exe` so Windows handles the RHI correctly. Replace `<UE5>` with the actual install path:
   ```powershell
   powershell.exe -Command "& '<UE5>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' 'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' -AllowCommandletRendering -unattended -nop4 -nosplash -log -ExecutePythonScript='C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\Scripts\ExportHeightmap1024.py'"

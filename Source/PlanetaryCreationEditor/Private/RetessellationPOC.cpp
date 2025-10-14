@@ -329,7 +329,7 @@ bool UTectonicSimulationService::PerformRetessellation()
     UE_LOG(LogPlanetaryCreation, Log, TEXT("[Re-tessellation] Rebuilding mesh for %d drifted plate(s) (full rebuild)"), DriftedPlateIDs.Num());
 
     // Trigger full mesh regeneration
-    GenerateRenderMesh();
+    GenerateRenderMesh(TEXT("Retessellation"));
     BuildVoronoiMapping();
 
     // Milestone 6 Fix: Refresh elevation baselines to match new plate assignments after retessellation
