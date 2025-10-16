@@ -20,12 +20,14 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectoni
 | Path | Purpose |
 | --- | --- |
 | `Source/PlanetaryCreation` | Runtime simulation core (`UTectonicSimulationService`, automation tests). |
-| `Source/PlanetaryCreationEditor` | Editor module, controller, GPU preview integration, Slate tooling. |
+| `Source/PlanetaryCreationEditor` | Editor module, organized into `Private/Simulation`, `Private/StageB`, `Private/Export`, `Private/UI`, plus shared utilities and Slate tooling. |
 | `Plugins/RealtimeMeshComponent` | Third-party mesh streaming plugin (API reference in `RealtimeMeshComponent_HowTo.md`). |
 | `Content/` | Editor assets (materials, tool UI assets, exemplar placeholders). |
 | `Docs/` | Milestone plans, performance reports, GPU preview notes, roadmap (`PlanningAgentPlan.md`). |
 | `ProceduralTectonicPlanetsPaper/` | Paper transcription (`PTP_Text.md`) and implementation alignment log. |
 | `Scripts/` | PowerShell automation wrappers (e.g., `RunMilestone3Tests.ps1`). |
+
+> **Directory refactor (2025-10-15):** Stage B amplification, sampling/export helpers, and simulation controllers now live in their own subfolders under `Source/PlanetaryCreationEditor`. Public headers mirror this layout (`Public/StageB`, `Public/Simulation`, etc.) to make ownership clearer when onboarding new contributors.
 
 ---
 

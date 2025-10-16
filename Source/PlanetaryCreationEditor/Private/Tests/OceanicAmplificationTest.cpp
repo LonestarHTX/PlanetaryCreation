@@ -1,9 +1,9 @@
 // Milestone 6 Task 2.1: Oceanic Amplification Automation Test
 // Validates transform fault synthesis, age-based fault accentuation, and high-frequency detail
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOceanicAmplificationTest,
     "PlanetaryCreation.Milestone6.OceanicAmplification",

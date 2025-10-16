@@ -1,5 +1,5 @@
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 #include "Hash/CityHash.h"
 #include "Misc/FileHelper.h"

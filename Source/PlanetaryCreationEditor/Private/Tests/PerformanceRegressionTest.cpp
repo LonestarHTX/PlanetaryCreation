@@ -1,8 +1,8 @@
 // Milestone 5 Task 3.1: Performance Regression Test
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 #include "HAL/PlatformTime.h"
 

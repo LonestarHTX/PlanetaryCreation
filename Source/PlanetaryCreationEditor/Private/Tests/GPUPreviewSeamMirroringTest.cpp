@@ -1,6 +1,6 @@
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
-#include "OceanicAmplificationGPU.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "StageB/OceanicAmplificationGPU.h"
 #include "Editor.h"
 #include "RHI.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"

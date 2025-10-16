@@ -1,7 +1,7 @@
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
-#include "HeightmapSampling.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "Export/HeightmapSampling.h"
 #include "Tests/RidgeTestHelpers.h"
 
 #include "Editor.h"

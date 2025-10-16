@@ -1,0 +1,2177 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Utilities/PlanetaryCreationLogging.h"
+#include "StageB/StageBAmplificationTypes.h"
+#include "Subsystems/UnrealEditorSubsystem.h"
+#include "Containers/BitArray.h"
+#include "VectorTypes.h"
+#include "RHIGPUReadback.h"
+#include "TectonicSimulationService.generated.h"
+
+namespace PlanetaryCreation::GPU
+{
+    struct FStageBUnifiedDispatchResult;
+    bool ApplyStageBUnifiedGPU(class UTectonicSimulationService& Service, bool bDispatchOceanic, bool bDispatchContinental, FStageBUnifiedDispatchResult& OutResult);
+}
+
+UENUM(BlueprintType)
+enum class ETectonicVisualizationMode : uint8
+{
+    PlateColors UMETA(DisplayName = "Plate Colors"),
+    Elevation UMETA(DisplayName = "Elevation Heatmap"),
+    Velocity UMETA(DisplayName = "Velocity Field"),
+    Stress UMETA(DisplayName = "Stress Gradient"),
+    Amplified UMETA(DisplayName = "Amplified Stage B"),
+    AmplificationBlend UMETA(DisplayName = "Amplification Blend")
+};
+
+UENUM(BlueprintType)
+enum class EHeightmapPaletteMode : uint8
+{
+    AbsoluteHypsometric UMETA(DisplayName = "Absolute hypsometric"),
+    NormalizedRange UMETA(DisplayName = "Normalized (min to max)")
+};
+
+struct FHeightmapExportMetrics
+{
+    bool bValid = false;
+    bool bSamplerUsedAmplified = false;
+    bool bStageBReadyAtExport = false;
+    bool bUsedSnapshotFloatBuffer = false;
+    bool bPerformanceBudgetExceeded = false;
+
+    int32 Width = 0;
+    int32 Height = 0;
+    int64 PixelCount = 0;
+    int64 SuccessfulSamples = 0;
+    int64 FailedSamples = 0;
+
+    double CoveragePercent = 0.0;
+    double AverageTraversalSteps = 0.0;
+    int32 MaxTraversalSteps = 0;
+
+    double MinElevation = 0.0;
+    double MaxElevation = 0.0;
+
+    int32 SeamRowsEvaluated = 0;
+    int32 SeamRowsAboveHalfMeter = 0;
+    int32 SeamRowsWithFailures = 0;
+    double SeamMeanAbsDelta = 0.0;
+   double SeamRmsDelta = 0.0;
+   double SeamMaxAbsDelta = 0.0;
+
+    double SamplerSetupMs = 0.0;
+    double SamplingMs = 0.0;
+    double EncodeMs = 0.0;
+    double TotalMs = 0.0;
+};
+
+struct FHeightmapExportPerformanceSample
+{
+    double SamplerSetupMs = 0.0;
+    double SamplingMs = 0.0;
+    double EncodeMs = 0.0;
+    double TotalMs = 0.0;
+    int32 Width = 0;
+    int32 Height = 0;
+    bool bUsedAmplified = false;
+    bool bUsedSnapshotFloatBuffer = false;
+    bool bBudgetExceeded = false;
+};
+
+struct FHypsometricBinMetrics
+{
+    int32 BinIndex = 0;
+    double MinElevationMeters = 0.0;
+    double MaxElevationMeters = 0.0;
+    double Percentage = 0.0;
+    int32 Count = 0;
+};
+
+struct FVelocityHistogramBin
+{
+    int32 BinIndex = 0;
+    double MinSpeedCmPerYear = 0.0;
+    double MaxSpeedCmPerYear = 0.0;
+    double Percentage = 0.0;
+    int32 Count = 0;
+};
+
+struct FRidgeTrenchMetrics
+{
+    double DivergentLengthKm = 0.0;
+    double ConvergentLengthKm = 0.0;
+    double TransformLengthKm = 0.0;
+    double RidgeToTrenchRatio = 0.0;
+};
+
+enum class EStagePipelinePhase : uint8
+{
+    Idle,
+    StageA,
+    StageBComplete,
+    PostErosion
+};
+
+struct FStageBProfile
+{
+    bool bAmplificationReady = false;
+    EStageBAmplificationReadyReason ReadyReason = EStageBAmplificationReadyReason::NoRenderMesh;
+    int32 PendingOceanicJobs = 0;
+    int32 PendingContinentalJobs = 0;
+    double BaselineMs = 0.0;
+    double RidgeMs = 0.0;
+    double OceanicCPUMs = 0.0;
+    double OceanicGPUMs = 0.0;
+    double ContinentalCPUMs = 0.0;
+    double ContinentalGPUMs = 0.0;
+    double HydraulicMs = 0.0;
+    double GpuReadbackMs = 0.0;
+    double CacheInvalidationMs = 0.0;
+    int32 RidgeDirtyVertices = 0;
+    int32 RidgeUpdatedVertices = 0;
+    int32 RidgeCacheHits = 0;
+    int32 RidgeMissingTangents = 0;
+    int32 RidgePoorAlignment = 0;
+    int32 RidgeGradientFallbacks = 0;
+    int32 RidgePlateFallbacks = 0;
+    int32 RidgeMotionFallbacks = 0;
+    int32 VoronoiReassignedVertices = 0;
+    bool bVoronoiForcedFullRidge = false;
+    int32 OceanicBaselineReuseCount = 0;
+    int32 OceanicMaskMismatchCount = 0;
+    bool bForcedOceanicCpuFallback = false;
+
+    double TotalMs() const
+    {
+        return BaselineMs +
+            RidgeMs +
+            OceanicCPUMs +
+            OceanicGPUMs +
+            ContinentalCPUMs +
+            ContinentalGPUMs +
+            HydraulicMs +
+            GpuReadbackMs +
+            CacheInvalidationMs;
+    }
+};
+
+enum class EContinentalTerrainType : uint8
+{
+    Plain = 0,
+    OldMountains = 1,
+    AndeanMountains = 2,
+    HimalayanMountains = 3
+};
+
+struct FRenderVertexFloatSoA
+{
+    TArray<float> PositionX;
+    TArray<float> PositionY;
+    TArray<float> PositionZ;
+    TArray<float> NormalX;
+    TArray<float> NormalY;
+    TArray<float> NormalZ;
+    TArray<float> TangentX;
+    TArray<float> TangentY;
+    TArray<float> TangentZ;
+};
+
+struct FOceanicAmplificationFloatInputs
+{
+    TArray<float> BaselineElevation;
+    TArray<float> CrustAge;
+    TArray<FVector4f> RidgeDirections;
+    TArray<FVector3f> RenderPositions;
+    TArray<uint32> OceanicMask;
+    uint64 CachedDataSerial = 0;
+};
+
+struct FContinentalAmplificationGPUInputs
+{
+    TArray<float> BaselineElevation;
+    TArray<FVector3f> RenderPositions;
+    TArray<uint32> PackedTerrainInfo;
+    TArray<FUintVector4> ExemplarIndices;
+    TArray<FVector4f> ExemplarWeights;
+    TArray<FVector2f> RandomUVOffsets;
+    TArray<FVector2f> WrappedUVs;
+    TArray<FVector4f> SampleHeights;
+    uint64 CachedDataSerial = 0;
+    int32 CachedTopologyVersion = INDEX_NONE;
+    int32 CachedSurfaceVersion = INDEX_NONE;
+    uint64 ForcedSettingsHash = 0;
+};
+
+struct FContinentalGPUDispatchStats
+{
+    bool bDispatchAttempted = false;
+    bool bDispatchSucceeded = false;
+    bool bSnapshotMatched = false;
+    int32 HashCheckCount = 0;
+    int32 HashMatchCount = 0;
+};
+
+struct FContinentalAmplificationCacheEntry
+{
+    EContinentalTerrainType TerrainType = EContinentalTerrainType::Plain;
+    uint32 ExemplarCount = 0;
+    uint32 ExemplarIndices[3] = { MAX_uint32, MAX_uint32, MAX_uint32 };  // Indices into CPU exemplar library
+    float Weights[3] = { 0.0f, 0.0f, 0.0f };
+    float TotalWeight = 0.0f;
+    FVector2f RandomOffset = FVector2f::ZeroVector;
+    FVector2f WrappedUV = FVector2f::ZeroVector;
+    bool bHasCachedData = false;
+};
+
+struct FContinentalBlendCache
+{
+    float BlendedHeight = 0.0f;
+   float ReferenceMean = 0.0f;
+   uint64 CachedSerial = 0;
+   bool bHasReferenceMean = false;
+};
+
+struct FContinentalCacheProfileMetrics
+{
+    double TotalSeconds = 0.0;
+    double ClassificationSeconds = 0.0;
+    double ExemplarSelectionSeconds = 0.0;
+    int32 ContinentalVertexCount = 0;
+    int32 ExemplarAssignmentCount = 0;
+};
+
+struct FContinentalAmplificationDebugInfo
+{
+    int32 VertexIndex = INDEX_NONE;
+    EContinentalTerrainType TerrainType = EContinentalTerrainType::Plain;
+    uint32 ExemplarCount = 0;
+    uint32 ExemplarIndices[3] = { MAX_uint32, MAX_uint32, MAX_uint32 };
+    double SampleHeights[3] = { 0.0, 0.0, 0.0 };
+    double Weights[3] = { 0.0, 0.0, 0.0 };
+    double TotalWeight = 0.0;
+    double BlendedHeight = 0.0;
+    double ReferenceMean = 0.0;
+    double CpuResult = 0.0;
+    double RandomOffsetU = 0.0;
+    double RandomOffsetV = 0.0;
+    bool bUseOverrideRandomOffset = false;
+    double OverrideRandomOffsetU = 0.0;
+    double OverrideRandomOffsetV = 0.0;
+    int32 RandomSeed = 0;
+    int32 OverrideRandomSeed = 0;
+    double UValue = 0.0;
+    double VValue = 0.0;
+};
+
+#if UE_BUILD_DEVELOPMENT
+void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo* DebugInfo);
+#else
+inline void SetContinentalAmplificationDebugContext(FContinentalAmplificationDebugInfo*) {}
+#endif
+
+struct FRidgeDirectionFloatSoA
+{
+    TArray<float> DirX;
+    TArray<float> DirY;
+    TArray<float> DirZ;
+    int32 CachedTopologyVersion = INDEX_NONE;
+    int32 CachedVertexCount = 0;
+};
+
+/**
+ * Paper-compliant elevation constants (Appendix A).
+ * Reference: "Procedural Tectonic Planets" paper, Table in Appendix A.
+ * Sea level is 0m (reference elevation).
+ */
+namespace PaperElevationConstants
+{
+    /** Oceanic ridge elevation at divergent boundaries (zᵀ in paper). */
+    constexpr double OceanicRidgeDepth_m = -1000.0;
+
+    /** Abyssal plains elevation for mature oceanic crust (zᵇ in paper). */
+    constexpr double AbyssalPlainDepth_m = -6000.0;
+
+    /** Continental baseline elevation (implied by paper, starts at sea level). */
+    constexpr double ContinentalBaseline_m = 0.0;
+
+    /** Sea level reference (explicitly stated in Appendix A). */
+    constexpr double SeaLevel_m = 0.0;
+}
+
+/** Crust type for a tectonic plate (from paper). */
+UENUM()
+enum class ECrustType : uint8
+{
+    Oceanic,
+    Continental
+};
+
+/** Represents a single tectonic plate with double-precision state. */
+USTRUCT()
+struct FTectonicPlate
+{
+    GENERATED_BODY()
+
+    /** Unique plate identifier. */
+    UPROPERTY()
+    int32 PlateID = INDEX_NONE;
+
+    /** Centroid position on the unit sphere (double-precision). */
+    FVector3d Centroid = FVector3d::ZeroVector;
+
+    /** Euler pole axis (normalized) for rotation. */
+    FVector3d EulerPoleAxis = FVector3d::ZAxisVector;
+
+    /** Angular velocity around Euler pole (radians per My). */
+    double AngularVelocity = 0.0;
+
+    /** Crust type (oceanic vs continental). */
+    UPROPERTY()
+    ECrustType CrustType = ECrustType::Oceanic;
+
+    /** Static crust thickness in km (deferred: dynamic updates in Milestone 3). */
+    double CrustThickness = 7.0; // Default oceanic crust ~7km
+
+    /** Indices of vertices forming this plate's polygon (into shared vertex array). */
+    TArray<int32> VertexIndices;
+};
+
+/** Boundary classification based on relative velocity (from paper Section 3). */
+UENUM()
+enum class EBoundaryType : uint8
+{
+    Divergent,   // Ridge - plates separating
+    Convergent,  // Subduction zone - plates colliding
+    Transform    // Shear - plates sliding past
+};
+
+/** Milestone 4 Task 1.3: Boundary lifecycle states (paper Section 4.1). */
+UENUM()
+enum class EBoundaryState : uint8
+{
+    Nascent,    // Recently formed, low stress
+    Active,     // Actively accumulating stress/spreading
+    Dormant,    // Low velocity, stress decaying
+    Rifting     // Milestone 4 Task 2.2: Active rift formation (divergent only)
+};
+
+/** Milestone 4 Task 1.2: Plate topology event types. */
+UENUM()
+enum class EPlateTopologyEventType : uint8
+{
+    Split,      // Plate split along rift
+    Merge,      // Plate consumed by subduction
+    None
+};
+
+/** Boundary metadata between two plates. */
+USTRUCT()
+struct FPlateBoundary
+{
+    GENERATED_BODY()
+
+    /** Shared edge vertex indices (2 vertices for icosphere edge). */
+    TArray<int32> SharedEdgeVertices;
+
+    /** Current boundary classification (updated each step). */
+    UPROPERTY()
+    EBoundaryType BoundaryType = EBoundaryType::Transform;
+
+    /** Relative velocity magnitude at boundary (for logging/debug). */
+    double RelativeVelocity = 0.0;
+
+    /**
+     * Milestone 3 Task 2.3: Accumulated stress at boundary (MPa, double precision).
+     * COSMETIC VISUALIZATION ONLY - simplified model, not physically accurate.
+     * - Convergent boundaries: accumulates stress (capped at 100 MPa)
+     * - Divergent boundaries: decays toward zero (τ = 10 My)
+     * - Transform boundaries: minimal accumulation
+     */
+    double AccumulatedStress = 0.0;
+
+    /**
+     * Milestone 4 Task 1.3: Boundary lifecycle state.
+     * Tracks boundary evolution (Nascent → Active → Dormant).
+     */
+    UPROPERTY()
+    EBoundaryState BoundaryState = EBoundaryState::Nascent;
+
+    /**
+     * Milestone 4 Task 1.3: Simulation time when boundary entered current state (My).
+     */
+    double StateTransitionTimeMy = 0.0;
+
+    /**
+     * Milestone 4 Task 1.2: Time (My) that boundary has been divergent (for rift split detection).
+     * Reset to 0 when boundary type changes.
+     */
+    double DivergentDurationMy = 0.0;
+
+    /**
+     * Milestone 4 Task 1.2: Time (My) that boundary has been convergent (for merge detection).
+     * Reset to 0 when boundary type changes.
+     */
+    double ConvergentDurationMy = 0.0;
+
+    /**
+     * Milestone 4 Task 2.2: Rift width (meters) for rifting divergent boundaries.
+     * Incremented over time based on divergence rate. Triggers split when threshold exceeded.
+     */
+    double RiftWidthMeters = 0.0;
+
+    /**
+     * Milestone 4 Task 2.2: Rift formation time (My) when boundary entered rifting state.
+     * Used to track rift age for visualization/analytics.
+     */
+    double RiftFormationTimeMy = 0.0;
+};
+
+struct FPlateBoundarySummaryEntry
+{
+    FVector3d RepresentativePosition = FVector3d::ZeroVector;
+    FVector3d RepresentativeUnit = FVector3d::ZAxisVector;
+    int32 OtherPlateID = INDEX_NONE;
+    EBoundaryType BoundaryType = EBoundaryType::Transform;
+    bool bIsSubduction = false;
+    bool bHasRepresentative = false;
+};
+
+struct FPlateBoundarySummary
+{
+    TArray<FPlateBoundarySummaryEntry> Boundaries;
+    int32 CachedTopologyVersion = INDEX_NONE;
+};
+
+/** Milestone 4 Task 1.2: Records a plate topology change event for logging/CSV export. */
+USTRUCT()
+struct FPlateTopologyEvent
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    EPlateTopologyEventType EventType = EPlateTopologyEventType::None;
+
+    /** Plate IDs involved (for split: [OriginalID, NewID], for merge: [ConsumedID, SurvivorID]). */
+    UPROPERTY()
+    TArray<int32> PlateIDs;
+
+    /** Simulation time when event occurred (My). */
+    double TimestampMy = 0.0;
+
+    /** Boundary stress at time of event (MPa, for validation). */
+    double StressAtEvent = 0.0;
+
+    /** Relative velocity at time of event (rad/My, for validation). */
+    double VelocityAtEvent = 0.0;
+};
+
+/** Milestone 4 Task 2.1: Hotspot type classification (paper Section 4.4). */
+UENUM()
+enum class EHotspotType : uint8
+{
+    Major,      // Large, long-lived plumes (e.g., Hawaii, Iceland)
+    Minor       // Smaller, shorter-lived plumes
+};
+
+/** Milestone 4 Task 2.1: Mantle hotspot/plume representation. */
+USTRUCT()
+struct FMantleHotspot
+{
+    GENERATED_BODY()
+
+    /** Unique hotspot identifier. */
+    int32 HotspotID = INDEX_NONE;
+
+    /** Position on unit sphere in mantle reference frame (drifts independently of plates). */
+    FVector3d Position = FVector3d::ZeroVector;
+
+    /** Hotspot type (major vs minor, affects thermal output and lifetime). */
+    UPROPERTY()
+    EHotspotType Type = EHotspotType::Minor;
+
+    /** Thermal output (arbitrary units, affects stress/elevation contribution). */
+    double ThermalOutput = 1.0;
+
+    /** Influence radius (radians) for thermal contribution falloff. */
+    double InfluenceRadius = 0.1; // ~5.7° on unit sphere
+
+    /** Drift velocity in mantle frame (rad/My), allows hotspots to migrate over time. */
+    FVector3d DriftVelocity = FVector3d::ZeroVector;
+};
+
+/** Milestone 6 Task 1.1: Terrane lifecycle states (paper Section 6). */
+UENUM()
+enum class ETerraneState : uint8
+{
+    Attached,       // Part of continental plate (normal)
+   Extracted,      // Surgically removed, awaiting carrier assignment
+   Transporting,   // Riding oceanic carrier plate toward collision
+   Colliding       // At convergent boundary, ready for reattachment
+};
+
+struct FTerraneAreaDriftSample
+{
+    int32 TerraneID = INDEX_NONE;
+    ETerraneState State = ETerraneState::Attached;
+    double OriginalAreaKm2 = 0.0;
+    double CurrentAreaKm2 = 0.0;
+    double DriftPercent = 0.0;
+};
+
+/** Per-vertex payload stored for detached terranes. */
+USTRUCT()
+struct FTerraneVertexRecord
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FVector3d Position = FVector3d::ZeroVector;
+
+    UPROPERTY()
+    FVector3d Velocity = FVector3d::ZeroVector;
+
+    UPROPERTY()
+    FVector3d RidgeDirection = FVector3d::ZeroVector;
+
+    UPROPERTY()
+    FVector3f RidgeTangent = FVector3f::ZeroVector;
+
+    UPROPERTY()
+    double Stress = 0.0;
+
+    UPROPERTY()
+    double Temperature = 0.0;
+
+    UPROPERTY()
+    double Elevation = 0.0;
+
+    UPROPERTY()
+    double ErosionRate = 0.0;
+
+    UPROPERTY()
+    double SedimentThickness = 0.0;
+
+    UPROPERTY()
+    double CrustAge = 0.0;
+
+    UPROPERTY()
+    double AmplifiedElevation = 0.0;
+
+    UPROPERTY()
+    int32 PlateID = INDEX_NONE;
+
+    /** Duplicate vertex index injected into render mesh when terrane is extracted (INDEX_NONE for interior vertices). */
+    UPROPERTY()
+    int32 ReplacementVertexIndex = INDEX_NONE;
+};
+
+/** Milestone 6 Task 1.1: Continental terrane (accreted microcontinent fragment). */
+USTRUCT()
+struct FContinentalTerrane
+{
+    GENERATED_BODY()
+
+    /** Unique terrane identifier (deterministic from seed for replay/determinism). */
+    int32 TerraneID = INDEX_NONE;
+
+    /** Current lifecycle state (Attached/Extracted/Transporting/Colliding). */
+    UPROPERTY()
+    ETerraneState State = ETerraneState::Attached;
+
+    /** Original render vertex indices comprising this terrane (for diagnostics/snapshots). */
+    UPROPERTY()
+    TArray<int32> OriginalVertexIndices;
+
+    /** Detached vertex payload retained while terrane is extracted. */
+    UPROPERTY()
+    TArray<FTerraneVertexRecord> VertexPayload;
+
+    /** Source plate ID (where terrane was extracted from, INDEX_NONE if not yet extracted). */
+    int32 SourcePlateID = INDEX_NONE;
+
+    /** Carrier plate ID (oceanic plate transporting terrane, INDEX_NONE if attached/extracted). */
+    int32 CarrierPlateID = INDEX_NONE;
+
+    /** Target plate ID for reattachment (continental plate at collision, INDEX_NONE if not colliding). */
+    int32 TargetPlateID = INDEX_NONE;
+
+    /** Centroid position on unit sphere (for tracking/visualization). */
+    FVector3d Centroid = FVector3d::ZeroVector;
+
+    /** Area in km² (for validation, prevents single-vertex terranes). */
+    double AreaKm2 = 0.0;
+
+    /** Extraction timestamp (My) for tracking terrane age/transport duration. */
+    double ExtractionTimeMy = 0.0;
+
+    /** Reattachment timestamp (My) for suturing/collision tracking. */
+    double ReattachmentTimeMy = 0.0;
+
+    /** Triangles removed from the base mesh during extraction (triplets of local vertex indices into VertexPayload). */
+    UPROPERTY()
+    TArray<int32> ExtractedTriangles;
+
+    /** Global vertex indices generated to cap the extraction hole (duplicates + optional centers). */
+    UPROPERTY()
+    TArray<int32> PatchVertexIndices;
+
+    /** Triangles added to cap the extraction hole (triplets referencing PatchVertexIndices). */
+    UPROPERTY()
+    TArray<int32> PatchTriangles;
+};
+
+struct FQuantitativeMetricsSnapshot
+{
+    bool bValid = false;
+    FString TimestampUTC;
+    FString LatestFilePath;
+    FString TimestampedFilePath;
+    double SimulationTimeMy = 0.0;
+    double MinElevationMeters = 0.0;
+    double MaxElevationMeters = 0.0;
+    double HypsometricSumPercent = 0.0;
+    double VelocitySumPercent = 0.0;
+    TArray<FHypsometricBinMetrics> HypsometricBins;
+    TArray<FVelocityHistogramBin> VelocityHistogram;
+    FRidgeTrenchMetrics RidgeTrench;
+    double TerraneMeanDriftPercent = 0.0;
+    double TerraneMaxDriftPercent = 0.0;
+    double TerraneRmsDriftPercent = 0.0;
+    TArray<FTerraneAreaDriftSample> TerraneSamples;
+};
+
+/** Simulation parameters (Phase 3 - UI integration). */
+USTRUCT()
+struct FTectonicSimulationParameters
+{
+    GENERATED_BODY()
+
+    /** Random seed for deterministic plate generation. */
+    UPROPERTY()
+    int32 Seed = 42;
+
+    /**
+     * Plate subdivision level (0-3). Controls number of tectonic plates generated from icosahedron:
+     * Level 0: 20 plates (baseline from paper, ~Earth's 7-15 major/minor plates)
+     * Level 1: 80 plates (experimental high-resolution mode)
+     * Level 2: 320 plates (experimental ultra-high resolution)
+     * Level 3: 1280 plates (experimental maximum resolution)
+     * Default: 0 (20 plates, aligns with Milestone 2 target of ~12-20 plates)
+     */
+    UPROPERTY()
+    int32 SubdivisionLevel = 0;
+
+    /** Render mesh subdivision level (0-6). Level 0=20, 1=80, 2=320, 3=1280, 4=5120, 5=20480, 6=81920 faces. */
+    UPROPERTY()
+    int32 RenderSubdivisionLevel = 5;
+
+    /**
+     * Milestone 3 Task 2.4: Elevation displacement scale.
+     * Controls magnitude of geometric displacement from stress field.
+     * 1.0 = realistic scale (100 MPa → ~10km elevation), 0.0 = flat (color only).
+     */
+    UPROPERTY()
+    double ElevationScale = 1.0;
+
+    /**
+     * Milestone 5 Phase 3: Planet radius in meters.
+     * Controls the physical size of the simulated planet for realistic geodesic calculations.
+     *
+     * Default 127,400 m (1/50 Earth scale):
+     * - Full Earth: 6,370,000 m (too large for initial testing/profiling)
+     * - 1/50 scale: 127,400 m (realistic tectonic features, manageable render distances)
+     *
+     * IMPORTANT: This value is embedded in history snapshots and CSV exports.
+     * Changing it mid-simulation invalidates deterministic fingerprints.
+     * Valid range: 10,000 m to 10,000,000 m (smaller than Jupiter, larger than asteroids).
+     */
+    UPROPERTY()
+    double PlanetRadius = 127400.0;
+
+    /**
+     * Milestone 3 Task 3.1: Lloyd relaxation iterations.
+     * Number of iterations to evenly distribute plate centroids (0-10).
+     * Default 8 typically achieves convergence. 0 = disabled.
+     */
+    UPROPERTY()
+    int32 LloydIterations = 8;
+
+    /**
+     * Milestone 3 Task 3.3: Dynamic re-tessellation threshold (degrees).
+     * When plate centroid drifts >N degrees from initial position, log warning.
+     * In Milestone 6+, this also serves as the cooldown threshold that must be
+     * re-attained before another rebuild is permitted (hysteresis lower bound).
+     */
+    UPROPERTY()
+    double RetessellationThresholdDegrees = 30.0;
+
+    /** Number of steps between drift/quality evaluations (≥1). */
+    UPROPERTY()
+    int32 RetessellationCheckIntervalSteps = 5;
+
+    /** Number of steps between Voronoi refreshes (≥1). */
+    UPROPERTY()
+    int32 VoronoiRefreshIntervalSteps = 5;
+
+    /** High watermark (degrees) before a rebuild is allowed (≥ threshold). */
+    UPROPERTY()
+    double RetessellationTriggerDegrees = 45.0;
+
+    /** Minimum acceptable interior angle (degrees) before a triangle is flagged. */
+    UPROPERTY()
+    double RetessellationMinTriangleAngleDegrees = 15.0;
+
+    /** Fraction of flagged triangles that will trigger a rebuild (0–1). */
+    UPROPERTY()
+    double RetessellationBadTriangleRatioThreshold = 0.02;
+
+    /**
+     * Milestone 4 Task 1.1: Enable dynamic re-tessellation.
+     * When true, triggers mesh rebuild when plates drift beyond RetessellationThresholdDegrees.
+     * Default true for M4+ (change to false to disable and use M3 logging behavior).
+     */
+    UPROPERTY()
+    bool bEnableDynamicRetessellation = true;
+
+    /**
+     * Milestone 4 Phase 4.1: Enable automatic LOD based on camera distance.
+     * When true, render subdivision level automatically adjusts based on viewport camera distance.
+     * When false, manual render subdivision level setting is respected.
+     * Paper default: false (locks LOD to 5 for Stage B). Enable when profiling the adaptive M5 workflow.
+     */
+    UPROPERTY()
+    bool bEnableAutomaticLOD = false;
+
+    /** Mantle viscosity coefficient (placeholder - used in Milestone 3). */
+    UPROPERTY()
+    double MantleViscosity = 1.0;
+
+    /** Thermal diffusion constant (placeholder - used in Milestone 3). */
+    UPROPERTY()
+    double ThermalDiffusion = 1.0;
+
+    /** Visualization overlay applied to preview mesh (paper default: `AmplificationBlend`). */
+    UPROPERTY()
+    ETectonicVisualizationMode VisualizationMode = ETectonicVisualizationMode::AmplificationBlend;
+
+    /**
+     * Milestone 4 Task 1.2: Plate split velocity threshold (rad/My).
+     * Divergent boundaries exceeding this velocity for sustained duration trigger rifting/split.
+     * Default 0.05 rad/My ≈ 3-5 cm/yr on Earth scale (realistic mid-ocean ridge spreading rate).
+     */
+    UPROPERTY()
+    double SplitVelocityThreshold = 0.05;
+
+    /**
+     * Milestone 4 Task 1.2: Sustained divergence duration required to trigger split (My).
+     * Prevents transient velocity spikes from causing spurious splits.
+     * Default 20 My (paper-aligned, ~1 Wilson cycle phase).
+     */
+    UPROPERTY()
+    double SplitDurationThreshold = 20.0;
+
+    /**
+     * Milestone 4 Task 1.2: Plate merge stress threshold (MPa).
+     * Convergent boundaries exceeding this stress trigger subduction/merge if plate is small enough.
+     * Default 80 MPa (80% of max stress cap, indicates sustained collision).
+     */
+    UPROPERTY()
+    double MergeStressThreshold = 80.0;
+
+    /**
+     * Milestone 4 Task 1.2: Plate area ratio threshold for merge eligibility.
+     * Smaller plate must be <N% of larger plate's area to be consumed.
+     * Default 0.25 (smaller plate must be <25% of larger, prevents balanced collision merges).
+     */
+    UPROPERTY()
+    double MergeAreaRatioThreshold = 0.25;
+
+    /**
+     * Milestone 4 Task 1.2: Enable plate split/merge topology changes.
+     * Default false for backward compatibility. Set true to activate split/merge detection.
+     */
+    UPROPERTY()
+    bool bEnablePlateTopologyChanges = false;
+
+    /**
+     * Milestone 4 Task 2.1: Number of major hotspots to generate (paper Section 4.4).
+     * Major hotspots have higher thermal output and longer lifetimes.
+     * Default 3 (paper recommendation for Earth-like planets).
+     */
+    UPROPERTY()
+    int32 MajorHotspotCount = 3;
+
+    /**
+     * Milestone 4 Task 2.1: Number of minor hotspots to generate.
+     * Minor hotspots have lower thermal output and shorter lifetimes.
+     * Default 5 (paper recommendation for Earth-like planets).
+     */
+    UPROPERTY()
+    int32 MinorHotspotCount = 5;
+
+    /**
+     * Milestone 4 Task 2.1: Hotspot drift speed in mantle frame (rad/My).
+     * Controls how fast hotspots migrate over time. 0 = stationary.
+     * Default 0.01 rad/My (~0.6 cm/yr on Earth scale, realistic mantle plume drift).
+     */
+    UPROPERTY()
+    double HotspotDriftSpeed = 0.01;
+
+    /**
+     * Milestone 4 Task 5.0: Enable Voronoi distance warping with noise.
+     * "More irregular continent shapes can be obtained by warping the geodesic distances
+     * to the centroids using a simple noise function." (Paper Section 3)
+     * When true, applies 3D noise to distance calculations in Voronoi mapping.
+     * Default true for irregular plate shapes.
+     */
+    UPROPERTY()
+    bool bEnableVoronoiWarping = true;
+
+    /**
+     * Milestone 4 Task 5.0: Voronoi warping noise amplitude.
+     * Controls how much noise distorts plate boundaries (as fraction of distance).
+     * 0.0 = perfect Voronoi cells (uniform), 0.5 = moderate irregularity (realistic continents).
+     * Default 0.5 (50% distance variation, paper-aligned for irregular continent shapes).
+     */
+    UPROPERTY()
+    double VoronoiWarpingAmplitude = 0.5;
+
+    /**
+     * Milestone 4 Task 5.0: Voronoi warping noise frequency.
+     * Controls noise scale/detail for boundary distortion.
+     * Higher values = finer boundary details, lower values = smoother curves.
+     * Default 2.0 (medium-scale continental irregularities).
+     */
+    UPROPERTY()
+    double VoronoiWarpingFrequency = 2.0;
+
+    /**
+     * Milestone 4 Task 2.1: Thermal output multiplier for major hotspots.
+     * Scales thermal contribution to stress/elevation fields.
+     * Default 2.0 (major hotspots are 2x more powerful than minor).
+     */
+    UPROPERTY()
+    double MajorHotspotThermalOutput = 2.0;
+
+    /**
+     * Milestone 4 Task 2.1: Thermal output multiplier for minor hotspots.
+     * Default 1.0 (baseline thermal contribution).
+     */
+    UPROPERTY()
+    double MinorHotspotThermalOutput = 1.0;
+
+    /**
+     * Milestone 4 Task 2.1: Enable hotspot generation and thermal coupling.
+     * Default false for backward compatibility. Set true to activate hotspot system.
+     */
+    UPROPERTY()
+    bool bEnableHotspots = false;
+
+    /**
+     * Milestone 4 Task 2.2: Rift progression rate (meters per My per rad/My velocity).
+     * Controls how fast rifts widen based on divergent velocity.
+     * Default 50000.0 m/My/(rad/My) ≈ realistic rift widening (~5 cm/yr at Earth scale).
+     */
+    UPROPERTY()
+    double RiftProgressionRate = 50000.0;
+
+    /**
+     * Milestone 4 Task 2.2: Rift width threshold for triggering plate split (meters).
+     * When rift width exceeds this value, boundary triggers split.
+     * Default 500000.0 m (500 km, realistic for mature ocean basin rifts).
+     */
+    UPROPERTY()
+    double RiftSplitThresholdMeters = 500000.0;
+
+    /**
+     * Milestone 4 Task 2.2: Enable rift propagation model.
+     * Default false for backward compatibility. Set true to activate rift tracking.
+     */
+    UPROPERTY()
+    bool bEnableRiftPropagation = false;
+
+    /**
+     * Milestone 5 Task 2.1: Continental erosion constant (m/My).
+     * Base erosion rate for continental crust above sea level.
+     * Formula: ErosionRate = k × Slope × (Elevation - SeaLevel)⁺
+     * Default 0.001 m/My (paper Section 4.5, realistic geological erosion rate).
+     */
+    UPROPERTY()
+    double ErosionConstant = 0.001;
+
+    /**
+     * Milestone 5 Task 2.1: Sea level reference elevation (meters).
+     * Erosion only applies to terrain above this threshold.
+     * Default 0.0 m (mean sea level).
+     */
+    UPROPERTY()
+    double SeaLevel = 0.0;
+
+    /**
+     * Milestone 5 Task 2.1: Enable continental erosion model.
+     * Default false for backward compatibility. Set true to activate erosion.
+     */
+    UPROPERTY()
+    bool bEnableContinentalErosion = false;
+
+    /**
+     * Milestone 6 Task 2.3: Enable heightmap visualization mode.
+     * When true, mesh vertex colors encode elevation (blue=low, red=high).
+     * Default false (normal plate boundary visualization).
+     */
+    UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Use VisualizationMode instead."))
+    bool bEnableHeightmapVisualization = false;
+
+    /** Heightmap palette selection for visualization/export (absolute vs normalized). */
+    UPROPERTY()
+    EHeightmapPaletteMode HeightmapPaletteMode = EHeightmapPaletteMode::AbsoluteHypsometric;
+
+    /**
+     * Milestone 6 GPU Preview: Skip CPU amplification path when controller handles GPU preview.
+     * When true, AdvanceSteps() skips ApplyOceanicAmplification/ApplyContinentalAmplification CPU paths.
+     * Controller sets this when bUseGPUPreviewMode is active to avoid redundant CPU work.
+     * Paper default: true (GPU path on first frame).
+     */
+    UPROPERTY()
+    bool bSkipCPUAmplification = true;
+
+    /**
+     * Milestone 5 Task 2.2: Sediment diffusion rate (dimensionless, 0-1).
+     * Controls how quickly eroded material redistributes to neighbors.
+     * Default 0.1 (10% of excess sediment diffuses per step).
+     */
+    UPROPERTY()
+    double SedimentDiffusionRate = 0.1;
+
+    /**
+     * Milestone 5 Task 2.2: Enable sediment transport (Stage 0 diffusion).
+     * Default false for backward compatibility. Set true to activate sediment redistribution.
+     */
+    UPROPERTY()
+    bool bEnableSedimentTransport = false;
+
+    /**
+     * Milestone 5 Task 2.3: Oceanic dampening constant (m/My).
+     * Smoothing rate for seafloor elevation (slower than erosion).
+     * Default 0.0005 m/My (paper Section 4.5, oceanic crust subsidence).
+     */
+    UPROPERTY()
+    double OceanicDampeningConstant = 0.0005;
+
+    /** Gaussian smoothing radius for oceanic dampening (radians). */
+    UPROPERTY()
+    double OceanicDampeningSmoothingRadius = 0.1;
+
+    /**
+     * Milestone 5 Task 2.3: Oceanic age-subsidence coefficient (m/sqrt(My)).
+     * Controls depth increase with crust age: depth = BaseDepth + Coeff × sqrt(age).
+     * Default 350.0 m/sqrt(My) (empirical formula from paper).
+     */
+    UPROPERTY()
+    double OceanicAgeSubsidenceCoeff = 350.0;
+
+    /**
+     * Milestone 5 Task 2.3: Enable oceanic dampening model.
+     * Default false for backward compatibility. Set true to activate seafloor smoothing.
+     */
+    UPROPERTY()
+    bool bEnableOceanicDampening = false;
+
+    /**
+     * Milestone 6 Task 2.1: Enable Stage B oceanic amplification (transform faults, fine detail).
+     * Paper default: true. Disable when profiling CPU-only baselines.
+     */
+    UPROPERTY()
+    bool bEnableOceanicAmplification = true;
+
+    /**
+     * Milestone 6 Task 2.1: Ridge amplitude applied to transform faults (meters).
+     * Acts as a scalar multiplier for the procedural oceanic amplification noise.
+     */
+    UPROPERTY()
+    double OceanicFaultAmplitude = 150.0;
+
+    /**
+     * Milestone 6 Task 2.1: Spatial frequency for transform fault noise (unitless).
+     * Higher values yield denser fault bands, lower values produce broader ridges.
+     */
+    UPROPERTY()
+    double OceanicFaultFrequency = 0.05;
+
+    /**
+     * Milestone 6 Task 2.1: Exponential age falloff constant for ridge noise (1/My).
+     * Controls how quickly transform fault detail fades as crust ages. Default 0.02 ≈ 50 My e-folding.
+     */
+    UPROPERTY()
+    double OceanicAgeFalloff = 0.02;
+
+    /**
+     * Milestone 6 Task 2.2: Enable Stage B continental amplification (exemplar-based terrain synthesis).
+     * Paper default: true. Disable when profiling CPU-only baselines.
+     */
+    UPROPERTY()
+    bool bEnableContinentalAmplification = true;
+
+    /**
+     * Milestone 6 Task 3.1: Stream-power hydraulic erosion constant (m/My).
+     * Multiplies A^m * S^n to yield erosion per mega-year. Paper plan defaults to 0.002.
+     */
+    UPROPERTY()
+    double HydraulicErosionConstant = 0.002;
+
+    /** Milestone 6 Task 3.1: Flow accumulation exponent (m in stream power law). */
+    UPROPERTY()
+    double HydraulicAreaExponent = 0.5;
+
+    /** Milestone 6 Task 3.1: Slope exponent (n in stream power law). */
+    UPROPERTY()
+    double HydraulicSlopeExponent = 1.0;
+
+    /**
+     * Milestone 6 Task 3.1: Fraction of eroded material transported to downstream neighbor.
+     * Remaining fraction redeposits locally to conserve mass.
+     */
+    UPROPERTY()
+    double HydraulicDownstreamDepositRatio = 0.5;
+
+    /**
+     * Milestone 6 Task 3.1: Enable hydraulic erosion pass on amplified terrain.
+     * Paper default: true (valley carving enabled). Disable to profile Stage B without erosion cost.
+     */
+    UPROPERTY()
+    bool bEnableHydraulicErosion = true;
+
+    /**
+     * Milestone 6 Task 2.1: Minimum render subdivision level for amplification.
+     * Amplification only applies at LOD levels >= this value (prevents wasted computation at low LOD).
+     * Default 5 (10,242 vertices, high-detail preview per plan).
+     */
+    UPROPERTY()
+    int32 MinAmplificationLOD = 5;
+
+    /**
+     * Milestone 6 Task 2.1: Number of adjacency rings marked dirty around ridge boundaries.
+     * Controls how many neighbor layers refresh when boundary motion occurs. Higher values smooth
+     * transitions but touch more vertices. Default 2 provides a 1-hop safety margin beyond
+     * boundary edges.
+     */
+    UPROPERTY()
+    int32 RidgeDirectionDirtyRingDepth = 1;
+
+    /**
+     * Angular distance threshold (radians) for using cached ridge tangents.
+     * Vertices farther than this from a divergent boundary fall back to gradient estimation.
+     */
+    UPROPERTY()
+    double RidgeBoundaryInfluenceRadians = FMath::DegreesToRadians(25.0);
+
+    /** STG-06: Active orogeny proximity threshold (radians, ~750 km @ Earth scale). */
+    UPROPERTY()
+    double ConvergentProximityRadActive = 0.12;
+
+    /** STG-06: Nascent orogeny proximity threshold (radians). */
+    UPROPERTY()
+    double ConvergentProximityRadNascent = 0.25;
+
+    /** STG-06: Fold direction validity epsilon. */
+    UPROPERTY()
+    double FoldValidityEps = 1e-6;
+
+    /** STG-06: Log fold direction coverage every N steps (0 = every step). */
+    UPROPERTY()
+    int32 FoldDirectionLogIntervalSteps = 5;
+};
+
+struct FOceanicAmplificationSnapshot
+{
+    FTectonicSimulationParameters Parameters;
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters UnifiedParameters;
+    int32 RenderLOD = INDEX_NONE;
+    int32 TopologyVersion = INDEX_NONE;
+    int32 SurfaceVersion = INDEX_NONE;
+    uint64 SnapshotId = 0;
+    uint64 DataSerial = 0;
+    uint32 InputHash = 0;
+    int32 VertexCount = 0;
+    TArray<float> BaselineElevation;
+    TArray<FVector4f> RidgeDirections;
+    TArray<float> CrustAge;
+    TArray<FVector3f> RenderPositions;
+    TArray<uint32> OceanicMask;
+    TArray<int32> PlateAssignments;
+
+    bool IsConsistent() const
+    {
+        return VertexCount > 0 &&
+            BaselineElevation.Num() == VertexCount &&
+            RidgeDirections.Num() == VertexCount &&
+            CrustAge.Num() == VertexCount &&
+            RenderPositions.Num() == VertexCount &&
+            OceanicMask.Num() == VertexCount &&
+            PlateAssignments.Num() == VertexCount;
+    }
+};
+
+struct FContinentalAmplificationSnapshot
+{
+    TArray<float> BaselineElevation;
+    TArray<FVector3f> RenderPositions;
+    TArray<FContinentalAmplificationCacheEntry> CacheEntries;
+    TArray<int32> PlateAssignments;
+    TArray<double> AmplifiedElevation;
+    FTectonicSimulationParameters Parameters;
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters UnifiedParameters;
+    uint64 DataSerial = 0;
+    int32 TopologyVersion = INDEX_NONE;
+    int32 SurfaceVersion = INDEX_NONE;
+    int32 VertexCount = 0;
+    uint32 Hash = 0;
+
+    bool IsConsistent() const
+    {
+        return VertexCount > 0 &&
+            BaselineElevation.Num() == VertexCount &&
+            RenderPositions.Num() == VertexCount &&
+            CacheEntries.Num() == VertexCount &&
+            PlateAssignments.Num() == VertexCount &&
+            AmplifiedElevation.Num() == VertexCount;
+    }
+};
+
+struct FHydraulicErosionGPUInputs
+{
+    TArray<float> AmplifiedElevation;
+    TArray<float> CrustAge;
+    TArray<int32> DownhillIndices;
+    TArray<int32> SortedVertexOrder;
+    int32 CachedVertexCount = 0;
+    uint64 CachedDataSerial = 0;
+    int32 CachedSurfaceVersion = INDEX_NONE;
+    int32 CachedTopologyVersion = INDEX_NONE;
+};
+
+
+/**
+ * Milestone 5 Phase 3: Unit conversion helper - meters to Unreal Engine centimeters.
+ *
+ * UE uses centimeters as base unit. All simulation logic operates in meters for geological accuracy.
+ * This helper enforces the conversion at render boundaries to prevent magnitude errors.
+ *
+ * @param Meters Distance or dimension in meters
+ * @return Distance in Unreal Engine centimeters (1 m = 100 cm)
+ */
+FORCEINLINE float MetersToUE(double Meters)
+{
+    return static_cast<float>(Meters * 100.0); // 1 meter = 100 centimeters
+}
+
+USTRUCT(BlueprintType)
+struct FStageBVertexSample
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    int32 VertexIndex = INDEX_NONE;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    double LongitudeDeg = 0.0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    double LatitudeDeg = 0.0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Stage B")
+    double ElevationMeters = 0.0;
+};
+
+/**
+ * Editor-only subsystem that holds the canonical tectonic simulation state.
+ * The state uses double precision so long-running editor sessions avoid drift.
+ */
+UCLASS()
+class UTectonicSimulationService : public UUnrealEditorSubsystem
+{
+    GENERATED_BODY()
+
+public:
+    friend bool PlanetaryCreation::GPU::ApplyStageBUnifiedGPU(UTectonicSimulationService& Service, bool bDispatchOceanic, bool bDispatchContinental, PlanetaryCreation::GPU::FStageBUnifiedDispatchResult& OutResult);
+
+    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+    virtual void Deinitialize() override;
+
+    /** Resets the simulation to the initial baseline. */
+    void ResetSimulation();
+
+    /** Advance the simulation by the requested number of steps (each 2 My). */
+    void AdvanceSteps(int32 StepCount);
+
+
+    /** Returns the accumulated tectonic time in mega-years. */
+    double GetCurrentTimeMy() const { return CurrentTimeMy; }
+
+    /** Returns the last step time in milliseconds (Milestone 3 Task 4.5). */
+    double GetLastStepTimeMs() const { return LastStepTimeMs; }
+    const FStageBProfile& GetLatestStageBProfile() const { return LatestStageBProfile; }
+
+    /** Accessor for the base sphere samples used to visualize placeholder geometry. */
+    const TArray<FVector3d>& GetBaseSphereSamples() const { return BaseSphereSamples; }
+
+    /** Accessor for plates (Milestone 2). */
+    const TArray<FTectonicPlate>& GetPlates() const { return Plates; }
+
+    /** Non-const accessor for plates (for test manipulation). */
+    TArray<FTectonicPlate>& GetPlatesForModification() { return Plates; }
+
+    /** Accessor for shared vertex pool (Milestone 2). */
+    const TArray<FVector3d>& GetSharedVertices() const { return SharedVertices; }
+
+    /** Accessor for render mesh vertices (Milestone 3 - separate from simulation vertices). */
+    const TArray<FVector3d>& GetRenderVertices() const { return RenderVertices; }
+
+    /** Accessor for render mesh triangle indices (Milestone 3). */
+    const TArray<int32>& GetRenderTriangles() const { return RenderTriangles; }
+
+    /** Skip CPU Stage B amplification passes when GPU preview handles displacement. */
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    void SetSkipCPUAmplification(bool bInSkip);
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    bool IsSkippingCPUAmplification() const { return Parameters.bSkipCPUAmplification; }
+    void SetForceHydraulicErosionDisabled(bool bDisabled);
+    bool IsForceHydraulicErosionDisabled() const { return bForceHydraulicErosionDisabled; }
+
+    /** Accessor for vertex-to-plate assignments (Milestone 3 Phase 2). */
+    const TArray<int32>& GetVertexPlateAssignments() const { return VertexPlateAssignments; }
+
+    /** Accessor for per-vertex velocity vectors (Milestone 3 Task 2.2). */
+    const TArray<FVector3d>& GetVertexVelocities() const { return VertexVelocities; }
+
+    /** Accessor for per-vertex stress values (Milestone 3 Task 2.3, cosmetic). */
+    const TArray<double>& GetVertexStressValues() const { return VertexStressValues; }
+
+    /** Milestone 4 Task 2.3: Accessor for per-vertex temperature values (K). */
+    const TArray<double>& GetVertexTemperatureValues() const { return VertexTemperatureValues; }
+
+    /** Milestone 5 Task 2.1: Accessor for per-vertex elevation values (meters). */
+    const TArray<double>& GetVertexElevationValues() const { return VertexElevationValues; }
+
+    /** Milestone 5 Task 2.1: Accessor for per-vertex erosion rates (m/My). */
+    const TArray<double>& GetVertexErosionRates() const { return VertexErosionRates; }
+
+    /** Milestone 5 Task 2.2: Accessor for per-vertex sediment thickness (meters). */
+    const TArray<double>& GetVertexSedimentThickness() const { return VertexSedimentThickness; }
+
+    /** Milestone 5 Task 2.3: Accessor for per-vertex crust age (My). */
+    const TArray<double>& GetVertexCrustAge() const { return VertexCrustAge; }
+    TArray<double>& GetMutableVertexCrustAge() { return VertexCrustAge; }
+
+    /** Milestone 6 Task 2.1: Accessor for per-vertex amplified elevation (Stage B, meters). */
+    const TArray<double>& GetVertexAmplifiedElevation() const { return VertexAmplifiedElevation; }
+    TArray<double>& GetMutableVertexAmplifiedElevation() { return VertexAmplifiedElevation; }
+    const FHydraulicErosionGPUInputs& GetHydraulicGPUInputs() const;
+
+    /** Milestone 6 Task 3.1: Last-step hydraulic erosion mass metrics (meters). */
+    double GetLastHydraulicTotalEroded() const { return LastHydraulicTotalEroded; }
+    double GetLastHydraulicTotalDeposited() const { return LastHydraulicTotalDeposited; }
+    double GetLastHydraulicLostToOcean() const { return LastHydraulicLostToOcean; }
+
+    EStageBAmplificationReadyReason GetStageBAmplificationNotReadyReason() const { return StageBReadyReason; }
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    FString GetStageBAmplificationReadyDescription() const;
+    FOnStageBAmplificationReadyChanged& OnStageBAmplificationReadyChanged() { return StageBReadyChangedDelegate; }
+    void ForceStageBAmplificationRebuild(const TCHAR* Context);
+    void LogStageBRescueSummary(const PlanetaryCreation::StageB::FStageBRescueSummary& Summary);
+
+    const TArray<int32>& GetRenderVertexAdjacencyOffsets() const { return RenderVertexAdjacencyOffsets; }
+    const TArray<int32>& GetRenderVertexAdjacency() const { return RenderVertexAdjacency; }
+
+    struct FRenderVertexBoundaryInfo
+    {
+        float DistanceRadians = TNumericLimits<float>::Max();
+        FVector3d BoundaryTangent = FVector3d::ZeroVector;
+        int32 SourcePlateID = INDEX_NONE;
+    int32 OpposingPlateID = INDEX_NONE;
+    bool bHasBoundary = false;
+    bool bIsDivergent = false;
+};
+
+    /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
+    const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
+    const TArray<FVector3f>& GetVertexRidgeTangents() const { return VertexRidgeTangents; }
+    /** STG-06: Accessor for per-vertex fold directions (for GPU upload in STG-07). */
+    const TArray<FVector3f>& GetVertexFoldDirection() const { return VertexFoldDirection; }
+    /** STG-06: Accessor for per-vertex orogeny classification (for GPU upload in STG-07). */
+    const TArray<EOrogenyClass>& GetVertexOrogenyClass() const { return VertexOrogenyClass; }
+    bool EvaluateAnisotropyCoverage(float& OutCoveragePercent, int32& OutValidCount) const;
+    /** STG-06: Last fold direction computation time (ms). */
+    double GetLastFoldDirectionTimeMs() const { return LastFoldDirectionTimeMs; }
+    int32 GetLastRidgeDirectionUpdateCount() const { return LastRidgeDirectionUpdateCount; }
+    int32 GetLastRidgeDirtyVertexCount() const { return LastRidgeDirtyVertexCount; }
+    int32 GetLastRidgeCacheHitCount() const { return LastRidgeCacheHitCount; }
+    int32 GetLastRidgeMissingTangentCount() const { return LastRidgeMissingTangentCount; }
+    int32 GetLastRidgePoorAlignmentCount() const { return LastRidgePoorAlignmentCount; }
+    int32 GetLastRidgeGradientFallbackCount() const { return LastRidgeGradientFallbackCount; }
+    int32 GetLastRidgePlateFallbackCount() const { return LastRidgePlateFallbackCount; }
+    int32 GetLastRidgeMotionFallbackCount() const { return LastRidgeMotionFallbackCount; }
+    int32 GetLastRidgeOceanicVertexCount() const { return LastRidgeOceanicVertexCount; }
+    int32 GetLastRidgeValidTangentCount() const { return LastRidgeValidTangentCount; }
+    double GetLastRidgeTangentCoveragePercent() const { return LastRidgeTangentCoveragePercent; }
+    double GetLastRidgeCacheHitPercent() const { return LastRidgeCacheHitPercent; }
+    double GetLastRidgeGradientFallbackPercent() const { return LastRidgeGradientFallbackPercent; }
+    double GetLastRidgeMotionFallbackPercent() const { return LastRidgeMotionFallbackPercent; }
+    const FString& GetLastRidgeInvalidateContext() const { return LastRidgeInvalidateContext; }
+    bool WasLastRidgeInvalidationFullReset() const { return bLastRidgeInvalidateWasFull; }
+    int32 GetLastOceanicBaselineReuseCount() const { return LastOceanicBaselineReuseCount; }
+    int32 GetLastOceanicMaskMismatchCount() const { return LastOceanicMaskMismatchCount; }
+    bool WasOceanicCpuFallbackForcedLastStep() const { return bLastOceanicForcedCpuFallback; }
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters GetStageBUnifiedParameters() const;
+    const TArray<FRenderVertexBoundaryInfo>& GetRenderVertexBoundaryCache() const { return RenderVertexBoundaryCache; }
+
+    /** Milestone 6 GPU: Initialize GPU exemplar texture array for Stage B amplification. */
+    void InitializeGPUExemplarResources();
+
+    /** Milestone 6 GPU: Shutdown GPU exemplar texture array (cleanup on module shutdown). */
+    void ShutdownGPUExemplarResources();
+
+    /** Accessor for boundary adjacency map (Milestone 2). */
+    const TMap<TPair<int32, int32>, FPlateBoundary>& GetBoundaries() const { return Boundaries; }
+
+    /** Accessor for simulation parameters (Milestone 2). */
+    const FTectonicSimulationParameters& GetParameters() const { return Parameters; }
+
+    /** Milestone 4 Task 1.2: Accessor for topology event log. */
+    const TArray<FPlateTopologyEvent>& GetTopologyEvents() const { return TopologyEvents; }
+
+    /** Milestone 4 Task 2.1: Accessor for active hotspots. */
+    const TArray<FMantleHotspot>& GetHotspots() const { return Hotspots; }
+
+    /** Update simulation parameters and reset (Milestone 2 - Phase 3). */
+    void SetParameters(const FTectonicSimulationParameters& NewParams);
+
+    /**
+     * Milestone 6 Task 2.3: Toggle heightmap visualization without resetting simulation state.
+     * Updates cached parameters, bumps surface version for LOD cache invalidation,
+     * and leaves tectonic history untouched.
+     */
+    void SetHeightmapVisualizationEnabled(bool bEnabled);
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    void SetHeightmapPaletteMode(EHeightmapPaletteMode Mode);
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    EHeightmapPaletteMode GetHeightmapPaletteMode() const;
+    const FHeightmapExportMetrics& GetLastHeightmapExportMetrics() const { return LastHeightmapExportMetrics; }
+    const TArray<FHeightmapExportPerformanceSample>& GetHeightmapExportPerformanceHistory() const { return HeightmapExportPerformanceHistory; }
+    void SetVisualizationMode(ETectonicVisualizationMode Mode);
+    ETectonicVisualizationMode GetVisualizationMode() const { return Parameters.VisualizationMode; }
+
+    void SetHighlightSeaLevel(bool bEnabled);
+    bool IsHighlightSeaLevelEnabled() const { return bHighlightSeaLevel; }
+
+    /**
+     * Milestone 4 Phase 4.1: Toggle automatic LOD selection without resetting simulation state.
+     * Allows the editor UI to switch between camera-driven LOD and manual control.
+     */
+    void SetAutomaticLODEnabled(bool bEnabled);
+
+    /**
+     * Milestone 4 Phase 4.1: Update render subdivision level without resetting simulation state.
+     * This allows LOD changes during camera movement without destroying tectonic history.
+     * Only regenerates render mesh and Voronoi mapping; preserves plates, stress, rifts, etc.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    void SetRenderSubdivisionLevel(int32 NewLevel);
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    int32 GetRenderSubdivisionLevel() const { return Parameters.RenderSubdivisionLevel; }
+
+    bool ShouldUseGPUAmplification() const;
+    bool ApplyStageBUnifiedGPU(bool bRunOceanic, bool bRunContinental, PlanetaryCreation::GPU::FStageBUnifiedDispatchResult& OutResult);
+    bool ShouldUseGPUHydraulic() const;
+    bool ApplyHydraulicErosionGPU(double DeltaTimeMy);
+    bool IsStagePipelineStageBComplete() const;
+    void WarnIfStageBInvokedOutOfOrder(const TCHAR* Context) const;
+    void BeginStagePipelineStep(int64 StepSerial);
+    void MarkStagePipelineStageBComplete();
+    void MarkStagePipelinePostErosion();
+    UFUNCTION(BlueprintPure, Category = "Tectonic Simulation")
+    bool IsStageBAmplificationReady() const;
+
+    void ResetContinentalGPUDispatchStats();
+    const FContinentalGPUDispatchStats& GetContinentalGPUDispatchStats() const { return ContinentalGPUDispatchStats; }
+
+    /** Export current simulation metrics to CSV (Milestone 2 - Phase 4). */
+    void ExportMetricsToCSV();
+
+    /** Milestone 6 Task 1.5: Export active terrane records to CSV for lifecycle analysis. */
+    void ExportTerranesToCSV();
+
+    /** Milestone 6 Phase 2: Export paper-aligned quantitative metrics to CSV. */
+    void ExportQuantitativeMetrics();
+    const FQuantitativeMetricsSnapshot& GetLastQuantitativeMetrics() const { return LastQuantitativeMetrics; }
+
+    /** Milestone 4 Task 1.1: Re-tessellation public API. */
+
+    /** Re-tessellation snapshot structure for rollback. */
+    struct FRetessellationSnapshot
+    {
+        TArray<FVector3d> SharedVertices;
+        TArray<FVector3d> RenderVertices;
+        TArray<int32> RenderTriangles;
+        TArray<int32> VertexPlateAssignments;
+        TMap<TPair<int32, int32>, FPlateBoundary> Boundaries;
+        double TimestampMy;
+
+        /** Milestone 5: Erosion state (for rollback after failed retessellation). */
+        TArray<double> VertexElevationValues;
+        TArray<double> VertexErosionRates;
+        TArray<double> VertexSedimentThickness;
+        TArray<double> VertexCrustAge;
+
+        FRetessellationSnapshot() : TimestampMy(0.0) {}
+    };
+
+    /** Captures current state for rollback. */
+    FRetessellationSnapshot CaptureRetessellationSnapshot() const;
+
+    /** Restores state from snapshot after failed rebuild. */
+    void RestoreRetessellationSnapshot(const FRetessellationSnapshot& Snapshot);
+
+    /** Performs incremental re-tessellation for drifted plates. Returns true if successful. */
+    bool PerformRetessellation();
+
+    /** Validates re-tessellation result against snapshot. */
+    bool ValidateRetessellation(const FRetessellationSnapshot& Snapshot) const;
+
+    /** Aggregated drift/quality metrics used to determine rebuild cadence. */
+    struct FRetessellationAnalysis
+    {
+        double MaxDriftDegrees = 0.0;
+        int32 MaxDriftPlateID = INDEX_NONE;
+        double BadTriangleRatio = 0.0;
+        int32 BadTriangleCount = 0;
+        int32 TotalTriangleCount = 0;
+    };
+
+    /** Aggregated telemetry for re-tessellation cadence/throttling. */
+    struct FRetessellationCadenceStats
+    {
+        int64 StepsObserved = 0;
+        int64 StepsSpentInCooldown = 0;
+        int32 EvaluationCount = 0;
+        int32 TriggerCount = 0;
+        int32 CooldownBlocks = 0;
+        int32 StepsSinceLastTrigger = 0;
+        int32 LastTriggerInterval = 0;
+        int32 CurrentCooldownStepAccumulator = 0;
+        int32 LastCooldownDuration = 0;
+        double LastTriggerTimeMy = 0.0;
+        double LastTriggerMaxDriftDegrees = 0.0;
+        double LastTriggerBadTriangleRatio = 0.0;
+
+        void Reset()
+        {
+            StepsObserved = 0;
+            StepsSpentInCooldown = 0;
+            EvaluationCount = 0;
+            TriggerCount = 0;
+            CooldownBlocks = 0;
+            StepsSinceLastTrigger = 0;
+            LastTriggerInterval = 0;
+            CurrentCooldownStepAccumulator = 0;
+            LastCooldownDuration = 0;
+            LastTriggerTimeMy = 0.0;
+            LastTriggerMaxDriftDegrees = 0.0;
+            LastTriggerBadTriangleRatio = 0.0;
+        }
+    };
+
+    /** Compute drift/quality metrics for the currently cached render mesh. */
+    FRetessellationAnalysis ComputeRetessellationAnalysis() const;
+
+    /** Apply cadence/hysteresis rules before invoking PerformRetessellation. */
+    void MaybePerformRetessellation();
+
+    /** Force ridge direction cache to rebuild on the next Stage B pass. */
+    void InvalidateRidgeDirectionCache();
+    void MarkAllRidgeDirectionsDirty();
+    void MarkRidgeRingDirty(const TArray<int32>& SeedVertices, int32 RingDepth);
+    void EnqueueCrustAgeResetSeeds(const TArray<int32>& SeedVertices);
+    void ResetCrustAgeForSeeds(int32 RingDepth);
+
+    /** Utility helpers for terrane surgery and render mesh maintenance. */
+    void CompactRenderVertexData(const TArray<int32>& VerticesToRemove, TArray<int32>& OutOldToNew);
+    int32 AppendRenderVertexFromRecord(const FTerraneVertexRecord& Record, int32 OverridePlateID);
+    void InvalidateRenderVertexCaches();
+
+    /** Milestone 4 Task 1.1: Re-tessellation performance tracking (public for tests). */
+    double LastRetessellationTimeMs = 0.0;
+    int32 RetessellationCount = 0;
+    double LastRetessellationMaxDriftDegrees = 0.0;
+    double LastRetessellationBadTriangleRatio = 0.0;
+    int32 StepsSinceLastRetessellationCheck = 0;
+    bool bRetessellationInCooldown = false;
+
+    const FRetessellationCadenceStats& GetRetessellationCadenceStats() const { return RetessellationCadenceStats; }
+    int64 GetTotalStepsSimulated() const { return TotalStepsSimulated; }
+
+    /** Milestone 4 Phase 4.2: Version tracking for LOD cache invalidation. */
+    int32 GetTopologyVersion() const { return TopologyVersion; }
+    int32 GetSurfaceDataVersion() const { return SurfaceDataVersion; }
+
+    /** Rebuild cached render adjacency after topology or LOD changes. */
+    void BuildRenderVertexAdjacency();
+    void BuildRenderVertexReverseAdjacency();
+    void UpdateConvergentNeighborFlags();
+    void BuildRenderVertexBoundaryCache();
+    void InvalidatePlateBoundarySummaries();
+    const FPlateBoundarySummary* GetPlateBoundarySummary(int32 PlateID) const;
+    void RebuildPlateBoundarySummary(int32 PlateID, FPlateBoundarySummary& OutSummary) const;
+
+    /** Milestone 5 Task 1.3: Full simulation history snapshot for undo/redo. */
+    struct FSimulationHistorySnapshot
+    {
+        double CurrentTimeMy;
+        TArray<FTectonicPlate> Plates;
+        TArray<FVector3d> SharedVertices;
+        TArray<FVector3d> RenderVertices;
+        TArray<int32> RenderTriangles;
+        TArray<int32> VertexPlateAssignments;
+        TArray<FVector3d> VertexVelocities;
+        TArray<double> VertexStressValues;
+        TArray<double> VertexTemperatureValues;
+        TMap<TPair<int32, int32>, FPlateBoundary> Boundaries;
+        TArray<FPlateTopologyEvent> TopologyEvents;
+        TArray<FMantleHotspot> Hotspots;
+        TArray<FVector3d> InitialPlateCentroids;
+        int32 TopologyVersion;
+        int32 SurfaceDataVersion;
+
+        /** Milestone 5: Erosion state (for undo/redo). */
+        TArray<double> VertexElevationValues;
+        TArray<double> VertexErosionRates;
+        TArray<double> VertexSedimentThickness;
+        TArray<double> VertexCrustAge;
+
+        /** Milestone 6 Task 1.1: Terrane state (for undo/redo). */
+        TArray<FContinentalTerrane> Terranes;
+        int32 NextTerraneID;
+        TArray<FVector3d> VertexRidgeDirections;
+        TArray<FVector3f> VertexFoldDirection;
+        TArray<EOrogenyClass> VertexOrogenyClass;
+        TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;
+
+        FSimulationHistorySnapshot() : CurrentTimeMy(0.0), TopologyVersion(0), SurfaceDataVersion(0), NextTerraneID(0) {}
+    };
+
+    /** Milestone 5 Task 1.3: Capture current state as history snapshot. */
+    void CaptureHistorySnapshot();
+
+    /** Milestone 5 Task 1.3: Undo to previous snapshot. Returns true if successful. */
+    bool Undo();
+
+    /** Milestone 5 Task 1.3: Redo to next snapshot. Returns true if successful. */
+    bool Redo();
+
+    /** Milestone 5 Task 1.3: Check if undo is available. */
+    bool CanUndo() const { return CurrentHistoryIndex > 0; }
+
+    /** Milestone 5 Task 1.3: Check if redo is available. */
+    bool CanRedo() const { return CurrentHistoryIndex < HistoryStack.Num() - 1; }
+
+    /** Milestone 5 Task 1.3: Get current history index (for UI display). */
+    int32 GetHistoryIndex() const { return CurrentHistoryIndex; }
+
+    /** Milestone 5 Task 1.3: Get history stack size (for UI display). */
+    int32 GetHistorySize() const { return HistoryStack.Num(); }
+
+    /** Milestone 5 Task 1.3: Get snapshot at index (for UI display). */
+    const FSimulationHistorySnapshot* GetHistorySnapshotAt(int32 Index) const
+    {
+        return HistoryStack.IsValidIndex(Index) ? &HistoryStack[Index] : nullptr;
+    }
+
+    /** Milestone 5 Task 1.3: Jump to specific history index (for timeline scrubbing). */
+    bool JumpToHistoryIndex(int32 Index);
+    void RestoreRidgeCacheFromSnapshot(const FSimulationHistorySnapshot& Snapshot);
+
+    /**
+     * Milestone 6 Task 1.1: Extract terrane from continental plate.
+     * Performs mesh surgery to remove specified vertices from plate.
+     *
+     * @param SourcePlateID Plate to extract terrane from (must be continental)
+     * @param TerraneVertexIndices Render vertex indices to extract (must be contiguous region)
+     * @param OutTerraneID Unique ID assigned to newly extracted terrane
+     * @return True if extraction succeeded, false if validation failed
+     */
+    bool ExtractTerrane(int32 SourcePlateID, const TArray<int32>& TerraneVertexIndices, int32& OutTerraneID);
+
+    /**
+     * Milestone 6 Task 1.1: Reattach terrane to target plate at collision.
+     * Performs mesh surgery to merge terrane vertices into target plate.
+     *
+     * @param TerraneID Terrane to reattach (must be in Colliding state)
+     * @param TargetPlateID Plate to attach to (must be continental at convergent boundary)
+     * @return True if reattachment succeeded, false if validation failed
+     */
+    bool ReattachTerrane(int32 TerraneID, int32 TargetPlateID);
+
+    /**
+     * Milestone 6 Task 1.1: Validate mesh topology after terrane operation.
+     * Checks Euler characteristic, manifold edges, and orphaned vertices.
+     *
+     * @param OutErrorMessage Detailed error description if validation fails
+     * @return True if topology is valid, false otherwise
+     */
+    bool ValidateTopology(FString& OutErrorMessage) const;
+
+    /**
+     * Milestone 6 Task 1.1: Compute area of terrane region (km²).
+     * Uses spherical triangle formula on render mesh.
+     *
+     * @param VertexIndices Render vertices comprising terrane
+     * @return Area in km² (0 if invalid region)
+     */
+    double ComputeTerraneArea(const TArray<int32>& VertexIndices) const;
+
+    /** Milestone 6 Task 1.1: Accessor for active terranes. */
+    const TArray<FContinentalTerrane>& GetTerranes() const { return Terranes; }
+
+    /** Milestone 6 Task 1.1: Get terrane by ID (nullptr if not found). */
+    const FContinentalTerrane* GetTerraneByID(int32 TerraneID) const;
+
+    /** Access cached float SoA streams for render vertices (position + normal). */
+    void GetRenderVertexFloatSoA(
+        const TArray<float>*& OutPositionX,
+        const TArray<float>*& OutPositionY,
+        const TArray<float>*& OutPositionZ,
+        const TArray<float>*& OutNormalX,
+        const TArray<float>*& OutNormalY,
+        const TArray<float>*& OutNormalZ,
+        const TArray<float>*& OutTangentX,
+        const TArray<float>*& OutTangentY,
+        const TArray<float>*& OutTangentZ) const;
+
+    /** Access cached float inputs required by the oceanic amplification GPU path. */
+    void GetOceanicAmplificationFloatInputs(
+        const TArray<float>*& OutBaselineElevation,
+        const TArray<FVector4f>*& OutRidgeDirections,
+        const TArray<float>*& OutCrustAge,
+        const TArray<FVector3f>*& OutRenderPositions,
+        const TArray<uint32>*& OutOceanicMask) const;
+
+    /** Build a deterministic snapshot for the continental amplification GPU dispatch. */
+    bool CreateContinentalAmplificationSnapshot(FContinentalAmplificationSnapshot& OutSnapshot) const;
+
+    const FContinentalAmplificationGPUInputs& GetContinentalAmplificationGPUInputs() const;
+    const TArray<FContinentalAmplificationCacheEntry>& GetContinentalAmplificationCacheEntries() const;
+    const FContinentalCacheProfileMetrics& GetLastContinentalCacheProfileMetrics() const { return LastContinentalCacheProfileMetrics; }
+#if UE_BUILD_DEVELOPMENT
+    void ForceContinentalSnapshotSerialDrift();
+    void ResetAmplifiedElevationForTests();
+    void SetForceStageBGPUReplayForTests(bool bEnabled);
+    bool GetForceStageBGPUReplayForTests() const { return bForceStageBGPUReplayForTests; }
+#endif
+    void SetStageBUnifiedDebugVertexIndex(int32 VertexIndex);
+    int32 GetStageBUnifiedDebugVertexIndex() const;
+
+    /** Pump pending GPU readbacks; optionally block until all are ready. */
+    void ProcessPendingOceanicGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
+    void ProcessPendingContinentalGPUReadbacks(bool bBlockUntilComplete = false, double* OutReadbackSeconds = nullptr);
+
+    /** Accessor for the current oceanic amplification serial (primarily for GPU snapshot validation). */
+    uint64 GetOceanicAmplificationDataSerial() const { return OceanicAmplificationDataSerial; }
+
+#if WITH_EDITOR
+    void EnqueueOceanicGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback, TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback, int32 VertexCount, FOceanicAmplificationSnapshot&& Snapshot, int32 DebugVertexIndex);
+    void EnqueueContinentalGPUJob(TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback,
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback,
+        int32 VertexCount,
+        int32 WorkCount,
+        TSharedPtr<TArray<uint32>, ESPMode::ThreadSafe> WorkIndices,
+        FContinentalAmplificationSnapshot&& Snapshot);
+#endif
+
+    /**
+     * Milestone 6 Task 1.2: Assign extracted terrane to nearest oceanic carrier plate.
+     * Called automatically after extraction to initiate transport phase.
+     *
+     * @param TerraneID Terrane to assign carrier to
+     * @return True if carrier assigned successfully
+     */
+    bool AssignTerraneCarrier(int32 TerraneID);
+
+    /**
+     * Milestone 6 Task 1.2: Update terrane positions based on carrier plate motion.
+     * Called each step to migrate terranes with their carrier plates.
+     */
+    void UpdateTerranePositions(double DeltaTimeMy);
+
+    /**
+     * Milestone 6 Task 1.2: Detect terranes approaching continental convergent boundaries.
+     * Marks terranes as Colliding when within 500 km of collision.
+     */
+    void DetectTerraneCollisions();
+
+    /**
+     * Milestone 6 Task 1.3: Automatically reattach colliding terranes to target continental plates.
+     * Called each step after collision detection to complete terrane lifecycle.
+     */
+    void ProcessTerraneReattachments();
+
+#if UE_BUILD_DEVELOPMENT
+    /** Development-only spike hook: perform terrane mesh surgery on the current render mesh. */
+    void RunTerraneMeshSurgerySpike();
+
+    /** Development helper: log plate/elevation mismatches for early diagnostics. */
+    void LogPlateElevationMismatches(const TCHAR* ContextLabel, int32 SampleCount = 128, int32 MaxLogged = 16) const;
+#endif
+
+    /**
+     * Export heightmap visualization as color-coded PNG with elevation gradient.
+     * @param ImageWidth Width of output image in pixels (default 2048)
+     * @param ImageHeight Height of output image in pixels (default 1024)
+     * @return Path to exported PNG file, or empty string on failure
+     */
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    FString ExportHeightmapVisualization(int32 ImageWidth = 2048, int32 ImageHeight = 1024);
+    UFUNCTION(BlueprintCallable, Category = "Tectonic Simulation")
+    TArray<FStageBVertexSample> GatherStageBVertexSamplesInBounds(double WestLongitudeDeg, double EastLongitudeDeg, double SouthLatitudeDeg, double NorthLatitudeDeg) const;
+    void SetAllowUnsafeHeightmapExport(bool bInAllowUnsafe);
+    bool IsUnsafeHeightmapExportAllowed() const { return bAllowUnsafeHeightmapExport; }
+
+private:
+    void SetStageBAmplificationReady(bool bReady, EStageBAmplificationReadyReason Reason, const TCHAR* Context);
+    void TryMarkStageBReady(const TCHAR* Context);
+    bool HasPendingStageBGPUJobs() const;
+    const TCHAR* PipelinePhaseToString(EStagePipelinePhase Phase) const;
+
+    void GenerateDefaultSphereSamples();
+
+    /** Phase 1 Task 1: Generate icosphere-based plate tessellation. */
+    void GenerateIcospherePlates();
+
+    /** Phase 1 Task 2: Assign Euler poles to plates. */
+    void InitializeEulerPoles();
+
+    /** Phase 1 Task 3: Build boundary adjacency map from icosphere topology. */
+    void BuildBoundaryAdjacencyMap();
+
+    /** Phase 1 Task 1 helper: Subdivide icosphere to target plate count. */
+    void SubdivideIcosphere(int32 SubdivisionLevel);
+
+    /** Milestone 3 Task 1.1: Generate high-density render mesh from base icosphere. */
+    void GenerateRenderMesh(const TCHAR* RidgeInvalidateContext = TEXT("GenerateRenderMesh"));
+
+    /** Milestone 3 Task 1.1 helper: Subdivide a triangle by splitting edges. */
+    int32 GetMidpointIndex(int32 V0, int32 V1, TMap<TPair<int32, int32>, int32>& MidpointCache, TArray<FVector3d>& Vertices);
+
+    /** Milestone 3 Task 2.1: Build Voronoi mapping from render vertices to plates. */
+    void BuildVoronoiMapping();
+
+    /** Milestone 3 Task 2.2: Compute per-vertex velocity field (v = ω × r). */
+    void ComputeVelocityField();
+
+    /** Milestone 3 Task 2.3: Update stress at boundaries (cosmetic visualization). */
+    void UpdateBoundaryStress(double DeltaTimeMy);
+
+    /** Milestone 3 Task 2.3: Interpolate boundary stress to render vertices (Gaussian falloff). */
+    void InterpolateStressToVertices();
+
+    /** Milestone 3 Task 3.1: Apply Lloyd relaxation to evenly distribute plate centroids. */
+    void ApplyLloydRelaxation();
+
+    /** Milestone 3 Task 3.3: Check if plates have drifted beyond re-tessellation threshold. */
+    void CheckRetessellationNeeded();
+
+    /** Phase 1 Task 1 helper: Validate solid angle coverage ≈ 4π. */
+    void ValidateSolidAngleCoverage();
+
+    /** Phase 2 Task 4: Migrate plate centroids using Euler pole rotations. */
+    void MigratePlateCentroids(double DeltaTimeMy);
+
+    /** Phase 2 Task 5: Update boundary classifications based on relative velocities. */
+    void UpdateBoundaryClassifications();
+
+    /** Milestone 4 Task 1.2: Detect and execute plate splits (rift-driven). */
+    void DetectAndExecutePlateSplits();
+
+    /** Milestone 4 Task 1.2: Detect and execute plate merges (subduction-driven). */
+    void DetectAndExecutePlateMerges();
+
+    /** Milestone 4 Task 1.2: Execute plate split along divergent boundary. */
+    bool SplitPlate(int32 PlateID, const TPair<int32, int32>& BoundaryKey, const FPlateBoundary& Boundary);
+
+    /** Milestone 4 Task 1.2: Execute plate merge (consume smaller plate into larger). */
+    bool MergePlates(int32 ConsumedPlateID, int32 SurvivorPlateID, const TPair<int32, int32>& BoundaryKey, const FPlateBoundary& Boundary);
+
+    /** Milestone 4 Task 1.2: Calculate plate area (spherical triangles). */
+    double ComputePlateArea(const FTectonicPlate& Plate) const;
+
+    /** Milestone 4 Task 1.3: Update boundary lifecycle states (Nascent/Active/Dormant). */
+    void UpdateBoundaryStates(double DeltaTimeMy);
+
+    /** Milestone 4 Task 2.1: Generate hotspot seeds deterministically. */
+    void GenerateHotspots();
+
+    /** Milestone 4 Task 2.1: Update hotspot positions in mantle frame (drift over time). */
+    void UpdateHotspotDrift(double DeltaTimeMy);
+
+    /** Milestone 6 Task 1.5: Deterministically generate a terrane identifier. */
+    int32 GenerateDeterministicTerraneID(int32 SourcePlateID, double ExtractionTimeMy, const TArray<int32>& SortedVertexIndices, int32 Salt) const;
+
+    /** Milestone 4 Task 2.1: Apply hotspot thermal contribution to plate stress/elevation. */
+    void ApplyHotspotThermalContribution();
+
+    /** Milestone 4 Task 2.2: Update rift progression for divergent boundaries. */
+    void UpdateRiftProgression(double DeltaTimeMy);
+
+    /** Milestone 4 Task 2.3: Compute thermal field from hotspots and subduction zones. */
+    void ComputeThermalField();
+
+    /** Milestone 5 Task 2.1: Apply continental erosion to vertices above sea level. */
+    void ApplyContinentalErosion(double DeltaTimeMy);
+
+    /** Milestone 5 Task 2.2: Redistribute sediment via diffusion (Stage 0, mass-conserving). */
+    void ApplySedimentTransport(double DeltaTimeMy);
+
+    /** Milestone 6 Task 3.1: Apply hydraulic erosion on amplified terrain (Stage B). */
+    void ApplyHydraulicErosion(double DeltaTimeMy);
+
+    /** Milestone 5 Task 2.3: Apply oceanic dampening and age-subsidence to seafloor. */
+    void ApplyOceanicDampening(double DeltaTimeMy);
+
+    /** Milestone 5: Helper to compute surface slope at vertex (for erosion rate). */
+    double ComputeVertexSlope(int32 VertexIdx) const;
+
+    /** Milestone 6 Task 2.1: Compute ridge directions for all oceanic vertices. */
+    void ComputeRidgeDirections();
+    /** STG-06: Compute fold directions and classify orogeny state for render vertices. */
+    void ComputeFoldDirectionsAndClasses();
+    void RecordRidgeCacheInvalidation(const TCHAR* Context, bool bFullReset, int32 DirtyCount, const TCHAR* Details = nullptr);
+    void RecordRidgeTerraneEvent(const TCHAR* Phase, int32 TerraneID, int32 VertexCountBefore, int32 VertexCountAfter);
+    void OnExemplarAtlasLoaded(uint64 AtlasFingerprint, const TCHAR* Context);
+    /** Milestone 6 Task 2.1: Recompute ridge directions if dirty or topology changed. Returns true when recomputed. */
+    bool RefreshRidgeDirectionsIfNeeded();
+
+    /** Milestone 6 Task 2.1: Apply Stage B oceanic amplification (transform faults, fine detail). */
+    void ApplyOceanicAmplification();
+
+    /** Milestone 6 Task 2.2: Apply Stage B continental amplification (exemplar-based terrain synthesis). */
+    void ApplyContinentalAmplification();
+
+    /** STG-00: Temporary isotropic Stage B amplification spike (noise × age/ridge falloff). */
+    bool ShouldUseTemporaryIsotropicStageB() const;
+    void ApplyTemporaryIsotropicStageBAmplification(double& OutOceanicCpuSeconds, bool& OutSurfaceDataChanged);
+
+    /** Ensures VertexAmplifiedElevation starts from the latest base elevation before Stage B passes. */
+    void InitializeAmplifiedElevationBaseline();
+    /** Ensure Stage B data structures (crust age, ridge directions, amplified buffers) are sized before running amplification. */
+    void EnsureStageBPrimed();
+    void RefreshHydraulicGPUInputs() const;
+
+    /** Rebuilds Stage B amplification for the current render LOD without advancing simulation time. */
+    void RebuildStageBForCurrentLOD();
+
+    /** Drops any pending Stage B GPU readbacks that no longer match the active render mesh. */
+    void DiscardOutdatedStageBGPUJobs(int32 ExpectedVertexCount);
+
+    double CurrentTimeMy = 0.0;
+    double LastStepTimeMs = 0.0; // Milestone 3 Task 4.5: Performance tracking
+    FStageBProfile LatestStageBProfile;
+    int64 TotalStepsSimulated = 0;
+    FRetessellationCadenceStats RetessellationCadenceStats;
+    TArray<FVector3d> BaseSphereSamples;
+
+    /** Milestone 2 state (Phase 1). */
+    UPROPERTY()
+    FTectonicSimulationParameters Parameters;
+
+    TArray<FTectonicPlate> Plates;
+    TArray<FVector3d> SharedVertices; // Shared vertex pool for plate polygons (simulation)
+    TMap<TPair<int32, int32>, FPlateBoundary> Boundaries; // Key: (PlateA_ID, PlateB_ID), sorted
+
+    /** Milestone 3: Separate render mesh geometry (high-density, independent from simulation). */
+    TArray<FVector3d> RenderVertices;
+    TArray<int32> RenderTriangles; // Triplets of indices into RenderVertices
+    TArray<int32> VertexPlateAssignments; // Maps each RenderVertex index to a Plate ID (Voronoi cell)
+    TArray<FVector3d> VertexVelocities; // Velocity vector (v = ω × r) for each RenderVertex (Task 2.2)
+    TArray<double> VertexStressValues; // Interpolated stress (MPa) for each RenderVertex (Task 2.3, cosmetic)
+    TArray<double> VertexTemperatureValues; // Milestone 4 Task 2.3: Thermal field (K) from hotspots + subduction
+
+    /** Milestone 5 Task 2.1: Per-vertex elevation (meters) relative to sphere surface. */
+    TArray<double> VertexElevationValues;
+
+    /** Milestone 5 Task 2.1: Per-vertex erosion rate (m/My) for visualization/CSV export. */
+    TArray<double> VertexErosionRates;
+
+    /** Milestone 5 Task 2.2: Per-vertex sediment thickness (meters) from erosion redistribution. */
+    TArray<double> VertexSedimentThickness;
+
+    /** Milestone 5 Task 2.3: Per-vertex oceanic crust age (My) for age-subsidence calculations. */
+    TArray<double> VertexCrustAge;
+
+    /** Milestone 6 Task 2.1: Per-vertex ridge direction (for transform fault orientation). */
+    TArray<FVector3d> VertexRidgeDirections;
+    /** Milestone 6 Task 2.1: Cached per-vertex ridge tangents (prepared for Stage B anisotropy). */
+    TArray<FVector3f> VertexRidgeTangents;
+    /** STG-06: Per-vertex fold direction (unit tangent along folds, or ZeroVector if invalid). */
+    TArray<FVector3f> VertexFoldDirection;
+    /** STG-06: Per-vertex orogeny classification. */
+    TArray<EOrogenyClass> VertexOrogenyClass;
+
+    /** Milestone 6 Task 2.1: Per-vertex amplified elevation (Stage B, meters). */
+    TArray<double> VertexAmplifiedElevation;
+
+    /** Milestone 6 Task 3.1: Hydraulic erosion working buffers (reused each step). */
+    TArray<int32> HydraulicDownhillNeighbor;
+    TArray<float> HydraulicFlowAccumulation;
+    TArray<float> HydraulicErosionBuffer;
+    TArray<float> HydraulicSelfDepositBuffer;
+    TArray<float> HydraulicDownstreamDepositBuffer;
+    TArray<int32> HydraulicUpstreamCount;
+    TArray<int32> HydraulicProcessingQueue;
+    double LastHydraulicTotalEroded = 0.0;
+    double LastHydraulicTotalDeposited = 0.0;
+    double LastHydraulicLostToOcean = 0.0;
+    mutable FHydraulicErosionGPUInputs HydraulicGPUInputs;
+
+    /** Optional sealevel emphasis toggle (visual only). */
+    bool bHighlightSeaLevel = false;
+    /** Cached palette mode for exporter/UI wiring. */
+    EHeightmapPaletteMode HeightmapPaletteMode = EHeightmapPaletteMode::AbsoluteHypsometric;
+    /** Metrics from the most recent heightmap export. */
+    FHeightmapExportMetrics LastHeightmapExportMetrics;
+    TArray<FHeightmapExportPerformanceSample> HeightmapExportPerformanceHistory;
+    FQuantitativeMetricsSnapshot LastQuantitativeMetrics;
+    static constexpr int32 MaxHeightmapPerformanceSamples = 8;
+
+    /** Cached render vertex adjacency (CSR layout: Offsets.Num == RenderVertices.Num + 1). */
+    TArray<int32> RenderVertexAdjacencyOffsets;
+    TArray<int32> RenderVertexAdjacency;
+    TArray<float> RenderVertexAdjacencyWeights;
+    TArray<float> RenderVertexAdjacencyWeightTotals;
+    TArray<int32> RenderVertexReverseAdjacency;
+    TArray<uint8> ConvergentNeighborFlags;
+
+    /** Pending seeds for crust age reset near divergent boundaries. */
+    TArray<int32> PendingCrustAgeResetSeeds;
+    TBitArray<> PendingCrustAgeResetMask;
+
+    TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;
+    /** Metrics from the most recent Voronoi rebuild for ridge dirtying heuristics. */
+    int32 LastVoronoiReassignedCount = 0;
+    bool bLastVoronoiForcedFullRidgeUpdate = false;
+    /** Last Voronoi plate assignments captured for incremental ridge updates. */
+    TArray<int32> CachedVoronoiAssignments;
+    /** Skip flag to avoid immediately refreshing Voronoi the step after reset. */
+    bool bSkipNextVoronoiRefresh = false;
+
+    /** Cadence counter for Voronoi refresh. */
+    int32 StepsSinceLastVoronoiRefresh = 0;
+
+    /** Milestone 3 Task 3.3: Initial plate centroid positions (captured after Lloyd relaxation). */
+    TArray<FVector3d> InitialPlateCentroids;
+
+    /** Milestone 4 Task 1.2: Log of plate topology change events (splits/merges). */
+    TArray<FPlateTopologyEvent> TopologyEvents;
+
+    /** Milestone 4 Task 2.1: Active mantle hotspots/plumes. */
+    TArray<FMantleHotspot> Hotspots;
+
+    /** Milestone 6 Task 1.1: Active continental terranes (extracted/transporting/colliding). */
+    TArray<FContinentalTerrane> Terranes;
+
+    /** Milestone 6 Task 1.1: Next terrane ID for deterministic generation. */
+    int32 NextTerraneID = 0;
+
+    /** Milestone 4 Phase 4.2: Topology version (increments on re-tessellation/split/merge). */
+    int32 TopologyVersion = 0;
+
+    /** Milestone 4 Phase 4.2: Surface data version (increments on stress/elevation changes). */
+    int32 SurfaceDataVersion = 0;
+
+    /** Milestone 5 Task 1.3: History stack for undo/redo (limited to 100 snapshots by default). */
+    TArray<FSimulationHistorySnapshot> HistoryStack;
+
+    /** Milestone 5 Task 1.3: Current position in history stack (for undo/redo navigation). */
+    int32 CurrentHistoryIndex = -1;
+
+    /** Milestone 5 Task 1.3: Maximum history size (prevents unbounded memory growth). */
+    int32 MaxHistorySize = 100;
+
+    /** Stage pipeline status (Stage A → Stage B → erosion). */
+    EStagePipelinePhase StagePipelinePhase = EStagePipelinePhase::Idle;
+    int64 StagePipelineStepSerial = -1;
+
+#if WITH_AUTOMATION_TESTS
+public:
+    void SetHeightmapExportTestOverrides(bool bInForceModuleFailure, bool bInForceWriteFailure = false, const FString& InOverrideOutputDirectory = FString());
+
+    void ForceRidgeRecomputeForTest() { ComputeRidgeDirections(); }
+    void ForceRidgeRingDirtyForTest(const TArray<int32>& SeedVertices, int32 RingDepth);
+    void SetVertexCrustAgeForTest(int32 VertexIdx, double Age);
+    int32 GetPendingOceanicGPUJobCount() const;
+    const TArray<FContinentalBlendCache>& GetContinentalAmplificationBlendCacheForTests() const { return ContinentalAmplificationBlendCache; }
+
+private:
+    bool bForceHeightmapModuleFailure = false;
+    bool bForceHeightmapWriteFailure = false;
+    FString HeightmapExportOverrideDirectory;
+#endif
+
+    bool bAllowUnsafeHeightmapExport = false;
+
+    /** Mutable caches to avoid recomputing float mirrors on every call. */
+    mutable FRenderVertexFloatSoA RenderVertexFloatSoA;
+    mutable FOceanicAmplificationFloatInputs OceanicAmplificationFloatInputs;
+    mutable FContinentalAmplificationGPUInputs ContinentalAmplificationGPUInputs;
+    mutable TArray<FContinentalAmplificationCacheEntry> ContinentalAmplificationCacheEntries;
+    mutable TArray<FContinentalBlendCache> ContinentalAmplificationBlendCache;
+    mutable FContinentalCacheProfileMetrics LastContinentalCacheProfileMetrics;
+    mutable double LastContinentalCacheBuildSeconds = 0.0;
+    bool bContinentalGPUResultWasApplied = false;
+#if UE_BUILD_DEVELOPMENT
+    bool bForceStageBGPUReplayForTests = false;
+#endif
+    mutable FRidgeDirectionFloatSoA RidgeDirectionFloatSoA;
+    mutable TMap<int32, FPlateBoundarySummary> PlateBoundarySummaries;
+    mutable int32 PlateBoundarySummaryTopologyVersion = INDEX_NONE;
+
+    /** Monotonic serial tracking modifications to amplification inputs. */
+    uint64 OceanicAmplificationDataSerial = 1;
+    uint64 NextOceanicSnapshotId = 1;
+    mutable uint64 ContinentalAmplificationCacheSerial = 0;
+    mutable uint64 ContinentalAmplificationCacheOverridesHash = 0;
+    mutable int32 ContinentalAmplificationCacheTopologyVersion = INDEX_NONE;
+    mutable int32 ContinentalAmplificationCacheSurfaceVersion = INDEX_NONE;
+
+    /** Ridge direction cache bookkeeping. */
+    mutable TBitArray<> RidgeDirectionDirtyMask;
+    mutable int32 RidgeDirectionDirtyCount = 0;
+    mutable int32 CachedRidgeDirectionTopologyVersion = INDEX_NONE;
+    mutable int32 CachedRidgeDirectionVertexCount = 0;
+    mutable int32 LastRidgeDirectionUpdateCount = 0;
+    mutable int32 LastRidgeDirtyVertexCount = 0;
+    mutable int32 LastRidgeCacheHitCount = 0;
+    mutable int32 LastRidgeMissingTangentCount = 0;
+    mutable int32 LastRidgePoorAlignmentCount = 0;
+    mutable int32 LastRidgeGradientFallbackCount = 0;
+    mutable int32 LastRidgePlateFallbackCount = 0;
+    mutable int32 LastRidgeMotionFallbackCount = 0;
+    mutable int32 LastRidgeOceanicVertexCount = 0;
+    mutable int32 LastRidgeValidTangentCount = 0;
+    mutable double LastRidgeTangentCoveragePercent = 0.0;
+    int32 LastOceanicBaselineReuseCount = 0;
+    int32 LastOceanicMaskMismatchCount = 0;
+    bool bLastOceanicForcedCpuFallback = false;
+
+    FContinentalGPUDispatchStats ContinentalGPUDispatchStats;
+    bool bStageBAmplificationReady = false;
+    EStageBAmplificationReadyReason StageBReadyReason = EStageBAmplificationReadyReason::NoRenderMesh;
+    FOnStageBAmplificationReadyChanged StageBReadyChangedDelegate;
+    void EmitStageBValidationPlanTelemetry(int32 RenderVertexCount);
+
+    bool bUseIsotropicStageBSpike = true;
+    bool bLoggedIsotropicStageBNotice = false;
+    bool bForceHydraulicErosionDisabled = true;
+    bool bLoggedHydraulicDisableNotice = false;
+    bool bStageBValidationPlanLogged = false;
+    FString LastRidgeInvalidateContext = TEXT("Init");
+    bool bLastRidgeInvalidateWasFull = true;
+    int32 LastRidgeInvalidateVertexEstimate = 0;
+    double LastRidgeCacheHitPercent = 100.0;
+    double LastRidgeGradientFallbackPercent = 0.0;
+    double LastRidgeMotionFallbackPercent = 0.0;
+    double LastFoldDirectionTimeMs = 0.0;
+    double LastFoldCoveragePercent = 0.0;
+    int32 StepsSinceLastFoldLog = 0;
+    bool bLastRidgeCacheHealthOk = true;
+    uint64 LastExemplarAtlasFingerprint = 0;
+#if UE_BUILD_DEVELOPMENT
+    int32 StageBUnifiedDebugVertexIndex = 23949;
+#endif
+
+#if WITH_EDITOR
+    struct FOceanicGPUAsyncJob
+    {
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback;
+        TSharedPtr<FRHIGPUTextureReadback, ESPMode::ThreadSafe> TextureReadback;
+        FRenderCommandFence DispatchFence;
+        FRenderCommandFence CopyFence;
+        int32 NumBytes = 0;
+        int32 DebugNumBytes = 0;
+        int32 VertexCount = 0;
+        uint64 JobId = 0;
+        bool bCopySubmitted = false;
+        bool bCpuReplayApplied = false;
+        FOceanicAmplificationSnapshot Snapshot;
+        int32 DebugVertexIndex = INDEX_NONE;
+#if UE_BUILD_DEVELOPMENT
+        FVector4f DebugMetrics = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+        bool bDebugMetricsValid = false;
+#endif
+    };
+
+    TArray<FOceanicGPUAsyncJob> PendingOceanicGPUJobs;
+    uint64 NextOceanicGPUJobId = 1;
+    TArray<TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>> OceanicReadbackPool;
+    int32 NextOceanicReadbackIndex = 0;
+
+    struct FContinentalGPUAsyncJob
+    {
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> Readback;
+        TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> DebugReadback;
+        TSharedPtr<FRHIGPUTextureReadback, ESPMode::ThreadSafe> TextureReadback;
+        FRenderCommandFence DispatchFence;
+        FRenderCommandFence CopyFence;
+        int32 NumBytes = 0;
+        int32 DebugNumBytes = 0;
+        int32 VertexCount = 0;
+        int32 WorkCount = 0;
+        uint64 JobId = 0;
+        bool bCopySubmitted = false;
+        FContinentalAmplificationSnapshot Snapshot;
+        TSharedPtr<TArray<uint32>, ESPMode::ThreadSafe> WorkIndices;
+#if UE_BUILD_DEVELOPMENT
+        TArray<FVector4f> DebugData;
+        bool bDebugDataValid = false;
+        bool bTextureDataLogged = false;
+#endif
+    };
+
+    TArray<FContinentalGPUAsyncJob> PendingContinentalGPUJobs;
+    uint64 NextContinentalGPUJobId = 1;
+    TArray<TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>> ContinentalReadbackPool;
+    int32 NextContinentalReadbackIndex = 0;
+    int32 PendingOceanicSerialBumps = 0;
+
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer();
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer();
+    uint64 AllocateOceanicSnapshotId();
+    bool EnsureLatestOceanicSnapshotApplied();
+    bool IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
+    bool IsContinentalReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>& Readback) const;
+
+#else
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireOceanicGPUReadbackBuffer() { return nullptr; }
+    TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe> AcquireContinentalGPUReadbackBuffer() { return nullptr; }
+    uint64 AllocateOceanicSnapshotId() { return 0; }
+    bool EnsureLatestOceanicSnapshotApplied() { return false; }
+    bool IsOceanicReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>&) const { return false; }
+    bool IsContinentalReadbackInFlight(const TSharedPtr<FRHIGPUBufferReadback, ESPMode::ThreadSafe>&) const { return false; }
+#endif
+
+    void RefreshRenderVertexFloatSoA() const;
+    void RefreshOceanicAmplificationFloatInputs() const;
+    void InvalidateOceanicAmplificationFloatInputs();
+    void RefreshContinentalAmplificationGPUInputs() const;
+    void RefreshContinentalAmplificationCache() const;
+    void BumpOceanicAmplificationSerial();
+    void EnsureRidgeDirtyMaskSize(int32 VertexCount) const;
+    bool MarkRidgeDirectionVertexDirty(int32 VertexIdx);
+    double ComputeContinentalAmplificationFromCache(int32 VertexIdx, const FVector3d& Position, double BaseElevation_m,
+        const FContinentalAmplificationCacheEntry& CacheEntry, const FString& ProjectContentDir, int32 Seed,
+        const PlanetaryCreation::StageB::FStageB_UnifiedParameters& UnifiedParams);
+};
+#if WITH_EDITOR
+class FRHIGPUBufferReadback;
+#endif

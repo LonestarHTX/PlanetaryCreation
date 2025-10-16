@@ -1,8 +1,8 @@
 // Milestone 4 Task 2.2: Rift Propagation Model Test
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 /**

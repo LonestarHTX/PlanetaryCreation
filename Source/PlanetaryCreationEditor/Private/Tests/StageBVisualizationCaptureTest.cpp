@@ -6,8 +6,8 @@
 #include "Editor.h"
 #include "HAL/IConsoleManager.h"
 
-#include "TectonicSimulationController.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationController.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"
 
 namespace StageBVisualization

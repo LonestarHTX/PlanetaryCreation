@@ -1,9 +1,9 @@
 // Milestone 6 Task 2.2: Continental Amplification Automation Test
 // Validates exemplar-based terrain synthesis, terrain type classification, and continental detail
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FContinentalAmplificationTest,
     "PlanetaryCreation.Milestone6.ContinentalAmplification",

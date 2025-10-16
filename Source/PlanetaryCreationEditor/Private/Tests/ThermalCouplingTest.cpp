@@ -1,8 +1,8 @@
 // Milestone 4 Task 2.3: Thermal & Stress Coupling Test
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 /**

@@ -1,7 +1,7 @@
 #include "Tests/RidgeTestHelpers.h"
 
-#include "PlanetaryCreationLogging.h"
-#include "TectonicSimulationService.h"
+#include "Utilities/PlanetaryCreationLogging.h"
+#include "Simulation/TectonicSimulationService.h"
 
 #include "Containers/Queue.h"
 

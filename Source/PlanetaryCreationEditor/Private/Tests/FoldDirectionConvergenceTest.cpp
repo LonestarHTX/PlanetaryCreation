@@ -1,7 +1,7 @@
 #include "Misc/AutomationTest.h"
 #include "Algo/Count.h"
 #include "Misc/ScopeExit.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFoldDirectionConvergenceTest,

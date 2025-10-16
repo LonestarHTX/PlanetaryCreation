@@ -1,10 +1,10 @@
 // Copyright 2025 Michael Hall. All Rights Reserved.
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicPlaybackController.h"
-#include "TectonicSimulationController.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicPlaybackController.h"
+#include "Simulation/TectonicSimulationController.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 /**

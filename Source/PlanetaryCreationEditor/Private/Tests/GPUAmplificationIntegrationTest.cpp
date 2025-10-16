@@ -1,9 +1,9 @@
 // Milestone 6 GPU: Integration Smoke Test
 // Validates GPU amplification produces finite results across multi-step simulations at high LOD
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "HAL/IConsoleManager.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"
 

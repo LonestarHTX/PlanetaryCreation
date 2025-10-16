@@ -1,8 +1,8 @@
 // Milestone 5 Task 3.1: Long-Duration Stress Test
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 #include "HAL/PlatformMemory.h"
 

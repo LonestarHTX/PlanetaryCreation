@@ -1,7 +1,7 @@
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
-#include "TectonicSimulationController.h"
-#include "PlanetaryCreationLogging.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationController.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "RHI.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"
 

@@ -1,8 +1,8 @@
 // Milestone 6 Task 1.5: Terrane Serialization & Persistence Test
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 /**

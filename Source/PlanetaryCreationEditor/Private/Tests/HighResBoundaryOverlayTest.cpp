@@ -1,9 +1,9 @@
 // Milestone 4 Task 3.1: High-Resolution Boundary Overlay Test
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
-#include "TectonicSimulationController.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationController.h"
 #include "Editor.h"
 
 namespace PlanetaryCreation::OverlayDiagnostics

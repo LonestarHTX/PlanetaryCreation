@@ -1,12 +1,12 @@
 // Milestone 6 GPU: Continental Amplification GPU vs CPU Parity Test
 // Scaffolded placeholder until continental shader is ready (AddExpectedError to suppress failures)
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "HAL/IConsoleManager.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"
-#include "OceanicAmplificationGPU.h"
+#include "StageB/OceanicAmplificationGPU.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGPUContinentalAmplificationTest,
     "PlanetaryCreation.Milestone6.GPU.ContinentalParity",

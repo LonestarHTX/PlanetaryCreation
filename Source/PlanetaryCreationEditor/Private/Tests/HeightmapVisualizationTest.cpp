@@ -1,7 +1,7 @@
 // Milestone 6: Heightmap Visualization Test
 // Generates color-coded PNG showing elevation gradient
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
@@ -10,8 +10,8 @@
 #include "Modules/ModuleManager.h"
 #include "IImageWrapperModule.h"
 #include "IImageWrapper.h"
-#include "TectonicSimulationController.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationController.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHeightmapVisualizationTest,

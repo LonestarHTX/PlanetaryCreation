@@ -68,18 +68,18 @@ An Unreal Engine 5.5 **editor tool** (not a game) that implements the "Procedura
    - Canonical simulation state (double-precision)
    - Advances in 2 My (million year) steps per paper spec
    - Manages Stage B amplification, terrane lifecycle, surface processes
-   - Location: `Source/PlanetaryCreationEditor/Public/TectonicSimulationService.h`
+   - Location: `Source/PlanetaryCreationEditor/Public/Simulation/TectonicSimulationService.h`
 
 2. **`FTectonicSimulationController`** (Non-UObject Bridge)
    - Converts double → float for rendering
    - Spawns/updates RealtimeMeshActor in editor world
    - Manages GPU preview pipeline
-   - Location: `Source/PlanetaryCreationEditor/Public/TectonicSimulationController.h`
+   - Location: `Source/PlanetaryCreationEditor/Public/Simulation/TectonicSimulationController.h`
 
 3. **`SPTectonicToolPanel`** (Slate UI)
    - Editor toolbar panel with Step button, visualization controls
    - Terrane export, undo/redo, playback controls
-   - Location: `Source/PlanetaryCreationEditor/Private/SPTectonicToolPanel.cpp`
+   - Location: `Source/PlanetaryCreationEditor/Private/UI/SPTectonicToolPanel.cpp`
 
 ### Data Flow
 ```

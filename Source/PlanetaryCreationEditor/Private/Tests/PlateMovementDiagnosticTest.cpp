@@ -1,8 +1,8 @@
 // Diagnostic test to investigate plate movement freeze at 114 Myr
 
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
-#include "TectonicSimulationController.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationController.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPlateMovementDiagnosticTest,
     "PlanetaryCreation.Milestone6.Debug.PlateMovementDiagnostic",

@@ -1,6 +1,6 @@
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationController.h"
+#include "Simulation/TectonicSimulationController.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTectonicSimulationSmokeTest, "PlanetaryCreation.Tectonics.Smoke", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

@@ -1,7 +1,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "HAL/IConsoleManager.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStageBAnisotropySanityTest,

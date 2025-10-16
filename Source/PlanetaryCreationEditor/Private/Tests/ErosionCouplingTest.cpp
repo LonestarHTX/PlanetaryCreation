@@ -1,8 +1,8 @@
 // Milestone 6 Task 3.2: Hydraulic erosion coupling (age-based) test
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 
 #include "Editor.h"
 

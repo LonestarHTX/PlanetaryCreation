@@ -1,9 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
-#include "TectonicSimulationController.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationController.h"
 #include "Editor.h"
 
 /**

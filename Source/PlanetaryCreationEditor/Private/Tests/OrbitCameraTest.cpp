@@ -1,8 +1,8 @@
 // Copyright 2025 Michael Hall. All Rights Reserved.
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "OrbitCameraController.h"
+#include "UI/OrbitCameraController.h"
 #include "GameFramework/Actor.h"
 #include "Editor.h"
 

@@ -1,8 +1,8 @@
 #include "Misc/AutomationTest.h"
 
 #if WITH_EDITOR
-#include "TectonicSimulationService.h"
-#include "PlanetaryCreationLogging.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Math/UnrealMathUtility.h"
 #include "Math/NumericLimits.h"
 #endif

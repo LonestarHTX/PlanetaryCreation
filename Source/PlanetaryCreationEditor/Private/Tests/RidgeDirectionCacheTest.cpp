@@ -1,6 +1,6 @@
 #include "Misc/AutomationTest.h"
-#include "PlanetaryCreationLogging.h"
-#include "TectonicSimulationService.h"
+#include "Utilities/PlanetaryCreationLogging.h"
+#include "Simulation/TectonicSimulationService.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRidgeDirectionCacheTest,
     "PlanetaryCreation.StageB.RidgeDirectionCache",

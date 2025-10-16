@@ -1,12 +1,12 @@
 // Milestone 6 GPU: Oceanic Amplification GPU vs CPU Parity Test
 // Validates GPU compute path produces identical results to CPU baseline within tolerance
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/ScopeExit.h"
-#include "OceanicAmplificationGPU.h"
+#include "StageB/OceanicAmplificationGPU.h"
 #include "Tests/PlanetaryCreationAutomationGPU.h"
 
 double ComputeOceanicAmplification(const FVector3d& Position, int32 PlateID, double CrustAge_My, double BaseElevation_m,

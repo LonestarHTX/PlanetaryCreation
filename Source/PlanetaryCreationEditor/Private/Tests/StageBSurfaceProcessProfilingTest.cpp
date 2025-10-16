@@ -2,7 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "HAL/IConsoleManager.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStageBSurfaceProcessProfilingTest,
     "PlanetaryCreation.Milestone6.Perf.StageBSurfaceProcesses",

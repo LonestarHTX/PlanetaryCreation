@@ -1,6 +1,6 @@
 #include "Misc/AutomationTest.h"
-#include "SphericalKDTree.h"
-#include "TectonicSimulationService.h"
+#include "Utilities/SphericalKDTree.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 /**

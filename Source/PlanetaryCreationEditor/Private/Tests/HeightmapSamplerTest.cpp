@@ -1,9 +1,9 @@
-#include "HeightmapSampling.h"
+#include "Export/HeightmapSampling.h"
 
 #include "Misc/AutomationTest.h"
-#include "StageBAmplificationTypes.h"
-#include "TectonicSimulationService.h"
-#include "TectonicSimulationController.h"
+#include "StageB/StageBAmplificationTypes.h"
+#include "Simulation/TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationController.h"
 
 #include "Editor.h"
 

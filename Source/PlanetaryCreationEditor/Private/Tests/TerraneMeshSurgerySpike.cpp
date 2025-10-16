@@ -1,9 +1,9 @@
 // Milestone 6 Task 1.0: Terrane Mesh Surgery Spike
 // Risk mitigation: Validate mesh topology at L3 before implementing extraction/reattachment
 
-#include "PlanetaryCreationLogging.h"
+#include "Utilities/PlanetaryCreationLogging.h"
 #include "Misc/AutomationTest.h"
-#include "TectonicSimulationService.h"
+#include "Simulation/TectonicSimulationService.h"
 #include "Editor.h"
 
 /**
