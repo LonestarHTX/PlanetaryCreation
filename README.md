@@ -1,165 +1,131 @@
 # PlanetaryCreation
 
-PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectonic-plate driven world synthesis described in *Procedural Tectonic Planets* (Cordial et al.). It delivers a deterministic tectonic simulation, real-time mesh visualization via `RealtimeMeshComponent`, and researcher-friendly tooling for exploring plate dynamics step-by-step or in continuous playback.
+PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectonic-plate simulation from *Procedural Tectonic Planets*. It couples a deterministic plate solver with real-time visualization, automation, and export tooling so researchers can iterate on terrain pipelines without leaving the editor.
 
-> **Current status (Milestone 6 – Stage B Amplification & Terranes):** Oceanic GPU preview is live with parity automation, CPU/GPU amplification plumbing is in place, and Stage B detail + terrane mechanics are in active development. See [Roadmap](#roadmap--milestones) for per-milestone details.
-
----
-
-## Feature Highlights
-- **Deterministic tectonic simulation:** Double-precision plate state, repeatable split/merge, rollback history, CSV exports.
-- **Realtime mesh pipeline:** Icosphere LODs (0–6) streamed through `RealtimeMeshComponent` with async rebuilds and caching.
-- **Visualization suite:** Stress, elevation, thermal overlays; high-resolution boundary tracing; velocity vectors; GPU World Position Offset preview.
-- **Production UX:** Continuous playback, orbital camera, timeline scrubber, undo/redo history, parameter presets, automation harness.
-- **Surface weathering (Milestone 5):** Continental erosion, sediment diffusion stage 0, oceanic dampening integrated into the step loop.
-- **GPU acceleration groundwork:** Oceanic Stage B preview compute shader, parity diagnostics, async playlist for future continental + normals passes.
+> **Active focus (Milestone 6 – Stage B Amplification & Terranes):** Stage B GPU preview is functional, unified CPU/GPU amplification is nearing parity, and terrane metrics are under validation. The remaining scope tracks in `Docs/Milestones/Milestone6_Plan.md`.
 
 ---
 
-## Repository Layout
-| Path | Purpose |
-| --- | --- |
-| `Source/PlanetaryCreation` | Runtime simulation core (`UTectonicSimulationService`, automation tests). |
-| `Source/PlanetaryCreationEditor` | Editor module, organized into `Private/Simulation`, `Private/StageB`, `Private/Export`, `Private/UI`, plus shared utilities and Slate tooling. |
-| `Plugins/RealtimeMeshComponent` | Third-party mesh streaming plugin (API reference in `RealtimeMeshComponent_HowTo.md`). |
-| `Content/` | Editor assets (materials, tool UI assets, exemplar placeholders). |
-| `Docs/` | Documentation hub (`Plans/`, `Milestones/`, `GPU/`, `Heightmap/`, `Automation/`, and more). |
-| `ProceduralTectonicPlanetsPaper/` | Paper transcription (`PTP_Text.md`) and implementation alignment log. |
-| `Scripts/` | PowerShell automation wrappers (e.g., `RunMilestone3Tests.ps1`). |
-
-> **Directory refactor (2025-10-15):** Stage B amplification, sampling/export helpers, and simulation controllers now live in their own subfolders under `Source/PlanetaryCreationEditor`. Public headers mirror this layout (`Public/StageB`, `Public/Simulation`, etc.) to make ownership clearer when onboarding new contributors.
-
-> **Documentation reorg (2025-10-15):** The `Docs/` hub is now grouped by topic (Plans, Milestones, GPU, Heightmap, Automation, Performance, Reviews, Reference), and contributor guides live under the root `Handbooks/` directory. Update any personal bookmarks to the new folder layout.
+## What You Get
+- Deterministic tectonic simulation with rollback support and CSV export hooks.
+- Realtime mesh streaming (LODs 0–6) via `RealtimeMeshComponent` plus async rebuild cache.
+- Rich visualization suite: elevation/thermal overlays, stress fields, high-res boundary tracing, velocity vectors, Stage B GPU preview.
+- Stage B pipeline: oceanic & continental amplification, exemplar sampling, hydraulic tuning hooks, profiling telemetry.
+- Automation harness: headless tests, parity captures, heightmap exporter metrics, scripted exemplar processing.
+- Research-friendly UX: playback timeline, parameter presets, plate surgery tools, documented pipelines.
 
 ---
 
-## Prerequisites
-- **Unreal Engine 5.5.4** (Windows install at `C:\Program Files\Epic Games\UE_5.5`).
-- **Visual Studio 2022** with C++ workload (Windows builds).
-- **Windows 11 with WSL2 (Ubuntu)** for the provided cross-platform build commands.
-- **RealtimeMeshComponent** plugin (already included under `Plugins/`).
-- GPU with Shader Model 5.0 support for Stage B preview (falls back to CPU if unavailable).
+## Environment Checklist
+- **Unreal Engine 5.5.4** installed to `C:\Program Files\Epic Games\UE_5.5`.
+- **Visual Studio 2022** with Desktop C++ workload.
+- **Windows 11 + WSL2 (Ubuntu)** for cross-platform build/test commands.
+- **Shader Model 5.0 GPU** (falls back to CPU when unavailable).
+- `RealtimeMeshComponent` plugin (already included under `Plugins/`).
 
 ---
 
-## Initial Setup
-1. Clone the repository:
+## Quick Start
+1. Clone and enter the repo:
    ```powershell
    git clone https://github.com/<org>/PlanetaryCreation.git
    cd PlanetaryCreation
    ```
-2. (Optional) Initialize submodules if additional plugins are added later:
-   ```powershell
-   git submodule update --init --recursive
-   ```
-3. Open `Handbooks/AGENTS.md` and `Handbooks/CLAUDE.md` for role expectations and build etiquette.
-4. Review `Docs/Plans/PlanningAgentPlan.md` and `Docs/Milestones/MilestoneSummary.md` to understand scope & current milestones.
+2. Review onboarding handbooks: `Handbooks/AGENTS.md`, `Handbooks/CLAUDE.md`, `Handbooks/QUICKSTART.md`.
+3. Skim planning context: `Docs/Plans/PlanningAgentPlan.md`, `Docs/Milestones/MilestoneSummary.md`.
+4. Ensure the Milestone 6 exemplar data (StageB_SRTM90) is downloaded if you plan to touch Stage B tooling.
 
 ---
 
-## Build Instructions
-### WSL-friendly (recommended for C++/Slate changes)
-```bash
-"/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe" \
-  PlanetaryCreationEditor Win64 Development \
-  -project="C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject" \
-  -WaitMutex -FromMsBuild
-```
-
-### Windows (VS Developer Command Prompt or PowerShell)
-```powershell
-"C:\Program Files\Epic Games\UE_5.5\Engine\Build\BatchFiles\Build.bat" \
-  PlanetaryCreationEditor Win64 Development \
-  -project="%CD%\PlanetaryCreation.uproject"
-```
-
-### Regenerate Project Files after module changes
-```powershell
-"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles
-```
-
-> **Tip:** If builds fail with DLL lock errors after automation runs, terminate stale commandlets: `cmd.exe /c "tasklist | findstr /i Unreal"` then `taskkill /F /PID <PID>` before rebuilding.
+## Building
+- **Preferred (WSL)**  
+  ```bash
+  "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe" \
+    PlanetaryCreationEditor Win64 Development \
+    -project="C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject" \
+    -WaitMutex -FromMsBuild
+  ```
+- **Windows shell**  
+  ```powershell
+  "C:\Program Files\Epic Games\UE_5.5\Engine\Build\BatchFiles\Build.bat" `
+    PlanetaryCreationEditor Win64 Development `
+    -project="%CD%\PlanetaryCreation.uproject"
+  ```
+- **Regenerate project files**  
+  ```powershell
+  "C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles
+  ```
+- If a build fails after automation, kill stale `UnrealEditor-Cmd.exe` (see `Handbooks/QUICKSTART.md#build-recovery`).
 
 ---
 
-## Running the Editor Tool
-```powershell
-"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor.exe" \
-  "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject"
-```
-- The **Planetary Creation** toolbar exposes playback, stepping, and GPU preview toggles.
-- GPU Preview Mode (Milestone 6) applies Stage B displacement through a WPO material while keeping CPU topology intact.
+## Running & Development Loops
+- Launch editor:
+  ```powershell
+  "C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor.exe" `
+    "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject"
+  ```
+- Switch between paper defaults and lean baseline:  
+  `r.PlanetaryCreation.PaperDefaults 1` (full Stage B) / `r.PlanetaryCreation.PaperDefaults 0` (Milestone 5 baseline).
+- Stage B throttling during GPU automation: `-SetCVar=r.PlanetaryCreation.StageBThrottleMs=50`.
+- Heightmap exports use `Scripts/ExportHeightmap1024.py` (safe) and `Scripts/ExportHeightmap4096Force.py` (unsafe; follow crash guidance in `Docs/Heightmap/heightmap_export_review.md`).
 
 ---
 
 ## Automation & Testing
-| Purpose | Command |
-| --- | --- |
-| Milestone 3 regression + quantitative metrics (CSV in `Saved/Metrics`) | `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 -ArchiveLogs` |
-| Targeted automation (headless) | `"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" PlanetaryCreation.uproject -ExecCmds="Automation RunTests PlanetaryCreation" -TestExit="Automation Test Queue Empty" -unattended -nop4 -nosplash` |
-| GPU parity smoke | `Automation RunTests PlanetaryCreation.Milestone6.GPU` (from in-editor console or commandlet) |
-
-Logs live under `Saved/Logs/PlanetaryCreation.log`. Tail/search patterns from WSL:
-```bash
-find "Saved/Logs" -name "*.log" -type f -printf '%T@ %p\n' | sort -n | tail -1
-```
-```bash
-grep -E "Test Completed|Result=|Error:" Saved/Logs/PlanetaryCreation.log
-```
-
-Automation suites auto-skip GPU-reliant tests when `GDynamicRHI` reports `NullDrv`.
-
----
-
-## Documentation Index
-- **Contributor handbooks:** `Handbooks/AGENTS.md`, `Handbooks/CLAUDE.md`, `Handbooks/QUICKSTART.md`
-- **Roadmap & milestones:** `Docs/Milestones/MilestoneSummary.md`, `Docs/Plans/PlanningAgentPlan.md`
-- **Performance baselines:** `Docs/Performance/Performance_M4.md`, `Docs/Performance/Performance_M5.md`
-- **GPU preview stack:** `Docs/GPU/gpu_preview_implementation_notes.md`, `Docs/GPU/gpu_preview_integration_complete.md`, `Docs/GPU/gpu_preview_optimizations.md`, `Docs/GPU/gpu_system_review.md`
-- **Simulation/paper alignment:** `ProceduralTectonicPlanetsPaper/PTP_Text.md` (transcribed paper) and `PTP_ImplementationAlignment.md`
-- **Testing:** `Docs/Automation/GPU_Test_Suite.md`, plus automation sources under `Source/PlanetaryCreation/Private/Tests`
-- **How-to references:** `RealtimeMeshComponent_HowTo.md`, `Docs/Reference/ParameterQuickReference.md`
+- **Milestone 3 regression:**  
+  `powershell.exe -ExecutionPolicy Bypass -File ".\Scripts\RunMilestone3Tests.ps1" -ArchiveLogs`
+- **General automation suite:**  
+  ```powershell
+  powershell.exe -Command "& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' `
+    'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' `
+    -ExecCmds='Automation RunTests PlanetaryCreation' `
+    -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log"
+  ```
+- **GPU parity suites:**  
+  Require real RHI, throttle ≥25 ms. Suites live under `PlanetaryCreation.Milestone6.GPU.*`.
+- **Log inspection:**  
+  `powershell -Command "Get-Content 'Saved/Logs/PlanetaryCreation.log' | Select-String 'Result={Success}'"`
+- Automation outputs (metrics, parity figures) now write under `Docs/Automation/Validation/`.
 
 ---
 
-## Roadmap & Milestones
-| Milestone | Status | Highlights |
-| --- | --- | --- |
-| 0 – Pre-Production | ✅ Complete | Paper review, glossary, feasibility analysis. |
-| 1 – Tooling & Infrastructure | ✅ Complete | Editor module scaffold, toolbar, automation seed. |
-| 2 – Simulation Core | ✅ Complete | Deterministic plate simulation, CSV exports. |
-| 3 – Geometry Integration | ✅ Complete | Icosphere LODs, stress/elevation overlays, async mesh pipeline. |
-| 4 – Dynamic Tectonics & Visual Fidelity | ✅ Complete (2025-10-04) | Re-tess engine, hotspot/rift lifecycle, LOD caching, 17/18 tests green. |
-| 5 – Production Readiness & Weathering | ✅ Complete (2025-10-04) | Continuous playback, orbital camera, erosion/sediment, 6.32 ms L3 step. |
-| 6 – Stage B Amplification & Terranes | 🚧 In Progress | GPU preview pipeline, terrane extraction & Stage B detail, SIMD/GPU optimisation, Level 7 parity. |
-| 7 – Presentation & Material Polish | 📝 Planned | Biome-aware materials, cinematic capture, advanced camera flows. |
-| 8 – Climate & Hydrosphere Coupling | 📝 Planned | Sea-level response, climate overlays, hydrology.
-| 9 – Shipping & Cinematic Polish | 📝 Planned | Final optimisation, console-class budgets, release packaging. |
-
-Milestone retrospectives and detailed plans live in `Docs/Milestones/` (see `*_Plan.md` / `*_CompletionSummary.md` for each milestone).
+## Project Layout (Top Level)
+- `Source/PlanetaryCreation` – runtime module scaffolding plus shared automation.
+- `Source/PlanetaryCreationEditor` – editor module organized by concern (`Private/StageB`, `Private/Simulation`, `Private/Export`, `Private/UI`, `Private/Visualization`, etc.).
+- `Plugins/RealtimeMeshComponent` – upstream plugin dependency.
+- `Content` – editor assets (materials, tool UI content, exemplar placeholders).
+- `Scripts` – build, automation, exemplar-processing scripts (Python/PowerShell).
+- `StageB_SRTM90` – exemplar source tiles (`raw/`, `cropped/`, `metadata/`).
+- `Handbooks` – contributor guides, quickstart, implementation summary.
+- `Docs` – topic-based documentation hub (see below).
 
 ---
 
-## Troubleshooting
-- **Plates appear frozen in GPU preview:** See `Docs/GPU/gpu_preview_plate_colors_fix.md`; verify vertex colors aren’t forced to elevation mode.
-- **Automation hangs on GPU readback:** Apply the fence strategy in `Docs/GPU/gpu_readback_fix_plan.md` and ensure commandlets tick `ProcessPendingOceanicGPUReadbacks(true)`.
-- **Perf spikes after enabling GPU preview:** Confirm `bSkipCPUAmplification` is true (Milestone 6 optimisation) and check `Docs/GPU/gpu_system_review.md` for sediment/dampening hotspots.
-- **Stale UnrealEditor-Cmd.exe locks:** Kill with `taskkill /F` before relaunching builds.
+## Documentation Map
+- **Handbooks:** `Handbooks/` (roles, quickstart, style guidance).
+- **Plans & Milestones:** `Docs/Plans/`, `Docs/Milestones/` (roadmaps, retros, release notes).
+- **Stage B & Heightmaps:** `Docs/Heightmap/` (export overhaul, parity plan, exemplar guides).
+- **GPU Preview & Compute:** `Docs/GPU/` (implementation notes, parity investigations, optimization logs).
+- **Automation:** `Docs/Automation/` (test quickstart, validation outputs, parity captures).
+- **Performance:** `Docs/Performance/` (milestone metrics, profiling notes).
+- **Reviews & Research:** `Docs/Reviews/` and `Docs/Research/` for audit findings and paper alignment.
+- **Reference:** `Docs/Reference/` (parameter cheat sheets, licenses).
 
 ---
 
-## Contributing & Workflow
-- Follow role guidance in `Handbooks/AGENTS.md`, coding standards in `Handbooks/CLAUDE.md`, and Unreal C++ style (4 spaces, prefix classes with A/U/F/I, `.generated.h` last in headers).
-- New runtime mesh experiments belong under `Plugins/RealtimeMeshComponent`; wrap experimental GPU paths in `#if UE_BUILD_DEVELOPMENT` until production-ready.
-- Place automation tests in `Source/PlanetaryCreation/Private/Tests`.
-- Update relevant docs (milestone plan/summary, performance logs) alongside code changes.
-- Use deterministic seeds and capture performance metrics when touching simulation or GPU code paths.
+## Troubleshooting Snapshot
+- **Blank GPU preview:** confirm Stage B ready latch (`LogPlanetaryCreation`, `[StageB][Profile]`) and see `Docs/GPU/gpu_preview_plate_colors_fix.md`.
+- **Automation hang:** verify no lingering `UnrealEditor-Cmd.exe`; rerun with `-TestExit="Automation Test Queue Empty"`.
+- **Heightmap export crash:** never exceed 512×256 without explicit approval; documented incidents in `Docs/Heightmap/heightmap_overhaul_relaunch.md`.
+- **GPU automation TDRs:** use `-AllowGPUAutomation` only on certified hardware and throttle ≥25 ms (50 ms for full parity suites).
 
 ---
 
-## Credits & Ownership
-- **Simulation Lead:** Michael (tectonic modeling, validation)
-- **Tooling & Rendering Engineers:** See `Docs/Milestones/MilestoneSummary.md` for per-milestone ownership.
-- **Automated documentation:** Maintained alongside milestone completion artifacts.
+## Ownership & Support
+- Simulation lead: Michael (tectonic modeling & validation).
+- Tooling/rendering owners per milestone: see `Docs/Milestones/MilestoneSummary.md`.
+- Planning cadence and workstream checkpoints: `Docs/Plans/PlanningAgentPlan.md`.
+- Pair reviews, automation expectations, and build etiquette: `Handbooks/AGENTS.md`.
 
-For project coordination, reference `Docs/Plans/PlanningAgentPlan.md` and associated milestone documents. Issues, PRs, and feature ideas should link the relevant milestone scope and include validation steps (editor launch, automation suites, perf captures).
+When proposing changes, include validation commands (build + relevant automation), Stage B profiling snippets, and doc updates for any new workflows.
