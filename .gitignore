@@ -41,6 +41,24 @@ Builds/
 .DS_Store
 Thumbs.db
 
+# Repository hygiene: keep GitHub tree code-only
+/.claude/
+/.cursor/
+/BugImages/
+/Docs/
+/FeatureRequest/
+/ProceduralTectonicPlanetsPaper/
+/StageB_SRTM90/
+
+# Local media & artifacts
+/A04_hs.tif
+/Heightmap_Visualization.png
+/opentopo_key.txt
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+__pycache__/
+
 # Optional: uncomment to use Git LFS for large binary assets
 # *.uasset filter=lfs diff=lfs merge=lfs -text
 # *.umap filter=lfs diff=lfs merge=lfs -text
