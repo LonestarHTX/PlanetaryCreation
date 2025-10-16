@@ -9,6 +9,11 @@
 - Place automation tests in `Source/PlanetaryCreation/Private/Tests` once created.
 
 ## Build, Test, and Development Commands
+- **WSL wrapper rule:** Always launch Windows executables (UnrealBuildTool, UnrealEditor, PowerShell scripts, batch files) through `powershell.exe` or `cmd.exe`. Calling `"/mnt/c/..."` paths directly from bash leaves the process unprivileged and often produces the "no output" no-op we just hit.
+  ```bash
+  powershell.exe -Command "& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe' PlanetaryCreationEditor Win64 Development -project='C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' -WaitMutex -FromMsBuild"
+  ```
+- When invoking any Windows executable from the Codex CLI, set `with_escalated_permissions=true` on the `shell` call and include a one-line justification (`"Launch UnrealBuildTool from Windows"`). Skipping escalation makes the first attempt fail silently and forces a rerun.
 - The editor now boots with the full paper pipeline (LOD 5 + Stage B/GPU/PBR). Run `r.PlanetaryCreation.PaperDefaults 0` when you need the lean M5 baseline (CPU profiling, older automation).
 - Stream-power hydraulic erosion is part of the default Stage B stack and now costs ~1.7 ms at L7. Leave it enabled for parity/profiling runs; use `r.PlanetaryCreation.EnableHydraulicErosion 0` only when you explicitly need the lean M5 baseline.
 - The toggle `r.PlanetaryCreation.UseGPUHydraulic` remains available (default `1`), but the pass still runs on the optimised CPU path—no GPU compute dispatch is required.
@@ -17,6 +22,8 @@
 - Regenerate project files after module changes with `"<UE5>\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles`.
 - Run Milestone 3 automation suite (captures `PlanetaryCreation.QuantitativeMetrics.Export` and refreshes `Saved/Metrics/heightmap_export_metrics.csv` + timestamped copy under `Docs/Validation`): `powershell -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 [-ArchiveLogs]`.
 - **CRITICAL AUTOMATION FIX:** CVars must use `-SetCVar=var1=val1,var2=val2` NOT `-ExecCmds`. Setting CVars in `-ExecCmds` causes them to execute AFTER test queuing, making tests run with wrong/default settings. This was the root cause of the "tests never run" regression.
+- **Automation exit rule:** Always pass the full `.uproject` path as the first argument to `UnrealEditor-Cmd.exe` *and* include `-TestExit='Automation Test Queue Empty'`. Skipping either launches the project selector or leaves the automation controller running indefinitely.
+- **Python scripts:** Two paths exist—offline analytics scripts (`Scripts/inspect_tif.py`, `convert_to_cog_png16.py`, etc.) expect a Python env with `numpy`, `rasterio`, and friends (on Windows: `py -m venv .venv-win`, then `.\.venv-win\Scripts\Activate.ps1`, `pip install numpy rasterio`; reuse from WSL with wrappers like `powershell.exe -Command "& '.\.venv-win\Scripts\Activate.ps1'; python Scripts\inspect_tif.py StageB_SRTM90\cropped\A01.tif"` or `powershell.exe -Command "& '.\.venv-win\Scripts\Activate.ps1'; python Scripts\convert_to_cog_png16.py"`), while editor-bound scripts (`ExportHeightmap512.py`, `WarmStageBForExemplar.py`, etc.) must run via `UnrealEditor-Cmd.exe ... -ExecutePythonScript="...\Script.py"` so the `unreal` module resolves.
 - CPU-only automation (Milestone 3/5 regressions, etc.) should use `-SetCVar=r.PlanetaryCreation.PaperDefaults=0` so the run matches the lean M5 configuration.
 - GPU preview parity suites (Milestone 6): launch from Windows PowerShell via `Automation RunTests PlanetaryCreation.Milestone6.GPU`.
 - GPU automation guardrails (root cause: unthrottled Stage B parity runs triggered Windows TDR resets on developer GPUs):
@@ -107,8 +114,10 @@
   ```powershell
   & 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' \
     'C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' \
-    -ExecCmds "Automation RunTests PlanetaryCreation.Milestone6.GPU.PreviewVertexParity; Quit" \
-    -unattended -nop4 -nosplash
+    -SetCVar="r.PlanetaryCreation.StageBThrottleMs=50,r.PlanetaryCreation.PaperDefaults=1" \
+    -ExecCmds="Automation RunTests PlanetaryCreation.Milestone6.GPU.PreviewVertexParity" \
+    -TestExit="Automation Test Queue Empty" \
+    -unattended -nop4 -nosplash -log
   ```
   Running the Windows binary directly inside WSL fails with `UtilBindVsockAnyPort`; always shell out through PowerShell or `cmd.exe` on Windows when you need GPU automation.
 - Guard GPU-reliant automation with a NullRHI check so tests auto-skip when `GDynamicRHI` reports `NullDrv`.
@@ -117,10 +126,7 @@
 ## Build Expectations
 - After **any** change to Unreal C++ or Slate, run the WSL-friendly build command from `CLAUDE.md` (see below).
   ```bash
-  "/mnt/c/Program Files/Epic Games/UE_5.5/Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe" \
-    PlanetaryCreationEditor Win64 Development \
-    -project="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" \
-    -WaitMutex -FromMsBuild
+  powershell.exe -Command "& 'C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe' PlanetaryCreationEditor Win64 Development -project='C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject' -WaitMutex -FromMsBuild"
   ```
 - When invoking that command from the Codex CLI, set `with_escalated_permissions=true` on the shell call; otherwise WSL denies it with `UtilBindVsockAnyPort`. Expect build logs under `%LOCALAPPDATA%\UnrealBuildTool\Log.txt`.
 - Confirm the build **succeeds** before proceeding. If the command fails in the sandbox, rerun it immediately and include the failure reason in your summary.
