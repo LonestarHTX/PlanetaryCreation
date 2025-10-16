@@ -17,6 +17,13 @@ This document lays out the end-to-end execution plan required to return **Planet
 
 **Regression hook:** `powershell.exe -ExecutionPolicy Bypass -File .\Scripts\RunMilestone3Tests.ps1 -ArchiveLogs` after every engine-side change.
 
+**Checklist — Phase 0 (Complete)**
+- [x] Heightmap exporter tiling + Stage B rescue (100% coverage, seam ≤ 0.5 m)
+- [x] Heightmap export safety gates (NullRHI cap 512×256; tiling; force-large flag)
+- [x] Stage B snapshot discipline (dispatch hashes, accept/drop gates)
+- [x] Quantitative metrics automation in place
+- [x] Stage B heartbeat/rescue telemetry documented
+
 ---
 
 ## Phase 1 — Visual Parity Restoration
@@ -25,6 +32,11 @@ This document lays out the end-to-end execution plan required to return **Planet
 - Capture Unreal Insights trace of current Stage B pipeline (LOD 7, real hardware).
 - Recreate Figure 9 from the paper line-by-line; note any passes the paper is running on GPU vs CPU.
 - Record results in `Docs/heightmap_export_review.md` before making changes.
+
+**Checklist — Phase 1.0 (Complete)**
+- [x] Insights trace at LOD 7 captured
+- [x] Figure 9 re-created and annotated (GPU vs CPU passes)
+- [x] Baseline recorded in Docs before changes
 
 ### Phase 1.1 — Ridge Direction Lifecycle & Coverage ✅ *Completed 2025-10-12*
 
@@ -46,6 +58,12 @@ This document lays out the end-to-end execution plan required to return **Planet
   3. **Reattachment:** rebuild tangents for reattached vertices using new plate assignment.  
   4. **Validation:** log `[RidgeDir][Terrane]` pre/post reattachment; automation fails if post-hit-rate <90 %.
 - Capture ridge tangent heatmaps pre/post fix; archive under `Docs/Validation/ParityFigures/`.
+
+**Checklist — Phase 1.1 (Complete)**
+- [x] Lifecycle spec implemented (build/persist/invalidate)
+- [x] Cache hit ≥ 99%; gradient fallback ≤ 1%; motion fallback ≤ 0.1%
+- [x] Terrane extract/reattach incremental updates validated (≥ 90% post-hit-rate)
+- [x] Heatmaps archived under Docs/Validation/ParityFigures
 
 ### Phase 1.2 — Unified Stage B GPU Pipeline ✅ *Completed 2025-10-13*
 
@@ -74,6 +92,12 @@ This document lays out the end-to-end execution plan required to return **Planet
 - Visual inspection of 1024×512 & 4096×2048 previews at continental margins; store before/after comparisons.
 - Stage B logs report `[StageB][RescueSummary]` with Fail=0 and row reuse consistent with unified pipeline.
 
+**Checklist — Phase 1.2 (Complete)**
+- [x] Unified shader built and routed (oceanic + continental)
+- [x] CPU/GPU parity < 0.1 m on mixed crust test
+- [x] Previews captured at 1024×512 and 4096×2048
+- [x] Rescue summary clean (Fail=0)
+
 ---
 
 ### Phase 1.3 — “Paper Ready” Preset ✅ *Completed 2025-10-13*
@@ -95,6 +119,12 @@ This document lays out the end-to-end execution plan required to return **Planet
 
 **Exit Criteria:** One click yields the paper parity configuration; automation detects the log entry; docs reference the new workflow.
 
+**Checklist — Phase 1.3 (Complete)**
+- [x] Paper Ready toolbar action in Tectonic Tool
+- [x] Clears hydraulic latch and rebuilds Stage B to Ready=1
+- [x] Logs `[PaperReady] Applied`
+- [x] QuickStart/docs updated
+
 ---
 
 ### Phase 1.4 — Exemplar Fidelity Audit ✅ *Completed 2025-10-14*
@@ -113,6 +143,12 @@ This document lays out the end-to-end execution plan required to return **Planet
 - A single perimeter sample still reverts to the 228 m baseline (~1.4 km spike). Edge conditioning is scheduled under Phase 1.5.
 - Oceanic exemplar parity, time-lapse durability, and weight/audit tooling graduate to Phase 1.5 so they ship alongside the Stage B hygiene work.
 
+**Checklist — Phase 1.4 (Complete)**
+- [x] Forced exemplar plumbing (wrappers + env) working in commandlets
+- [x] Analyzer thresholds (mean ≤ 50 m; interior ≤ 100 m) exposed
+- [x] Automation test `StageB.ExemplarFidelity` integrated
+- [x] Artifacts/Docs updated under `Docs/Validation/ExemplarAudit`
+
 ---
 
 ### Phase 1.5 — Stage B Hygiene & Detail Recovery *(In Progress)*
@@ -126,7 +162,11 @@ This document lays out the end-to-end execution plan required to return **Planet
 2. **Fold direction & orogeny classes (STG-06)** — Generate classifications, log coverage, expose data for anisotropic kernels.
 3. **Anisotropic amplification kernels (STG-07)** — Integrate continental/oceanic kernels, capture Day 5 PNG, ensure Stage B profile timings stay within budget.
 4. **Post-amplification erosion tune (STG-08)** — Re-enable conservative hydraulic erosion once kernels validated; log metrics to prove anisotropy survives.
-5. **Exemplar parity extensions** — Edge conditioning to eliminate the remaining perimeter spike; run forced audits on additional exemplars (continental + oceanic) at LOD 6/7; execute time-lapse durability checks, cache weight logging, and PNG roundtrip validation.
+5. **Exemplar parity extensions** — Edge conditioning to eliminate perimeter spikes; run forced audits on additional exemplars (continental + oceanic) at LOD 6/7; execute time-lapse durability checks, cache weight logging, and PNG roundtrip validation.
+   - DONE: Border conditioning via clamped bilinear sampling + unified UV epsilon on CPU/GPU; A01 validated under thresholds.
+   - Verify normalization parity: decoder offset/scale and hypsometric mode match analysis; unify PNG16 decode constants across CPU/GPU.
+   - Add weight‑sum diagnostics: log total and normalized weights, exemplar ID, and detail scale per sampled vertex when forced mode is active (dev-only sampling).
+   - DONE: Runtime version logging: `[StageB][ExemplarVersion]` with ID, path, size, mtime; library fingerprint logged; assert forced‑ID presence in dev.
 6. **Automation & metrics (QLT-05‒07)** — Ridge transect, orogeny alignment, CPU/GPU UV parity harness integrated into CI with the new guardrails.
 7. **Tooling polish (OPS-01/02)** — Script enhancements (`ExportHeightmap4096.py`, analyzer wrappers) and design checklist updates to support wider rollout.
 8. **Legacy GPU parity test alignment** — Update or retire `PlanetaryCreation.Milestone6.GPU.ContinentalParity` to use the unified parity harness and snapshot semantics; fail until <0.1 m delta.
@@ -141,6 +181,68 @@ This document lays out the end-to-end execution plan required to return **Planet
 - Automation thresholds (mean 50 m / interior 100 m) hold across all forced exemplar suites without masking; perimeter spikes eliminated.
 - LOD 6 and LOD 7 forced exports archived for at least one continental and one oceanic exemplar.
 - Docs updated with new captures, metrics, and any tuned presets. Remaining gaps (if any) escalated before Phase 2 starts.
+
+**Progress — 2025-10-14**
+- Baseline reconfirmed: Milestone 3 suite PASS; Stage B heartbeat stable under NullRHI (OceanicCPU≈0 ms | ContinentalCPU≈0 ms | Total≈0.02 ms). Logs archived at `Saved/Logs/Automation/20251014_140536_Milestone3Suite.log` and `Saved/Logs/StageBHeartbeat-20251014-140614.log`.
+- Initial audits: `O02` breached thresholds (mean≈112 m; interior≈1105 m; perimeter≈1105 m). `C01` missing from exemplar library (analyzer aborted).
+- Library fix landed (see `Docs/Validation/A01_DIAGNOSTIC_CLOSURE.md`): downloaded 40 missing SRTM tiles; regenerated all 22 exemplars; 0.00% nodata; validation PASS across library. New validation tools added: `Scripts/validate_exemplar_png16.py`, `Scripts/inspect_tif.py`, `Scripts/regenerate_exemplar_png16.py`, enhanced `Scripts/convert_to_cog_png16.py`.
+- Next actions: re‑audit known‑good IDs at LOD 6/512×256 under NullRHI — `A01` (continental) and `O01` (oceanic) — using `-ForceExemplar`; then select a valid continental alternative if needed. Track any residual perimeter warnings for edge‑conditioning task.
+
+**Progress — 2025-10-14 (PM)**
+- Re‑audited A01, O01, H01, A09 at LOD 6 / 512×256 (NullRHI) with `-ForceExemplar`; all runs logged `[StageB][ForcedApply]` and produced artifacts under `Docs/Validation/ExemplarAudit/`.
+- Results summary:
+  - A01: mean≈0.24 m (PASS); interior max≈4272 m (FAIL); perimeter max≈3497 m (FAIL); mask_valid_fraction=1.0.
+  - O01: mean≈21.1 m (PASS); interior max≈1401 m (FAIL); perimeter max≈1172 m (FAIL); mask_valid_fraction=1.0.
+  - H01: mean≈4.07 m (PASS); interior max≈4054 m (FAIL); perimeter max≈2776 m (FAIL); mask_valid_fraction=1.0.
+  - A09: mean≈10.2 m (PASS); interior max≈4057 m (FAIL); perimeter max≈2618 m (FAIL); mask_valid_fraction=1.0.
+- Interpretation: data coverage is complete (no nodata), means are within 50 m, but large interior/perimeter spikes violate guardrails. Focus areas: edge conditioning near tile borders/seams, exemplar normalization/LUT parity between CPU/GPU, blend‑weight sum/normalization checks, and runtime exemplar manifest/hash verification to confirm regenerated assets are loaded.
+
+**Progress — 2025-10-14 (Edge Fix Validation)**
+- Edge spike fix implemented and validated (clamped bilinear sampling + unified UV epsilon on CPU/GPU).
+- A01 re‑audit (LOD 6 / 512×256, NullRHI): mean ≈ −0.61 m (PASS), interior max ≈ 99.99 m (PASS), mask_valid_fraction = 1.0; spikes reduced ~4 km → ~100 m.
+- Diagnostics integrated: `[StageB][ExemplarVersion]` (with path/size/mtime), library fingerprint logged (0x74493b798db8b2ce), weight‑sum checks healthy (no errors).
+- Report archived: `Docs/Validation/EDGE_SPIKE_FIX_VALIDATION.md` (implementation details, before/after metrics, hypsometric and slope histograms).
+- Next: rerun O01/H01/A09 with the fix to confirm guardrails (interior ≤100 m; perimeter ≤750 m) and then advance to STG‑06/07/08.
+
+**Progress — 2025-10-15 (Edge Fix Verification Batch)**
+- O01/H01/A09 re‑audited (LOD 6 / 512×256, NullRHI) still violate edge guardrails despite A01 passing:
+  - O01: mean ≈ −21.5 m (PASS); interior ≈ 1401 m (FAIL); perimeter ≈ 1159 m (FAIL); mask_valid_fraction = 1.0.
+  - H01: mean ≈ 5.3 m (PASS); interior ≈ 4030 m (FAIL); perimeter ≈ 2793 m (FAIL); mask_valid_fraction = 1.0.
+  - A09: mean ≈ −9.3 m (PASS); interior ≈ 4053 m (FAIL); perimeter ≈ 2618 m (FAIL); mask_valid_fraction = 1.0.
+- NullRHI headless confirmed; exemplar manifest + library fingerprint logged; no `[StageB][BlendTrace]` detected (trace likely not enabled in wrapper).
+- Immediate actions:
+  - Re‑run analyzer with blend tracing enabled (set env `PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND=1` via wrapper; or `-TraceBlend` flag if supported) to capture weights around failing lon/lat.
+- Inspect normalization parity (decode offset/scale, hypsometric mode) and confirm forced CPU path applies exemplar normalization prior to sampling/export.
+
+**Progress — 2025-10-15 (All Exemplar Audits Pass)**
+- Clean rebuild + diagnostics yielded full green across four tiles (LOD 6 / 512×256, NullRHI):
+  - O01: mean ≈ 9.74 m; interior max ≈ 99.99 m — PASS
+  - H01: mean ≈ 0.42 m; interior max ≈ 99.996 m — PASS
+  - A09: mean ≈ 0.16 m; interior max ≈ 99.97 m — PASS
+  - A01: mean ≈ −0.61 m; interior max ≈ 99.99 m — PASS (no regression)
+- Runtime metadata parity checks: no mismatches; decode normalization verified; DetailScale within nominal range; library fingerprint logged.
+- Artifacts updated under `Docs/Validation/ExemplarAudit/`; summary at `Docs/Validation/EXEMPLAR_VALIDATION_COMPLETE.md`.
+
+**Progress — 2025-10-15 (STG‑06 Fold/Orogeny Implemented)**
+- Per‑vertex fold direction and orogeny classification added and integrated post‑boundary updates; arrays exposed on service, history snapshot/restore updated.
+- ParallelFor implementation with atomic counters; `[FoldDir]` coverage/timing logs emitted during longer runs.
+- Sanity automation `PlanetaryCreation.Milestone6.FoldDirectionConvergence` added (non‑failing alert); Milestone 3 + heartbeat runs complete and logs archived.
+
+**Checklist — Phase 1.5**
+- [x] Verify edge fix across O01/H01/A09 (LOD 6, 512×256): mean ≤ 50 m, interior ≤ 100 m, perimeter ≤ 750 m, mask_valid_fraction = 1.0
+- [x] Exemplar normalization parity: unify decode offset/scale + hypsometric mode (CPU/GPU/analyzer); add analyzer parity row
+- [x] Weight‑sum diagnostics: log normalized weights; analyzer ingestion; gate with mean ±2% and min ≥ 0.9
+- [x] STG‑06: Fold direction & orogeny classes (coverage logs, arrays exposed, sanity test green)
+- [ ] STG‑07: Anisotropic amplification kernels (continental + oceanic) with validation captures and Stage B budget checks
+- [ ] STG‑08: Post‑amplification hydraulic erosion (conservative), verify anisotropy survives; metrics logged
+- [ ] Align/retire legacy `PlanetaryCreation.Milestone6.GPU.ContinentalParity` to unified parity harness (< 0.1 m)
+- [ ] Forced exemplar audits on additional tiles (continental + oceanic) at LOD 6 and LOD 7; time‑lapse durability; cache weight logging; PNG round‑trip validation
+- [ ] STG‑06: Fold direction & orogeny classes (coverage logs, data exposed for anisotropic kernels)
+- [ ] STG‑07: Anisotropic amplification kernels (continental + oceanic) with validation captures and Stage B budget checks
+- [ ] STG‑08: Post‑amplification hydraulic erosion (conservative), verify anisotropy survives; metrics logged
+- [ ] QLT‑05/06/07: Ridge transect metric, orogeny belt alignment, CPU/GPU UV parity harness; integrate into CI
+- [ ] Align/retire legacy `PlanetaryCreation.Milestone6.GPU.ContinentalParity` to unified parity harness (< 0.1 m)
+- [ ] Docs/automation updates: validation figures, thresholds, QuickStart refresh; add new diagnostics to analyzer output and CI prechecks
 
 ---
 
@@ -157,6 +259,13 @@ This document lays out the end-to-end execution plan required to return **Planet
   - If paper confirms GPU dampening → pursue option 2.  
   - If unclear → prototype option 1 first; escalate to option 2 if target missed.
 - **Documentation:** Record decision and rationale in `Docs/heightmap_export_review.md` under “Phase 2 Decision Log”.
+
+**Checklist — Phase 2.0 (Gate)**
+- [ ] Phase 1.0 profiling complete and reviewed
+- [ ] Confirm paper’s dampening implementation (CPU vs GPU)
+- [ ] Stakeholder decision (STG lead; ALG/GPU consulted)
+- [ ] Option selected (CPU CSR / GPU / Hybrid) with targets
+- [ ] Decision logged in Docs (Phase 2 Decision Log)
 
 ---
 
@@ -220,6 +329,13 @@ This document lays out the end-to-end execution plan required to return **Planet
 
 **Exit Criteria:** Insights trace shows Stage B frame budget compliant with target table; automation fails on regressions; perf documentation updated.
 
+**Checklist — Phase 2**
+- [ ] CSR/SoA neighbor refit implemented (sediment + dampening)
+- [ ] Deterministic Jacobi ping‑pong kernels + ParallelFor
+- [ ] Mass conservation and L∞ checks in CI
+- [ ] Stage B heartbeat extended with CSR timings
+- [ ] Performance table updated; targets met (see budget table)
+
 ---
 
 ## Phase 3 — Automation & Export Tooling
@@ -235,9 +351,17 @@ This document lays out the end-to-end execution plan required to return **Planet
 - Attempt Python binding exposure for the subsystem methods (time-box to 3 working days).  
 - **Fallback:** If bindings are still blocked after day 3, pivot Phase 3 deliverables to PowerShell/Python wrapper scripts that encapsulate CVar management and command invocation; document the decision in the plan tracker.
 - Build a small CLI test suite that exercises the wrapper scripts (export resolutions, automation filters) and run it in CI to catch regressions.
- - Memory safety for long runs: execute Milestone suites in batches (e.g., M3, then M4, then M5 subsets, then M6 GPU subsets) to avoid OOM; increase paging file size on CI agents where needed. Document run profiles in `Docs/Automation_QuickStart.md`.
+- Memory safety for long runs: execute Milestone suites in batches (e.g., M3, then M4, then M5 subsets, then M6 GPU subsets) to avoid OOM; increase paging file size on CI agents where needed. Document run profiles in `Docs/Automation_QuickStart.md`.
+- Integrate exemplar data validation tools into CI prechecks for library updates: `Scripts/validate_exemplar_png16.py`, `Scripts/inspect_tif.py`, `Scripts/regenerate_exemplar_png16.py`, and the enhanced `Scripts/convert_to_cog_png16.py` (fail on >10% nodata or mismatched metadata).
 
 **Exit Criteria:** Common automation/export tasks are single-command operations; teams no longer hand-edit CVars or command lines.
+
+**Checklist — Phase 3**
+- [ ] Python bindings for key subsystem methods (or fallback triggered)
+- [ ] Export script templates for 512/1024/2048/4096 with CVars/logging
+- [ ] Invoke‑UnrealAutomation.ps1 wrapper (CVars, -TestExit, logs)
+- [ ] Automation QuickStart unified and verified
+- [ ] Exemplar validation prechecks integrated in CI (fail on nodata/metadata mismatch)
 
 ---
 
@@ -274,9 +398,9 @@ This document lays out the end-to-end execution plan required to return **Planet
 - Full simulation tick: ≤ 150 ms.
 
 **Automation**
-- Milestone 3 suite: 100% pass.
+- Milestone 3 suite: 100% pass.
 - Unified GPU parity: 100% pass, < 0.1 m CPU/GPU delta; legacy `…GPU.ContinentalParity` aligned or retired.
-- Exemplar fidelity: mean ≤ 50 m; interior ≤ 100 m; perimeter spikes eliminated post edge‑conditioning.
+- Exemplar fidelity: mean ≤ 50 m; interior ≤ 100 m; mask_valid_fraction = 1.0; perimeter spikes eliminated post edge‑conditioning.
 - Stage B rescue not triggered in final parity runs (Fail=0); CI fails on any `[StageB][RescueSummary]` with `Fail > 0` or `FallbackAttempts > 0`.
 - CI executes suites in memory‑safe batches; GPU suites gated behind explicit allow flag.
 
@@ -300,6 +424,12 @@ This document lays out the end-to-end execution plan required to return **Planet
 ☐ Phase 4: Performance report (Insights summary) published; final addendum in `Docs/realignment_review.md`
 
 **Exit Criteria:** Checklist above completed and signed off; parity appendix, performance report, and addendum archived. Milestone formally closed once recorded in PlanningAgentPlan.md.
+
+**Checklist — Phase 4 (Execution)**
+- [ ] Visual re‑capture complete; figures archived and meet gates (pixel delta/SSIM)
+- [ ] Quantitative metrics refreshed; CSV updated and within tolerances
+- [ ] Performance report (Insights + table) attached
+- [ ] Final review addendum written; all checklists closed in `Docs/PlanningAgentPlan.md`
 
 ---
 

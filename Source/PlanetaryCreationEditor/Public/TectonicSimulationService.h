@@ -1066,11 +1066,28 @@ struct FTectonicSimulationParameters
      */
     UPROPERTY()
     double RidgeBoundaryInfluenceRadians = FMath::DegreesToRadians(25.0);
+
+    /** STG-06: Active orogeny proximity threshold (radians, ~750 km @ Earth scale). */
+    UPROPERTY()
+    double ConvergentProximityRadActive = 0.12;
+
+    /** STG-06: Nascent orogeny proximity threshold (radians). */
+    UPROPERTY()
+    double ConvergentProximityRadNascent = 0.25;
+
+    /** STG-06: Fold direction validity epsilon. */
+    UPROPERTY()
+    double FoldValidityEps = 1e-6;
+
+    /** STG-06: Log fold direction coverage every N steps (0 = every step). */
+    UPROPERTY()
+    int32 FoldDirectionLogIntervalSteps = 5;
 };
 
 struct FOceanicAmplificationSnapshot
 {
     FTectonicSimulationParameters Parameters;
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters UnifiedParameters;
     int32 RenderLOD = INDEX_NONE;
     int32 TopologyVersion = INDEX_NONE;
     int32 SurfaceVersion = INDEX_NONE;
@@ -1105,6 +1122,7 @@ struct FContinentalAmplificationSnapshot
     TArray<int32> PlateAssignments;
     TArray<double> AmplifiedElevation;
     FTectonicSimulationParameters Parameters;
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters UnifiedParameters;
     uint64 DataSerial = 0;
     int32 TopologyVersion = INDEX_NONE;
     int32 SurfaceVersion = INDEX_NONE;
@@ -1280,6 +1298,13 @@ public:
     /** Milestone 6 Task 2.1: Accessor for per-vertex ridge directions. */
     const TArray<FVector3d>& GetVertexRidgeDirections() const { return VertexRidgeDirections; }
     const TArray<FVector3f>& GetVertexRidgeTangents() const { return VertexRidgeTangents; }
+    /** STG-06: Accessor for per-vertex fold directions (for GPU upload in STG-07). */
+    const TArray<FVector3f>& GetVertexFoldDirection() const { return VertexFoldDirection; }
+    /** STG-06: Accessor for per-vertex orogeny classification (for GPU upload in STG-07). */
+    const TArray<EOrogenyClass>& GetVertexOrogenyClass() const { return VertexOrogenyClass; }
+    bool EvaluateAnisotropyCoverage(float& OutCoveragePercent, int32& OutValidCount) const;
+    /** STG-06: Last fold direction computation time (ms). */
+    double GetLastFoldDirectionTimeMs() const { return LastFoldDirectionTimeMs; }
     int32 GetLastRidgeDirectionUpdateCount() const { return LastRidgeDirectionUpdateCount; }
     int32 GetLastRidgeDirtyVertexCount() const { return LastRidgeDirtyVertexCount; }
     int32 GetLastRidgeCacheHitCount() const { return LastRidgeCacheHitCount; }
@@ -1529,6 +1554,8 @@ public:
         TArray<FContinentalTerrane> Terranes;
         int32 NextTerraneID;
         TArray<FVector3d> VertexRidgeDirections;
+        TArray<FVector3f> VertexFoldDirection;
+        TArray<EOrogenyClass> VertexOrogenyClass;
         TArray<FRenderVertexBoundaryInfo> RenderVertexBoundaryCache;
 
         FSimulationHistorySnapshot() : CurrentTimeMy(0.0), TopologyVersion(0), SurfaceDataVersion(0), NextTerraneID(0) {}
@@ -1816,6 +1843,8 @@ private:
 
     /** Milestone 6 Task 2.1: Compute ridge directions for all oceanic vertices. */
     void ComputeRidgeDirections();
+    /** STG-06: Compute fold directions and classify orogeny state for render vertices. */
+    void ComputeFoldDirectionsAndClasses();
     void RecordRidgeCacheInvalidation(const TCHAR* Context, bool bFullReset, int32 DirtyCount, const TCHAR* Details = nullptr);
     void RecordRidgeTerraneEvent(const TCHAR* Phase, int32 TerraneID, int32 VertexCountBefore, int32 VertexCountAfter);
     void OnExemplarAtlasLoaded(uint64 AtlasFingerprint, const TCHAR* Context);
@@ -1883,6 +1912,10 @@ private:
     TArray<FVector3d> VertexRidgeDirections;
     /** Milestone 6 Task 2.1: Cached per-vertex ridge tangents (prepared for Stage B anisotropy). */
     TArray<FVector3f> VertexRidgeTangents;
+    /** STG-06: Per-vertex fold direction (unit tangent along folds, or ZeroVector if invalid). */
+    TArray<FVector3f> VertexFoldDirection;
+    /** STG-06: Per-vertex orogeny classification. */
+    TArray<EOrogenyClass> VertexOrogenyClass;
 
     /** Milestone 6 Task 2.1: Per-vertex amplified elevation (Stage B, meters). */
     TArray<double> VertexAmplifiedElevation;
@@ -2047,6 +2080,9 @@ private:
     double LastRidgeCacheHitPercent = 100.0;
     double LastRidgeGradientFallbackPercent = 0.0;
     double LastRidgeMotionFallbackPercent = 0.0;
+    double LastFoldDirectionTimeMs = 0.0;
+    double LastFoldCoveragePercent = 0.0;
+    int32 StepsSinceLastFoldLog = 0;
     bool bLastRidgeCacheHealthOk = true;
     uint64 LastExemplarAtlasFingerprint = 0;
 #if UE_BUILD_DEVELOPMENT
@@ -2133,7 +2169,8 @@ private:
     void EnsureRidgeDirtyMaskSize(int32 VertexCount) const;
     bool MarkRidgeDirectionVertexDirty(int32 VertexIdx);
     double ComputeContinentalAmplificationFromCache(int32 VertexIdx, const FVector3d& Position, double BaseElevation_m,
-        const FContinentalAmplificationCacheEntry& CacheEntry, const FString& ProjectContentDir, int32 Seed);
+        const FContinentalAmplificationCacheEntry& CacheEntry, const FString& ProjectContentDir, int32 Seed,
+        const PlanetaryCreation::StageB::FStageB_UnifiedParameters& UnifiedParams);
 };
 #if WITH_EDITOR
 class FRHIGPUBufferReadback;

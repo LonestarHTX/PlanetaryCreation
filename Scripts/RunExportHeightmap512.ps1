@@ -22,6 +22,7 @@ if ($TraceTiles) {
 
 if ($TraceBlend) {
     $env:PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND = "1"
+    Write-Host ("[RunExportHeightmap512] TraceBlend env set to {0}" -f $env:PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND)
 } else {
     $env:PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND = ""
 }
@@ -61,6 +62,10 @@ $arguments = @(
     '-log'
 )
 
+if ($TraceBlend) {
+    $arguments += '-LogCmds="LogPlanetaryCreation Log"'
+}
+
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $cmdExe
 $psi.Arguments = $arguments -join ' '
@@ -79,6 +84,7 @@ if ($TraceTiles) {
 }
 if ($TraceBlend) {
     $psi.EnvironmentVariables["PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND"] = "1"
+    Write-Host ("[RunExportHeightmap512] PSI TraceBlend env= {0}" -f $psi.EnvironmentVariables["PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND"])
 }
 
 $process = [System.Diagnostics.Process]::Start($psi)

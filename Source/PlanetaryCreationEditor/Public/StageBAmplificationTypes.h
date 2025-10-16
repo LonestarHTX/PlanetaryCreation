@@ -2,6 +2,16 @@
 
 #include "CoreMinimal.h"
 
+/** STG-06: Orogeny classification for continental vertices near convergent boundaries. */
+UENUM()
+enum class EOrogenyClass : uint8
+{
+    None = 0,      // No convergent boundary influence
+    Nascent = 1,   // Within nascent proximity threshold
+    Active = 2,    // Within active proximity threshold (closest)
+    Dormant = 3    // Beyond nascent threshold but has valid fold direction
+};
+
 UENUM(BlueprintType)
 enum class EStageBAmplificationReadyReason : uint8
 {
@@ -133,6 +143,16 @@ namespace StageB
         float ContinentalNormalizationEpsilon = 1.0e-3f;
         float OceanicVarianceScale = 1.5f;
         float ExtraVarianceAmplitude = 150.0f;
+
+        // Anisotropy params (STG-07 class-weighted blend)
+        bool bEnableAnisotropy = false;
+        float ContinentalAnisoAlong = 1.0f;
+        float ContinentalAnisoAcross = 0.6f;
+        float AnisoClassWeights[4] = {0.0f, 0.6f, 1.0f, 0.3f};
     };
+
+    // Epsilon for clamping exemplar UVs to [ε, 1-ε] to avoid border sampling issues
+    // Shared between CPU and GPU exemplar sampling (decoupled from PoleAvoidanceEpsilon)
+    static constexpr double StageB_UVWrapEpsilon = 1.0e-6;
 } // namespace StageB
 } // namespace PlanetaryCreation

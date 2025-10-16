@@ -547,27 +547,62 @@ double SampleExemplarHeight(const FExemplarMetadata& Exemplar, double U, double 
     if (!Exemplar.bDataLoaded || Exemplar.HeightData.Num() == 0)
         return 0.0;
 
-    // Wrap UV coordinates to [0, 1] range (for tiling/repetition mitigation)
-    U = FMath::Frac(U);
-    V = FMath::Frac(V);
+    // Clamp UVs to avoid border sampling issues (matches GPU clamp addressing)
+    // Use StageB_UVWrapEpsilon to keep UVs in [ε, 1-ε]
+    constexpr double Eps = PlanetaryCreation::StageB::StageB_UVWrapEpsilon;
+    U = FMath::Clamp(U, Eps, 1.0 - Eps);
+    V = FMath::Clamp(V, Eps, 1.0 - Eps);
 
-    // Convert UV to pixel coordinates
-    const int32 X = FMath::Clamp(static_cast<int32>(U * Exemplar.Width_px), 0, Exemplar.Width_px - 1);
-    const int32 Y = FMath::Clamp(static_cast<int32>(V * Exemplar.Height_px), 0, Exemplar.Height_px - 1);
-    const int32 PixelIndex = Y * Exemplar.Width_px + X;
-
-    if (!Exemplar.HeightData.IsValidIndex(PixelIndex))
-        return 0.0;
-
-    // Get 16-bit value [0, 65535]
-    const uint16 RawValue = Exemplar.HeightData[PixelIndex];
-
-    // Remap to [elevation_min, elevation_max]
-    const double NormalizedHeight = static_cast<double>(RawValue) / 65535.0;
-    const double ElevationRange = Exemplar.ElevationMax_m - Exemplar.ElevationMin_m;
-    const double SampledElevation = Exemplar.ElevationMin_m + (NormalizedHeight * ElevationRange);
-
-    return SampledElevation;
+    // Bilinear filtering
+    const double FractX = U * (Exemplar.Width_px - 1);
+    const double FractY = V * (Exemplar.Height_px - 1);
+    
+    const int32 X0 = FMath::Clamp(FMath::FloorToInt(FractX), 0, Exemplar.Width_px - 1);
+    const int32 X1 = FMath::Clamp(X0 + 1, 0, Exemplar.Width_px - 1);
+    const int32 Y0 = FMath::Clamp(FMath::FloorToInt(FractY), 0, Exemplar.Height_px - 1);
+    const int32 Y1 = FMath::Clamp(Y0 + 1, 0, Exemplar.Height_px - 1);
+    
+    const double Tx = FractX - X0;
+    const double Ty = FractY - Y0;
+    
+    // Fetch 4 neighbors
+    auto GetHeight = [&](int32 X, int32 Y) -> double {
+        const int32 Idx = Y * Exemplar.Width_px + X;
+        if (!Exemplar.HeightData.IsValidIndex(Idx))
+            return 0.0;
+        const uint16 RawValue = Exemplar.HeightData[Idx];
+        const double Normalized = static_cast<double>(RawValue) / 65535.0;
+        const double ElevationRange = Exemplar.ElevationMax_m - Exemplar.ElevationMin_m;
+        const double DecodedElev = Exemplar.ElevationMin_m + (Normalized * ElevationRange);
+        
+#if UE_BUILD_DEVELOPMENT
+        // Sample trace for failing exemplars (first 5 samples per exemplar)
+        static TMap<FString, int32> TraceCountPerExemplar;
+        int32& TraceCount = TraceCountPerExemplar.FindOrAdd(Exemplar.ID, 0);
+        const bool bShouldTrace = (TraceCount < 5);
+        const bool bIsFailingExemplar = (Exemplar.ID.Equals(TEXT("O01")) || Exemplar.ID.Equals(TEXT("H01")) || Exemplar.ID.Equals(TEXT("A09")));
+        
+        if (bShouldTrace && bIsFailingExemplar)
+        {
+            UE_LOG(LogPlanetaryCreation, Display,
+                TEXT("[StageB][SampleTrace] Exemplar=%s Pixel=(%d,%d) RawU16=%u Norm=%.6f Range=[%.3f,%.3f] Decoded=%.3f"),
+                *Exemplar.ID, X, Y, RawValue, Normalized, Exemplar.ElevationMin_m, Exemplar.ElevationMax_m, DecodedElev);
+            ++TraceCount;
+        }
+#endif
+        
+        return DecodedElev;
+    };
+    
+    const double H00 = GetHeight(X0, Y0);
+    const double H10 = GetHeight(X1, Y0);
+    const double H01 = GetHeight(X0, Y1);
+    const double H11 = GetHeight(X1, Y1);
+    
+    // Bilinear interpolation
+    const double H0 = FMath::Lerp(H00, H10, Tx);
+    const double H1 = FMath::Lerp(H01, H11, Tx);
+    return FMath::Lerp(H0, H1, Ty);
 }
 
 /**
@@ -660,6 +695,29 @@ double BlendContinentalExemplars(
     {
         const int32 ForcedIndex = FindExemplarIndexById(ForcedExemplarId);
         ForcedMetadata = AccessExemplarMetadata(ForcedIndex);
+        
+#if UE_BUILD_DEVELOPMENT
+        // Verify forced exemplar presence
+        if (ForcedIndex == INDEX_NONE)
+        {
+            UE_LOG(LogPlanetaryCreation, Error,
+                TEXT("[StageB][ExemplarVersion] Forced exemplar '%s' not found in library! Check stageb_manifest.json"),
+                *ForcedExemplarId);
+            ensureMsgf(false, TEXT("Forced exemplar ID not found: %s"), *ForcedExemplarId);
+        }
+        else
+        {
+            static bool bLoggedForcedApply = false;
+            if (!bLoggedForcedApply)
+            {
+                UE_LOG(LogPlanetaryCreation, Display,
+                    TEXT("[StageB][ForcedApply] Using forced exemplar: %s"),
+                    *ForcedExemplarId);
+                bLoggedForcedApply = true;
+            }
+        }
+#endif
+        
         if (bTraceBlend)
         {
             UE_LOG(LogPlanetaryCreation, Log,
@@ -872,10 +930,54 @@ double BlendContinentalExemplars(
         BlendedHeight /= TotalWeight;
     }
 
+#if UE_BUILD_DEVELOPMENT
+    // Diagnostic for forced exemplar mode: verify weight accumulation
+    if (bForceExemplarOverride)
+    {
+        // Log weight-sum diagnostics for sample vertices or when abnormal
+        constexpr double WeightEpsilon = 1.0e-9;
+        const bool bWeightTooSmall = (TotalWeight <= WeightEpsilon);
+        const bool bShouldLog = bWeightTooSmall || (PlateID % 50 == 0); // Sample logging
+        
+        if (bShouldLog)
+        {
+            UE_LOG(LogPlanetaryCreation, Display,
+                TEXT("[StageB][BlendTrace] Plate=%d Exemplar=%s ExemplarCount=%d AccumulatedWeights=%.6f BlendedHeight=%.3f BaseElev=%.3f"),
+                PlateID,
+                *ForcedExemplarId,
+                MaxExemplarsToBlend,
+                TotalWeight,
+                BlendedHeight,
+                BaseElevation_m);
+        }
+        
+        if (bWeightTooSmall)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[StageB][WeightError] Plate=%d AccumulatedWeights=%.9f (too small, empty weights) - check exemplar spec"),
+                PlateID,
+                TotalWeight);
+        }
+    }
+#endif
+
     if (EffectiveExemplars.Num() > 0 && EffectiveExemplars[0] && EffectiveExemplars[0]->bDataLoaded)
     {
         const FExemplarMetadata& RefExemplar = *EffectiveExemplars[0];
-        const double DetailScale = (BaseElevation_m > 1000.0) ? (BaseElevation_m / RefExemplar.ElevationMean_m) : 0.5;
+        double DetailScale = (BaseElevation_m > 1000.0) ? (BaseElevation_m / RefExemplar.ElevationMean_m) : 0.5;
+        
+#if UE_BUILD_DEVELOPMENT
+        // DetailScale guardrails: clamp extreme values and log for diagnostics
+        const double OriginalDetailScale = DetailScale;
+        if (DetailScale > 100.0 || DetailScale < 0.01)
+        {
+            UE_LOG(LogPlanetaryCreation, Warning,
+                TEXT("[StageB][DetailScale][Clamp] Plate=%d Original=%.6f Base=%.3f RefMean=%.3f Blended=%.3f - clamping to [0.01, 100.0]"),
+                PlateID, DetailScale, BaseElevation_m, RefExemplar.ElevationMean_m, BlendedHeight);
+            DetailScale = FMath::Clamp(DetailScale, 0.01, 100.0);
+        }
+#endif
+        
         const double Detail = (BlendedHeight - RefExemplar.ElevationMean_m) * DetailScale;
 
         if (bTraceBlend)

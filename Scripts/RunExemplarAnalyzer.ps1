@@ -17,7 +17,8 @@ param(
     [double]$MeanDiffThreshold = 50.0,
     [double]$InteriorDiffThreshold = 100.0,
     [double]$SpikeWarningThreshold = 750.0,
-    [switch]$EnablePerimeterMask
+    [switch]$EnablePerimeterMask,
+    [switch]$TraceBlend
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,6 +51,10 @@ if ($EnablePerimeterMask.IsPresent) {
 } else {
     $env:PLANETARY_STAGEB_ANALYZER_ENABLE_MASK = ""
 }
+if ($TraceBlend.IsPresent) {
+    $env:PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND = "1"
+    Write-Host ("[RunExemplarAnalyzer] Continental blend tracing enabled. Env value={0}" -f $env:PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND)
+}
 
 $uproject = "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject"
 $pythonScript = "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\Scripts\analyze_exemplar_fidelity.py"
@@ -65,6 +70,10 @@ $arguments = @(
     "-nosplash",
     "-log"
 )
+
+if ($TraceBlend.IsPresent) {
+    $arguments += '-LogCmds="LogPlanetaryCreation Log"'
+}
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $editorCmd
@@ -84,6 +93,10 @@ $psi.EnvironmentVariables["PLANETARY_STAGEB_ANALYZER_INTERIOR_THRESHOLD"] = ("{0
 $psi.EnvironmentVariables["PLANETARY_STAGEB_ANALYZER_SPIKE_THRESHOLD"] = ("{0:F3}" -f $SpikeWarningThreshold)
 if ($EnablePerimeterMask.IsPresent) {
     $psi.EnvironmentVariables["PLANETARY_STAGEB_ANALYZER_ENABLE_MASK"] = "1"
+}
+if ($TraceBlend.IsPresent) {
+    $psi.EnvironmentVariables["PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND"] = "1"
+    Write-Host ("[RunExemplarAnalyzer] PSI TraceBlend env={0}" -f $psi.EnvironmentVariables["PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND"])
 }
 
 $process = [System.Diagnostics.Process]::Start($psi)

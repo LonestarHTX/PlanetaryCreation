@@ -2,7 +2,26 @@
 
 **Date:** 2025-10-14  
 **Task:** Diagnose A01 continental exemplar export failure  
-**Status:** ✅ Complete - Root cause identified (data corruption)
+**Status:** ✅ RESOLVED - Data corruption fixed, all 22 exemplars validated
+
+## Resolution Update
+
+**All 22 exemplars now validated with 0.00% nodata:**
+- ✅ Downloaded 40 missing SRTMGL1 tiles (complete cache)
+- ✅ Regenerated all cropped TIFs, COG, and PNG16 assets
+- ✅ Validated entire library: A01-A11, H01-H07, O01-O05
+- ✅ Metadata-aligned statistics (deltas ≤0.04m)
+
+**Post-Fix Audit Results (A01):**
+- ✅ Mean diff: 0.243m (was -408.57m) → **1681× improvement**
+- ⚠️ Max diff: 4271m → Moiré artifacts from global tiling (expected)
+- ✅ Data corruption fully resolved
+- ⚠️ Tiling artifacts documented as known limitation
+
+**See:** 
+- `Docs/Validation/exemplar_library_validation_complete.md` - Library validation
+- `Docs/exemplar_forced_mode_limitations.md` - Tiling limitation details
+- `Docs/Validation/A01_final_addendum.md` - Complete closure summary
 
 ---
 

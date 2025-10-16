@@ -5,6 +5,10 @@
 #define PI 3.14159265358979323846f
 #endif
 
+#ifndef UV_WRAP_EPS
+#define UV_WRAP_EPS 1e-6
+#endif
+
 static const int Permutation[512] = {
     63, 9, 212, 205, 31, 128, 72, 59, 137, 203, 195, 170, 181, 115, 165, 40, 116, 139, 175, 225, 132, 99, 222, 2, 41, 15, 197, 93, 169, 90, 228, 43,
     221, 38, 206, 204, 73, 17, 97, 10, 96, 47, 32, 138, 136, 30, 219, 78, 224, 13, 193, 88, 134, 211, 7, 112, 176, 19, 106, 83, 75, 217, 85,
@@ -265,6 +269,12 @@ StructuredBuffer<uint> ContinentalPackedTerrainInfo;
 StructuredBuffer<float2> ContinentalRandomUV;
 StructuredBuffer<float4> ContinentalWrappedUV;
 StructuredBuffer<float4> ContinentalSampleHeights;
+StructuredBuffer<float3> ContinentalFoldDirection;
+StructuredBuffer<uint> ContinentalOrogenyClass;
+uint bEnableAnisotropy;
+float ContinentalAnisoAlong;
+float ContinentalAnisoAcross;
+float4 AnisoClassWeights;
 StructuredBuffer<float> ContinentalCrustAge;
 StructuredBuffer<float4> ContinentalRidgeDirection;
 StructuredBuffer<float4> ContinentalExemplarMetadata;
@@ -290,8 +300,11 @@ float SampleExemplarHeightGPU(
         return ElevationMin;
     }
 
-    const float ClampedU = saturate(WrappedUV.x);
-    const float ClampedV = saturate(WrappedUV.y);
+    // Clamp UVs to [ε, 1-ε] to avoid border sampling issues
+    const float2 ClampedUV = clamp(WrappedUV, UV_WRAP_EPS, 1.0 - UV_WRAP_EPS);
+    const float ClampedU = ClampedUV.x;
+    const float ClampedV = ClampedUV.y;
+    
     const int PixelX = clamp(int(ClampedU * (float)(TextureWidth - 1u)), 0, int(TextureWidth - 1u));
     const int PixelY = clamp(int(ClampedV * (float)(TextureHeight - 1u)), 0, int(TextureHeight - 1u));
     const int4 LoadCoords = int4(PixelX, PixelY, int(AtlasIndex), 0);
@@ -498,5 +511,21 @@ void ContinentalMainCS(uint3 GroupID : SV_GroupID, uint3 GroupThreadID : SV_Grou
         }
     }
 
-    ContinentalOutAmplified[VertexIndex] = Baseline + Detail;
+    float FinalDetail = Detail;
+
+    if (bEnableAnisotropy != 0)
+    {
+        const uint OroClass = ContinentalOrogenyClass[VertexIndex];
+        const float3 FoldDir = ContinentalFoldDirection[VertexIndex];
+        const float FoldLenSq = dot(FoldDir, FoldDir);
+        if (FoldLenSq > 1.0e-6f && OroClass > 0u && OroClass <= 3u)
+        {
+            const uint ClassIndex = min(OroClass, 3u);
+            const float ClassWeight = saturate(AnisoClassWeights[ClassIndex]);
+            const float AnisoScale = lerp(ContinentalAnisoAcross, ContinentalAnisoAlong, ClassWeight);
+            FinalDetail *= AnisoScale;
+        }
+    }
+
+    ContinentalOutAmplified[VertexIndex] = Baseline + FinalDetail;
 }

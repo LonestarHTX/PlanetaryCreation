@@ -101,6 +101,20 @@ namespace PlanetaryCreation::GPU
 				continue;
 			}
 
+			// Log exemplar version info
+			const FString AbsPath = FPaths::ConvertRelativePathToFull(PNG16Path);
+			IFileManager& FileManager = IFileManager::Get();
+			const int64 FileSize = FileManager.FileSize(*PNG16Path);
+			const FDateTime MTime = FileManager.GetTimeStamp(*PNG16Path);
+			const FString MTimeISO = MTime.ToIso8601();
+
+			UE_LOG(LogPlanetaryCreation, Log,
+				TEXT("[StageB][ExemplarVersion] Id=%s Path=%s Size=%lld MTime=%s Hash=Unavailable"),
+				*Data.Info.ID,
+				*AbsPath,
+				FileSize,
+				*MTimeISO);
+
 			Data.Info.ArrayIndex = ExemplarData.Num();
 			Data.Info.LibraryIndex = CurrentLibraryIndex;
 			ExemplarData.Add(MoveTemp(Data));
@@ -192,6 +206,27 @@ namespace PlanetaryCreation::GPU
 			const double MeanSquare = SumElevationSquared / static_cast<double>(SampleCount);
 			const double Variance = FMath::Max(MeanSquare - Mean * Mean, 0.0);
 			Info.ElevationStdDev_m = static_cast<float>(FMath::Sqrt(Variance));
+			
+			// Runtime parity check: verify JSON metadata vs actual PNG16 stats
+			const double JsonMean = static_cast<double>(Data.Info.ElevationMean_m);
+			const double JsonStdDev = static_cast<double>(Data.Info.ElevationStdDev_m);
+			const double MeanError = FMath::Abs(Mean - JsonMean);
+			const double StdDevError = FMath::Abs(Info.ElevationStdDev_m - JsonStdDev);
+			const double MeanErrorPct = (JsonMean > 1.0) ? (MeanError / JsonMean) * 100.0 : 0.0;
+			const double StdDevErrorPct = (JsonStdDev > 1.0) ? (StdDevError / JsonStdDev) * 100.0 : 0.0;
+			
+			if (MeanErrorPct > 5.0 || StdDevErrorPct > 10.0)
+			{
+				UE_LOG(LogPlanetaryCreation, Warning,
+					TEXT("[StageB][ExemplarMetaMismatch] Id=%s JsonMean=%.3f ComputedMean=%.3f ErrorPct=%.2f%% JsonStd=%.3f ComputedStd=%.3f ErrorPct=%.2f%%"),
+					*Data.Info.ID,
+					JsonMean,
+					Mean,
+					MeanErrorPct,
+					JsonStdDev,
+					static_cast<double>(Info.ElevationStdDev_m),
+					StdDevErrorPct);
+			}
 		}
 		else
 		{
@@ -217,17 +252,21 @@ namespace PlanetaryCreation::GPU
 			i, *Data.Info.ID, *Data.Info.Region, Data.Info.ElevationMin_m, Data.Info.ElevationMax_m);
 	}
 
-		Mip->BulkData.Unlock();
-		TextureArray->GetPlatformData()->Mips.Add(Mip);
+	Mip->BulkData.Unlock();
+	TextureArray->GetPlatformData()->Mips.Add(Mip);
 
-		// Update GPU resource
-		TextureArray->UpdateResource();
+	// Update GPU resource
+	TextureArray->UpdateResource();
 
-		bInitialized = true;
-		UE_LOG(LogPlanetaryCreation, Log, TEXT("[ExemplarGPU] Texture2DArray initialized: %d exemplars, %dx%d PF_G16"),
-			ExemplarCount, TextureWidth, TextureHeight);
+	bInitialized = true;
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("[ExemplarGPU] Texture2DArray initialized: %d exemplars, %dx%d PF_G16"),
+		ExemplarCount, TextureWidth, TextureHeight);
 
-		return true;
+	// Log library fingerprint for verification
+	UE_LOG(LogPlanetaryCreation, Log, TEXT("[StageB][ExemplarLibrary] Fingerprint=0x%016llx Count=%d %dx%d"),
+		LibraryFingerprint, ExemplarCount, TextureWidth, TextureHeight);
+
+	return true;
 	}
 
 	void FExemplarTextureArray::Shutdown()

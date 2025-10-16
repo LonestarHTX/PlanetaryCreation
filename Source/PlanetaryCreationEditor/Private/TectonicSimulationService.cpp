@@ -2,6 +2,7 @@
 
 #include "PlanetaryCreationLogging.h"
 #include "TectonicSimulationController.h"
+#include "Async/ParallelFor.h"
 
 // =====================================================================================
 //  File Navigation
@@ -41,6 +42,7 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "Engine/Texture2DArray.h"
 #include "ContinentalAmplificationTypes.h"
 #include <queue>
+#include <atomic>
 #if WITH_EDITOR
 #include "Editor.h"
 #endif
@@ -59,6 +61,7 @@ static void HandleUseGPUHydraulicChanged(IConsoleVariable* Variable);
 #if WITH_EDITOR
 static bool GStageBForceCPUEnvCached = false;
 static bool GStageBForceCPUFromEnv = false;
+static bool GStageBAnisotropyLoggedCPU = false;
 
 static bool ShouldForceCPUStageB()
 {
@@ -99,6 +102,12 @@ static TAutoConsoleVariable<int32> CVarPlanetaryCreationStageBProfiling(
     TEXT("r.PlanetaryCreation.StageBProfiling"),
     1,
     TEXT("Enable detailed Stage B profiling logs. 0=Off, 1=Per-step log (paper default)."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarStageBEnableAnisotropy(
+    TEXT("r.PlanetaryCreation.StageBEnableAnisotropy"),
+    0,
+    TEXT("Enable anisotropic amplification for continental Stage B (0=off, 1=on)."),
     ECVF_Default);
 
 static TAutoConsoleVariable<int32> CVarPlanetaryCreationHydraulicErosion(
@@ -396,6 +405,7 @@ namespace
         Hash = HashMemory(Hash, Snapshot.OceanicMask.GetData(), Snapshot.OceanicMask.Num() * sizeof(uint32));
         Hash = HashMemory(Hash, Snapshot.PlateAssignments.GetData(), Snapshot.PlateAssignments.Num() * sizeof(int32));
         Hash = HashMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
+        Hash = HashMemory(Hash, &Snapshot.UnifiedParameters, sizeof(PlanetaryCreation::StageB::FStageB_UnifiedParameters));
         Hash = HashMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
         return Hash;
     }
@@ -439,6 +449,17 @@ namespace
     Hash = HashMemory(Hash, LivePlateAssignments.GetData(), LivePlateAssignments.Num() * sizeof(int32));
     Hash = HashMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
     Hash = HashMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters LiveUnifiedParams = Service.GetStageBUnifiedParameters();
+    if (LiveUnifiedParams.bEnableAnisotropy)
+    {
+        float CoveragePercentLocal = 0.0f;
+        int32 ValidCountLocal = 0;
+        if (!Service.EvaluateAnisotropyCoverage(CoveragePercentLocal, ValidCountLocal))
+        {
+            LiveUnifiedParams.bEnableAnisotropy = false;
+        }
+    }
+    Hash = HashMemory(Hash, &LiveUnifiedParams, sizeof(PlanetaryCreation::StageB::FStageB_UnifiedParameters));
 
         OutHash = Hash;
         return true;
@@ -492,6 +513,7 @@ namespace
         Hash = HashMemory(Hash, Snapshot.CacheEntries.GetData(), Snapshot.CacheEntries.Num() * sizeof(FContinentalAmplificationCacheEntry));
         Hash = HashMemory(Hash, Snapshot.PlateAssignments.GetData(), Snapshot.PlateAssignments.Num() * sizeof(int32));
         Hash = HashMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
+        Hash = HashMemory(Hash, &Snapshot.UnifiedParameters, sizeof(PlanetaryCreation::StageB::FStageB_UnifiedParameters));
         Hash = HashMemory(Hash, &Snapshot.DataSerial, sizeof(uint64));
         Hash = HashMemory(Hash, &Snapshot.TopologyVersion, sizeof(int32));
         Hash = HashMemory(Hash, &Snapshot.SurfaceVersion, sizeof(int32));
@@ -530,14 +552,25 @@ namespace
         const int32 SurfaceVersion = Service.GetSurfaceDataVersion();
         uint32 Hash = 0;
         Hash = HashMemory(Hash, Inputs.BaselineElevation.GetData(), Inputs.BaselineElevation.Num() * sizeof(float));
-        Hash = HashMemory(Hash, Inputs.RenderPositions.GetData(), Inputs.RenderPositions.Num() * sizeof(FVector3f));
-        Hash = HashMemory(Hash, CacheEntries.GetData(), CacheEntries.Num() * sizeof(FContinentalAmplificationCacheEntry));
-        Hash = HashMemory(Hash, PlateAssignments.GetData(), PlateAssignments.Num() * sizeof(int32));
-        Hash = HashMemory(Hash, &LiveParams, sizeof(FTectonicSimulationParameters));
-        Hash = HashMemory(Hash, &DataSerial, sizeof(uint64));
-        Hash = HashMemory(Hash, &TopologyVersion, sizeof(int32));
-        Hash = HashMemory(Hash, &SurfaceVersion, sizeof(int32));
-        Hash = HashMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
+    Hash = HashMemory(Hash, Inputs.RenderPositions.GetData(), Inputs.RenderPositions.Num() * sizeof(FVector3f));
+    Hash = HashMemory(Hash, CacheEntries.GetData(), CacheEntries.Num() * sizeof(FContinentalAmplificationCacheEntry));
+    Hash = HashMemory(Hash, PlateAssignments.GetData(), PlateAssignments.Num() * sizeof(int32));
+    Hash = HashMemory(Hash, &LiveParams, sizeof(FTectonicSimulationParameters));
+    Hash = HashMemory(Hash, &DataSerial, sizeof(uint64));
+    Hash = HashMemory(Hash, &TopologyVersion, sizeof(int32));
+    Hash = HashMemory(Hash, &SurfaceVersion, sizeof(int32));
+    Hash = HashMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters LiveUnifiedParams = Service.GetStageBUnifiedParameters();
+    if (LiveUnifiedParams.bEnableAnisotropy)
+    {
+        float CoveragePercentLocal = 0.0f;
+        int32 ValidCountLocal = 0;
+        if (!Service.EvaluateAnisotropyCoverage(CoveragePercentLocal, ValidCountLocal))
+        {
+            LiveUnifiedParams.bEnableAnisotropy = false;
+        }
+    }
+    Hash = HashMemory(Hash, &LiveUnifiedParams, sizeof(PlanetaryCreation::StageB::FStageB_UnifiedParameters));
 
         OutHash = Hash;
         return true;
@@ -745,6 +778,35 @@ bool UTectonicSimulationService::MarkRidgeDirectionVertexDirty(int32 VertexIdx)
     }
 
     return false;
+}
+
+bool UTectonicSimulationService::EvaluateAnisotropyCoverage(float& OutCoveragePercent, int32& OutValidCount) const
+{
+    OutCoveragePercent = 0.0f;
+    OutValidCount = 0;
+
+    const int32 VertexCount = VertexFoldDirection.Num();
+    if (VertexCount <= 0 || VertexOrogenyClass.Num() != VertexCount)
+    {
+        return false;
+    }
+
+    int32 ValidCount = 0;
+    for (int32 Index = 0; Index < VertexCount; ++Index)
+    {
+        const FVector3f& Fold = VertexFoldDirection[Index];
+        const EOrogenyClass Class = VertexOrogenyClass[Index];
+        if (Fold.SizeSquared() > 1.0e-6f && Class != EOrogenyClass::None)
+        {
+            ++ValidCount;
+        }
+    }
+
+    OutValidCount = ValidCount;
+    OutCoveragePercent = VertexCount > 0
+        ? static_cast<float>(ValidCount) / static_cast<float>(VertexCount) * 100.0f
+        : 0.0f;
+    return OutCoveragePercent >= 50.0f;
 }
 
 void UTectonicSimulationService::MarkAllRidgeDirectionsDirty()
@@ -1331,6 +1393,12 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
             const double BlockStart = FPlatformTime::Seconds();
             InitializeAmplifiedElevationBaseline();
             BaselineInitTime += FPlatformTime::Seconds() - BlockStart;
+        }
+
+        {
+            TRACE_CPUPROFILER_EVENT_SCOPE(FoldDirectionAndClassification);
+            ComputeFoldDirectionsAndClasses();
+            bSurfaceDataChanged = true;
         }
 
         const bool bUseIsotropicStageB = ShouldUseTemporaryIsotropicStageB();
@@ -2255,6 +2323,7 @@ PlanetaryCreation::StageB::FStageB_UnifiedParameters UTectonicSimulationService:
     Unified.ContinentalNormalizationEpsilon = 1.0e-3f;
     Unified.OceanicVarianceScale = 1.5f;
     Unified.ExtraVarianceAmplitude = 150.0f;
+    Unified.bEnableAnisotropy = CVarStageBEnableAnisotropy.GetValueOnGameThread() != 0;
     return Unified;
 }
 
@@ -3673,6 +3742,9 @@ void UTectonicSimulationService::GenerateRenderMesh(const TCHAR* RidgeInvalidate
         }
     }
 
+    VertexFoldDirection.SetNumZeroed(RenderVertices.Num());
+    VertexOrogenyClass.Init(EOrogenyClass::None, RenderVertices.Num());
+
     MarkAllRidgeDirectionsDirty();
     BumpOceanicAmplificationSerial();
 }
@@ -4971,6 +5043,8 @@ void UTectonicSimulationService::CaptureHistorySnapshot()
     Snapshot.Terranes = Terranes;
     Snapshot.NextTerraneID = NextTerraneID;
     Snapshot.VertexRidgeDirections = VertexRidgeDirections;
+    Snapshot.VertexFoldDirection = VertexFoldDirection;
+    Snapshot.VertexOrogenyClass = VertexOrogenyClass;
     Snapshot.RenderVertexBoundaryCache = RenderVertexBoundaryCache;
 
     // Add to stack
@@ -4994,6 +5068,8 @@ void UTectonicSimulationService::RestoreRidgeCacheFromSnapshot(const FSimulation
     const int32 VertexCount = Snapshot.RenderVertices.Num();
 
     VertexRidgeDirections = Snapshot.VertexRidgeDirections;
+    VertexFoldDirection = Snapshot.VertexFoldDirection;
+    VertexOrogenyClass = Snapshot.VertexOrogenyClass;
     RenderVertexBoundaryCache = Snapshot.RenderVertexBoundaryCache;
 
     EnsureRidgeDirtyMaskSize(VertexCount);
@@ -5017,7 +5093,23 @@ void UTectonicSimulationService::RestoreRidgeCacheFromSnapshot(const FSimulation
         LastRidgeGradientFallbackCount = 0;
         LastRidgePlateFallbackCount = 0;
         LastRidgeMotionFallbackCount = 0;
+        VertexFoldDirection.Reset();
+        VertexOrogenyClass.Reset();
         return;
+    }
+
+    if (VertexFoldDirection.Num() != VertexCount)
+    {
+        VertexFoldDirection.SetNum(VertexCount);
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            VertexFoldDirection[Index] = FVector3f::ZeroVector;
+        }
+    }
+
+    if (VertexOrogenyClass.Num() != VertexCount)
+    {
+        VertexOrogenyClass.Init(EOrogenyClass::None, VertexCount);
     }
 
     RidgeDirectionDirtyMask.Init(false, VertexCount);
@@ -7112,6 +7204,144 @@ namespace
 }
 }
 
+void UTectonicSimulationService::ComputeFoldDirectionsAndClasses()
+{
+    TRACE_CPUPROFILER_EVENT_SCOPE(ComputeFoldDirectionsAndClasses);
+
+    const int32 VertexCount = RenderVertices.Num();
+    if (VertexCount <= 0)
+    {
+        VertexFoldDirection.Reset();
+        VertexOrogenyClass.Reset();
+        LastFoldDirectionTimeMs = 0.0;
+        LastFoldCoveragePercent = 0.0;
+        StepsSinceLastFoldLog = 0;
+        return;
+    }
+
+    VertexFoldDirection.SetNumUninitialized(VertexCount);
+    VertexOrogenyClass.SetNum(VertexCount);
+
+    TArray<const FPlateBoundarySummary*> VertexBoundarySummaries;
+    VertexBoundarySummaries.SetNum(VertexCount);
+    for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
+    {
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        VertexBoundarySummaries[VertexIdx] = GetPlateBoundarySummary(PlateID);
+    }
+
+    const double ActiveThreshold = FMath::Max(0.0, Parameters.ConvergentProximityRadActive);
+    const double NascentThreshold = FMath::Max(ActiveThreshold, Parameters.ConvergentProximityRadNascent);
+    const double ValidityEps = FMath::Max(Parameters.FoldValidityEps, 0.0);
+    const double StartTime = FPlatformTime::Seconds();
+
+    std::atomic<int32> ValidCount{0};
+    std::atomic<int32> ActiveCount{0};
+    std::atomic<int32> NascentCount{0};
+    std::atomic<int32> DormantCount{0};
+    std::atomic<int32> NoneCount{0};
+
+    ParallelFor(VertexCount, [this, &VertexBoundarySummaries, ActiveThreshold, NascentThreshold, ValidityEps,
+        &ValidCount, &ActiveCount, &NascentCount, &DormantCount, &NoneCount](int32 VertexIdx)
+    {
+        const FVector3d Position = RenderVertices[VertexIdx];
+        const int32 PlateID = VertexPlateAssignments.IsValidIndex(VertexIdx) ? VertexPlateAssignments[VertexIdx] : INDEX_NONE;
+        const FPlateBoundarySummary* BoundarySummary = VertexBoundarySummaries[VertexIdx];
+
+        FVector3d FoldDir = FVector3d::ZeroVector;
+        double BoundaryDistance = TNumericLimits<double>::Max();
+        bool bValid = TryComputeFoldDirection(
+            Position,
+            PlateID,
+            Plates,
+            Boundaries,
+            BoundarySummary,
+            FoldDir,
+            &BoundaryDistance);
+
+        if (bValid && FoldDir.IsNearlyZero(ValidityEps))
+        {
+            bValid = false;
+        }
+
+        EOrogenyClass Classification = EOrogenyClass::None;
+
+        if (bValid)
+        {
+            const FVector3d NormalizedFold = FoldDir.GetSafeNormal(ValidityEps, FVector3d::ZeroVector);
+            VertexFoldDirection[VertexIdx] = FVector3f(NormalizedFold);
+            ValidCount.fetch_add(1, std::memory_order_relaxed);
+
+            if (!FMath::IsFinite(BoundaryDistance))
+            {
+                BoundaryDistance = TNumericLimits<double>::Max();
+            }
+
+            if (BoundaryDistance <= ActiveThreshold)
+            {
+                Classification = EOrogenyClass::Active;
+                ActiveCount.fetch_add(1, std::memory_order_relaxed);
+            }
+            else if (BoundaryDistance <= NascentThreshold)
+            {
+                Classification = EOrogenyClass::Nascent;
+                NascentCount.fetch_add(1, std::memory_order_relaxed);
+            }
+            else
+            {
+                Classification = EOrogenyClass::Dormant;
+                DormantCount.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        else
+        {
+            VertexFoldDirection[VertexIdx] = FVector3f::ZeroVector;
+            NoneCount.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        VertexOrogenyClass[VertexIdx] = Classification;
+    });
+
+    const double DurationMs = (FPlatformTime::Seconds() - StartTime) * 1000.0;
+    const int32 ValidTotal = ValidCount.load(std::memory_order_relaxed);
+    const int32 ActiveTotal = ActiveCount.load(std::memory_order_relaxed);
+    const int32 NascentTotal = NascentCount.load(std::memory_order_relaxed);
+    const int32 DormantTotal = DormantCount.load(std::memory_order_relaxed);
+    const int32 NoneTotal = NoneCount.load(std::memory_order_relaxed);
+
+    LastFoldDirectionTimeMs = DurationMs;
+    LastFoldCoveragePercent = (VertexCount > 0)
+        ? (static_cast<double>(ValidTotal) / static_cast<double>(VertexCount)) * 100.0
+        : 0.0;
+
+    int32 LogInterval = Parameters.FoldDirectionLogIntervalSteps;
+    if (LogInterval > 0)
+    {
+        ++StepsSinceLastFoldLog;
+    }
+    else
+    {
+        StepsSinceLastFoldLog = 0;
+    }
+
+    const bool bShouldLog = (LogInterval <= 0) || (StepsSinceLastFoldLog >= LogInterval);
+    if (bShouldLog)
+    {
+        StepsSinceLastFoldLog = 0;
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("[FoldDir] Coverage=%.1f%% Valid=%d Total=%d Eps=%.2e Active=%d Nascent=%d Dormant=%d None=%d Time=%.2fms"),
+            LastFoldCoveragePercent,
+            ValidTotal,
+            VertexCount,
+            ValidityEps,
+            ActiveTotal,
+            NascentTotal,
+            DormantTotal,
+            NoneTotal,
+            LastFoldDirectionTimeMs);
+    }
+}
+
 bool UTectonicSimulationService::RefreshRidgeDirectionsIfNeeded()
 {
     const int32 VertexCount = RenderVertices.Num();
@@ -7748,6 +7978,8 @@ void UTectonicSimulationService::EnsureStageBPrimed()
         VertexCrustAge.Reset();
         VertexRidgeDirections.Reset();
         VertexAmplifiedElevation.Reset();
+        VertexFoldDirection.Reset();
+        VertexOrogenyClass.Reset();
         return;
     }
 
@@ -7780,6 +8012,20 @@ void UTectonicSimulationService::EnsureStageBPrimed()
         {
             VertexRidgeTangents[Index] = FVector3f::ZeroVector;
         }
+    }
+
+    if (VertexFoldDirection.Num() != VertexCount)
+    {
+        VertexFoldDirection.SetNum(VertexCount);
+        for (int32 Index = 0; Index < VertexCount; ++Index)
+        {
+            VertexFoldDirection[Index] = FVector3f::ZeroVector;
+        }
+    }
+
+    if (VertexOrogenyClass.Num() != VertexCount)
+    {
+        VertexOrogenyClass.Init(EOrogenyClass::None, VertexCount);
     }
 
     if (bResizedRidgeDirections)
@@ -8435,6 +8681,51 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
     RefreshContinentalAmplificationCache();
     const FTectonicSimulationParameters SimParams = GetParameters();
 
+    PlanetaryCreation::StageB::FStageB_UnifiedParameters UnifiedParams = GetStageBUnifiedParameters();
+    float AnisoCoveragePercent = 0.0f;
+    int32 AnisoValidCount = 0;
+    if (UnifiedParams.bEnableAnisotropy)
+    {
+        const bool bCoverageOk = EvaluateAnisotropyCoverage(AnisoCoveragePercent, AnisoValidCount);
+        const bool bSizeMatches = VertexFoldDirection.Num() == VertexCount && VertexOrogenyClass.Num() == VertexCount;
+        if (!bCoverageOk || !bSizeMatches)
+        {
+            if (!bSizeMatches)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[Aniso] Coverage check skipped: Fold/Orogeny size mismatch (Fold=%d Orogeny=%d VertexCount=%d)"),
+                    VertexFoldDirection.Num(),
+                    VertexOrogenyClass.Num(),
+                    VertexCount);
+            }
+            else
+            {
+                UE_LOG(LogPlanetaryCreation, Warning,
+                    TEXT("[Aniso] CoverageLow=%.1f%%, skipping anisotropy this pass"),
+                    AnisoCoveragePercent);
+            }
+            UnifiedParams.bEnableAnisotropy = false;
+        }
+        else if (!GStageBAnisotropyLoggedCPU)
+        {
+            UE_LOG(LogPlanetaryCreation, Log,
+                TEXT("[Aniso] Enabled=1 Mode=ClassOnly Along=%.2f Across=%.2f ClassWeights=[None=%.2f Nascent=%.2f Active=%.2f Dormant=%.2f] Coverage=%.1f%%"),
+                UnifiedParams.ContinentalAnisoAlong,
+                UnifiedParams.ContinentalAnisoAcross,
+                UnifiedParams.AnisoClassWeights[0],
+                UnifiedParams.AnisoClassWeights[1],
+                UnifiedParams.AnisoClassWeights[2],
+                UnifiedParams.AnisoClassWeights[3],
+                AnisoCoveragePercent);
+            GStageBAnisotropyLoggedCPU = true;
+        }
+    }
+
+    if (!UnifiedParams.bEnableAnisotropy)
+    {
+        GStageBAnisotropyLoggedCPU = false;
+    }
+
     for (int32 VertexIdx = 0; VertexIdx < VertexCount; ++VertexIdx)
     {
         const FVector3d& VertexPosition = RenderVertices[VertexIdx];
@@ -8645,7 +8936,8 @@ void UTectonicSimulationService::ApplyContinentalAmplification()
             BaseElevation_m,
             *CacheEntry,
             ProjectContentDir,
-            SimParams.Seed);
+            SimParams.Seed,
+            UnifiedParams);
 
         VertexAmplifiedElevation[VertexIdx] = AmplifiedElevation;
     }
@@ -8785,6 +9077,7 @@ bool UTectonicSimulationService::CreateContinentalAmplificationSnapshot(FContine
         return false;
     }
     OutSnapshot.AmplifiedElevation = CurrentAmplified;
+    OutSnapshot.UnifiedParameters = GetStageBUnifiedParameters();
     OutSnapshot.Hash = HashContinentalSnapshot(OutSnapshot);
     if (!OutSnapshot.Hash)
     {
@@ -10407,6 +10700,16 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
             const FContinentalAmplificationGPUInputs& LiveInputs = GetContinentalAmplificationGPUInputs();
             const TArray<FContinentalAmplificationCacheEntry>& LiveCache = GetContinentalAmplificationCacheEntries();
             const FString ProjectContentDir = FPaths::ProjectContentDir();
+            PlanetaryCreation::StageB::FStageB_UnifiedParameters LiveUnifiedParams = GetStageBUnifiedParameters();
+            if (LiveUnifiedParams.bEnableAnisotropy)
+            {
+                float CoveragePercentLocal = 0.0f;
+                int32 ValidCountLocal = 0;
+                if (!EvaluateAnisotropyCoverage(CoveragePercentLocal, ValidCountLocal))
+                {
+                    LiveUnifiedParams.bEnableAnisotropy = false;
+                }
+            }
 
             int32 ContinentalOverrideCount = 0;
 #if UE_BUILD_DEVELOPMENT
@@ -10473,13 +10776,19 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                         ? ActiveSnapshot->Parameters.Seed
                         : Parameters.Seed;
 
+                    const PlanetaryCreation::StageB::FStageB_UnifiedParameters& CacheUnifiedParams =
+                        (bUsingSnapshotData && ActiveSnapshot)
+                            ? ActiveSnapshot->UnifiedParameters
+                            : LiveUnifiedParams;
+
                     CpuValue = ComputeContinentalAmplificationFromCache(
                         Index,
                         Position,
                         Baseline,
                         *PreferredCache,
                         ProjectContentDir,
-                        Seed);
+                        Seed,
+                        CacheUnifiedParams);
                     bHasOverride = true;
                 }
                 else if (ActiveSnapshot && ActiveSnapshot->AmplifiedElevation.IsValidIndex(Index))
@@ -11696,7 +12005,8 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
     double BaseElevation_m,
     const FContinentalAmplificationCacheEntry& CacheEntry,
     const FString& ProjectContentDir,
-    int32 Seed)
+    int32 Seed,
+    const PlanetaryCreation::StageB::FStageB_UnifiedParameters& UnifiedParams)
 {
     double AmplifiedElevation = BaseElevation_m;
     const bool bTraceBlend = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_TRACE_CONTINENTAL_BLEND")).Len() > 0;
@@ -12097,6 +12407,25 @@ double UTectonicSimulationService::ComputeContinentalAmplificationFromCache(
     if (bHasReferenceMean)
     {
         Detail = (BlendedHeight - ReferenceMean) * DetailScale;
+
+        if (UnifiedParams.bEnableAnisotropy &&
+            VertexFoldDirection.IsValidIndex(VertexIdx) &&
+            VertexOrogenyClass.IsValidIndex(VertexIdx))
+        {
+            const FVector3f& FoldVector = VertexFoldDirection[VertexIdx];
+            const EOrogenyClass OroClass = VertexOrogenyClass[VertexIdx];
+            if (FoldVector.SizeSquared() > 1.0e-6f && OroClass != EOrogenyClass::None)
+            {
+                const int32 ClassIndex = FMath::Clamp(static_cast<int32>(OroClass), 0, 3);
+                const float ClassWeight = FMath::Clamp(UnifiedParams.AnisoClassWeights[ClassIndex], 0.0f, 1.0f);
+                const float AnisoScale = FMath::Lerp(
+                    UnifiedParams.ContinentalAnisoAcross,
+                    UnifiedParams.ContinentalAnisoAlong,
+                    ClassWeight);
+                Detail *= static_cast<double>(AnisoScale);
+            }
+        }
+
         AmplifiedElevation = EffectiveBase + Detail;
     }
     else

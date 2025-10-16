@@ -38,6 +38,7 @@ namespace PlanetaryCreation::GPU
     namespace
     {
         constexpr uint32 GStageBThreadsPerGroup = 64u;
+        static bool GStageBAnisotropyLoggedThisRun = false;
 
         inline uint32 HashSnapshotMemory(uint32 ExistingHash, const void* Data, SIZE_T NumBytes)
         {
@@ -63,6 +64,7 @@ namespace PlanetaryCreation::GPU
             Hash = HashSnapshotMemory(Hash, Snapshot.OceanicMask.GetData(), Snapshot.OceanicMask.Num() * sizeof(uint32));
             Hash = HashSnapshotMemory(Hash, Snapshot.PlateAssignments.GetData(), Snapshot.PlateAssignments.Num() * sizeof(int32));
             Hash = HashSnapshotMemory(Hash, &Snapshot.Parameters, sizeof(FTectonicSimulationParameters));
+            Hash = HashSnapshotMemory(Hash, &Snapshot.UnifiedParameters, sizeof(PlanetaryCreation::StageB::FStageB_UnifiedParameters));
             Hash = HashSnapshotMemory(Hash, &Snapshot.VertexCount, sizeof(int32));
             return Hash;
         }
@@ -199,6 +201,12 @@ namespace PlanetaryCreation::GPU
             SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector2f>, ContinentalRandomUV)
             SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector4f>, ContinentalWrappedUV)
             SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector4f>, ContinentalSampleHeights)
+            SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector3f>, ContinentalFoldDirection)
+            SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint32>, ContinentalOrogenyClass)
+            SHADER_PARAMETER(uint32, bEnableAnisotropy)
+            SHADER_PARAMETER(float, ContinentalAnisoAlong)
+            SHADER_PARAMETER(float, ContinentalAnisoAcross)
+            SHADER_PARAMETER(FVector4f, AnisoClassWeights)
             SHADER_PARAMETER_RDG_TEXTURE(Texture2DArray, ContinentalExemplarTexture)
             SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float>, ContinentalCrustAge)
             SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FVector4f>, ContinentalRidgeDirection)
@@ -299,7 +307,7 @@ namespace PlanetaryCreation::GPU
             return false;
         }
 
-        const PlanetaryCreation::StageB::FStageB_UnifiedParameters UnifiedParams = Service.GetStageBUnifiedParameters();
+        PlanetaryCreation::StageB::FStageB_UnifiedParameters UnifiedParams = Service.GetStageBUnifiedParameters();
         const FTectonicSimulationParameters CurrentParams = Service.GetParameters();
         UE_LOG(LogPlanetaryCreation, Display,
             TEXT("[UnifiedGPU][Params] UnifiedFaultAmp=%.2f UnifiedFaultFreq=%.3f UnifiedAgeFalloff=%.3f UnifiedVarianceScale=%.2f UnifiedExtraVariance=%.2f | CpuFaultAmp=%.2f CpuFaultFreq=%.3f CpuAgeFalloff=%.3f"),
@@ -311,6 +319,70 @@ namespace PlanetaryCreation::GPU
             CurrentParams.OceanicFaultAmplitude,
             CurrentParams.OceanicFaultFrequency,
             CurrentParams.OceanicAgeFalloff);
+
+        float AnisoCoveragePercent = 0.0f;
+        int32 AnisoValidCount = 0;
+        TArray<FVector3f> ContinentalFoldDirectionData;
+        TArray<uint32> ContinentalOrogenyClassData;
+
+        if (UnifiedParams.bEnableAnisotropy)
+        {
+            const bool bCoverageOk = Service.EvaluateAnisotropyCoverage(AnisoCoveragePercent, AnisoValidCount);
+            const TArray<FVector3f>& FoldDirections = Service.GetVertexFoldDirection();
+            const TArray<EOrogenyClass>& OrogenyClasses = Service.GetVertexOrogenyClass();
+            const bool bSizeMatches = FoldDirections.Num() == VertexCount && OrogenyClasses.Num() == VertexCount;
+
+            if (!bCoverageOk || !bSizeMatches)
+            {
+                if (!bSizeMatches)
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning,
+                        TEXT("[Aniso] Coverage check skipped: Fold/Orogeny size mismatch (Fold=%d Orogeny=%d VertexCount=%d)"),
+                        FoldDirections.Num(),
+                        OrogenyClasses.Num(),
+                        VertexCount);
+                }
+                else
+                {
+                    UE_LOG(LogPlanetaryCreation, Warning,
+                        TEXT("[Aniso] CoverageLow=%.1f%%, skipping anisotropy this pass"),
+                        AnisoCoveragePercent);
+                }
+                UnifiedParams.bEnableAnisotropy = false;
+            }
+            else
+            {
+                ContinentalFoldDirectionData = FoldDirections;
+                ContinentalOrogenyClassData.SetNum(VertexCount);
+                for (int32 Index = 0; Index < VertexCount; ++Index)
+                {
+                    ContinentalOrogenyClassData[Index] = static_cast<uint32>(OrogenyClasses[Index]);
+                }
+
+                if (!GStageBAnisotropyLoggedThisRun)
+                {
+                    UE_LOG(LogPlanetaryCreation, Log,
+                        TEXT("[Aniso] Enabled=1 Mode=ClassOnly Along=%.2f Across=%.2f ClassWeights=[None=%.2f Nascent=%.2f Active=%.2f Dormant=%.2f] Coverage=%.1f%%"),
+                        UnifiedParams.ContinentalAnisoAlong,
+                        UnifiedParams.ContinentalAnisoAcross,
+                        UnifiedParams.AnisoClassWeights[0],
+                        UnifiedParams.AnisoClassWeights[1],
+                        UnifiedParams.AnisoClassWeights[2],
+                        UnifiedParams.AnisoClassWeights[3],
+                        AnisoCoveragePercent);
+                    GStageBAnisotropyLoggedThisRun = true;
+                }
+            }
+        }
+
+        if (!UnifiedParams.bEnableAnisotropy)
+        {
+            GStageBAnisotropyLoggedThisRun = false;
+            ContinentalFoldDirectionData.SetNum(1);
+            ContinentalFoldDirectionData[0] = FVector3f::ZeroVector;
+            ContinentalOrogenyClassData.SetNum(1);
+            ContinentalOrogenyClassData[0] = 0u;
+        }
 
         int32 DebugVertexIndex = Service.GetStageBUnifiedDebugVertexIndex();
         if (DebugVertexIndex == INDEX_NONE)
@@ -581,6 +653,7 @@ namespace PlanetaryCreation::GPU
             FOceanicAmplificationSnapshot Snapshot;
             Snapshot.VertexCount = VertexCount;
             Snapshot.Parameters = SimParams;
+            Snapshot.UnifiedParameters = UnifiedParams;
             Snapshot.RenderLOD = SimParams.RenderSubdivisionLevel;
             Snapshot.TopologyVersion = Service.GetTopologyVersion();
             Snapshot.SurfaceVersion = Service.GetSurfaceDataVersion();
@@ -602,6 +675,7 @@ namespace PlanetaryCreation::GPU
             FContinentalAmplificationSnapshot Snapshot;
             if (Service.CreateContinentalAmplificationSnapshot(Snapshot))
             {
+                Snapshot.UnifiedParameters = UnifiedParams;
                 ContinentalSnapshotPtr = MakeShared<FContinentalAmplificationSnapshot, ESPMode::ThreadSafe>(MoveTemp(Snapshot));
             }
             else
@@ -712,6 +786,8 @@ namespace PlanetaryCreation::GPU
              ContinentalWrappedUV,
              ContinentalBaseline,
              ContinentalRenderPositions,
+             ContinentalFoldDirectionData,
+             ContinentalOrogenyClassData,
              ExemplarTextureObject,
              OceanicReadback,
              ContinentalReadback,
@@ -824,6 +900,8 @@ namespace PlanetaryCreation::GPU
                         FRDGBufferRef SampleHeightsBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalSampleHeights"), ContinentalSampleHeights);
                         FRDGBufferRef BaselineBufferLocal = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalBaseline"), ContinentalBaseline);
                         FRDGBufferRef RenderPositionBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalPosition"), ContinentalRenderPositions);
+                        FRDGBufferRef FoldDirectionBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalFoldDirection"), ContinentalFoldDirectionData);
+                        FRDGBufferRef OrogenyClassBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalOrogenyClass"), ContinentalOrogenyClassData);
                         FRDGBufferRef MetadataBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ExemplarMetadata"), *ExemplarMetadataPtr);
 
                         FRDGBufferRef OutputBuffer = GraphBuilder.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(sizeof(float), VertexCount), TEXT("PlanetaryCreation.StageBUnified.ContinentalOutput"));
@@ -865,6 +943,16 @@ namespace PlanetaryCreation::GPU
                         Parameters->ContinentalRandomUV = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(RandomUVBuffer));
                         Parameters->ContinentalWrappedUV = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(WrappedUVBuffer));
                         Parameters->ContinentalSampleHeights = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(SampleHeightsBuffer));
+                        Parameters->ContinentalFoldDirection = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(FoldDirectionBuffer));
+                        Parameters->ContinentalOrogenyClass = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(OrogenyClassBuffer));
+                        Parameters->bEnableAnisotropy = UnifiedParams.bEnableAnisotropy ? 1u : 0u;
+                        Parameters->ContinentalAnisoAlong = UnifiedParams.ContinentalAnisoAlong;
+                        Parameters->ContinentalAnisoAcross = UnifiedParams.ContinentalAnisoAcross;
+                        Parameters->AnisoClassWeights = FVector4f(
+                            UnifiedParams.AnisoClassWeights[0],
+                            UnifiedParams.AnisoClassWeights[1],
+                            UnifiedParams.AnisoClassWeights[2],
+                            UnifiedParams.AnisoClassWeights[3]);
                         Parameters->ContinentalCrustAge = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(AgeBuffer));
                         Parameters->ContinentalRidgeDirection = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(RidgeBuffer));
                         Parameters->ContinentalExemplarMetadata = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(MetadataBuffer));
