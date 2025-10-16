@@ -319,7 +319,7 @@ bool FGPUOceanicAmplificationTest::RunTest(const FString& Parameters)
 
         // NOTE: The current GPU implementation performs synchronous readback and therefore
         // runs slower than the CPU baseline. This test only enforces numerical parity so the
-        // async/perf work can follow later (see Docs/GPU_Compute_Plan.md).
+        // async/perf work can follow later (see Docs/GPU/GPU_Compute_Plan.md).
         UE_LOG(LogPlanetaryCreation, Log, TEXT("[GPUOceanicParity] Performance: CPU=%.2f ms, GPU=%.2f ms, Speedup=%.1fx"),
             CPUTime_ms, GPUTime_ms, Speedup);
 

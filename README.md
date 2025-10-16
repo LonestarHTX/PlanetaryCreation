@@ -23,11 +23,13 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectoni
 | `Source/PlanetaryCreationEditor` | Editor module, organized into `Private/Simulation`, `Private/StageB`, `Private/Export`, `Private/UI`, plus shared utilities and Slate tooling. |
 | `Plugins/RealtimeMeshComponent` | Third-party mesh streaming plugin (API reference in `RealtimeMeshComponent_HowTo.md`). |
 | `Content/` | Editor assets (materials, tool UI assets, exemplar placeholders). |
-| `Docs/` | Milestone plans, performance reports, GPU preview notes, roadmap (`PlanningAgentPlan.md`). |
+| `Docs/` | Documentation hub (`Plans/`, `Milestones/`, `GPU/`, `Heightmap/`, `Automation/`, and more). |
 | `ProceduralTectonicPlanetsPaper/` | Paper transcription (`PTP_Text.md`) and implementation alignment log. |
 | `Scripts/` | PowerShell automation wrappers (e.g., `RunMilestone3Tests.ps1`). |
 
 > **Directory refactor (2025-10-15):** Stage B amplification, sampling/export helpers, and simulation controllers now live in their own subfolders under `Source/PlanetaryCreationEditor`. Public headers mirror this layout (`Public/StageB`, `Public/Simulation`, etc.) to make ownership clearer when onboarding new contributors.
+
+> **Documentation reorg (2025-10-15):** The `Docs/` hub is now grouped by topic (Plans, Milestones, GPU, Heightmap, Automation, Performance, Reviews, Reference), and contributor guides live under the root `Handbooks/` directory. Update any personal bookmarks to the new folder layout.
 
 ---
 
@@ -50,8 +52,8 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectoni
    ```powershell
    git submodule update --init --recursive
    ```
-3. Open `AGENTS.md` and `CLAUDE.md` for role expectations and build etiquette.
-4. Review `Docs/PlanningAgentPlan.md` and `Docs/MilestoneSummary.md` to understand scope & current milestones.
+3. Open `Handbooks/AGENTS.md` and `Handbooks/CLAUDE.md` for role expectations and build etiquette.
+4. Review `Docs/Plans/PlanningAgentPlan.md` and `Docs/Milestones/MilestoneSummary.md` to understand scope & current milestones.
 
 ---
 
@@ -110,12 +112,13 @@ Automation suites auto-skip GPU-reliant tests when `GDynamicRHI` reports `NullDr
 ---
 
 ## Documentation Index
-- **Roadmap & milestones:** `Docs/MilestoneSummary.md`, `Docs/PlanningAgentPlan.md`
-- **Performance baselines:** `Docs/Performance_M4.md`, `Docs/Performance_M5.md`
-- **GPU preview stack:** `Docs/gpu_preview_implementation_notes.md`, `Docs/gpu_preview_integration_complete.md`, `Docs/gpu_preview_optimizations.md`, `Docs/gpu_system_review.md`
+- **Contributor handbooks:** `Handbooks/AGENTS.md`, `Handbooks/CLAUDE.md`, `Handbooks/QUICKSTART.md`
+- **Roadmap & milestones:** `Docs/Milestones/MilestoneSummary.md`, `Docs/Plans/PlanningAgentPlan.md`
+- **Performance baselines:** `Docs/Performance/Performance_M4.md`, `Docs/Performance/Performance_M5.md`
+- **GPU preview stack:** `Docs/GPU/gpu_preview_implementation_notes.md`, `Docs/GPU/gpu_preview_integration_complete.md`, `Docs/GPU/gpu_preview_optimizations.md`, `Docs/GPU/gpu_system_review.md`
 - **Simulation/paper alignment:** `ProceduralTectonicPlanetsPaper/PTP_Text.md` (transcribed paper) and `PTP_ImplementationAlignment.md`
-- **Testing:** `Docs/GPU_Test_Suite.md`, plus automation sources under `Source/PlanetaryCreation/Private/Tests`
-- **How-to references:** `RealtimeMeshComponent_HowTo.md`, `Docs/ParameterQuickReference.md`
+- **Testing:** `Docs/Automation/GPU_Test_Suite.md`, plus automation sources under `Source/PlanetaryCreation/Private/Tests`
+- **How-to references:** `RealtimeMeshComponent_HowTo.md`, `Docs/Reference/ParameterQuickReference.md`
 
 ---
 
@@ -133,20 +136,20 @@ Automation suites auto-skip GPU-reliant tests when `GDynamicRHI` reports `NullDr
 | 8 – Climate & Hydrosphere Coupling | 📝 Planned | Sea-level response, climate overlays, hydrology.
 | 9 – Shipping & Cinematic Polish | 📝 Planned | Final optimisation, console-class budgets, release packaging. |
 
-Milestone retrospectives and detailed plans live in `Docs/Milestone*_Plan.md` / `Docs/Milestone*_CompletionSummary.md`.
+Milestone retrospectives and detailed plans live in `Docs/Milestones/` (see `*_Plan.md` / `*_CompletionSummary.md` for each milestone).
 
 ---
 
 ## Troubleshooting
-- **Plates appear frozen in GPU preview:** See `Docs/gpu_preview_plate_colors_fix.md`; verify vertex colors aren’t forced to elevation mode.
-- **Automation hangs on GPU readback:** Apply the fence strategy in `Docs/gpu_readback_fix_plan.md` and ensure commandlets tick `ProcessPendingOceanicGPUReadbacks(true)`.
-- **Perf spikes after enabling GPU preview:** Confirm `bSkipCPUAmplification` is true (Milestone 6 optimisation) and check `Docs/gpu_system_review.md` for sediment/dampening hotspots.
+- **Plates appear frozen in GPU preview:** See `Docs/GPU/gpu_preview_plate_colors_fix.md`; verify vertex colors aren’t forced to elevation mode.
+- **Automation hangs on GPU readback:** Apply the fence strategy in `Docs/GPU/gpu_readback_fix_plan.md` and ensure commandlets tick `ProcessPendingOceanicGPUReadbacks(true)`.
+- **Perf spikes after enabling GPU preview:** Confirm `bSkipCPUAmplification` is true (Milestone 6 optimisation) and check `Docs/GPU/gpu_system_review.md` for sediment/dampening hotspots.
 - **Stale UnrealEditor-Cmd.exe locks:** Kill with `taskkill /F` before relaunching builds.
 
 ---
 
 ## Contributing & Workflow
-- Follow role guidance in `AGENTS.md`, coding standards in `CLAUDE.md`, and Unreal C++ style (4 spaces, prefix classes with A/U/F/I, `.generated.h` last in headers).
+- Follow role guidance in `Handbooks/AGENTS.md`, coding standards in `Handbooks/CLAUDE.md`, and Unreal C++ style (4 spaces, prefix classes with A/U/F/I, `.generated.h` last in headers).
 - New runtime mesh experiments belong under `Plugins/RealtimeMeshComponent`; wrap experimental GPU paths in `#if UE_BUILD_DEVELOPMENT` until production-ready.
 - Place automation tests in `Source/PlanetaryCreation/Private/Tests`.
 - Update relevant docs (milestone plan/summary, performance logs) alongside code changes.
@@ -156,7 +159,7 @@ Milestone retrospectives and detailed plans live in `Docs/Milestone*_Plan.md` / 
 
 ## Credits & Ownership
 - **Simulation Lead:** Michael (tectonic modeling, validation)
-- **Tooling & Rendering Engineers:** See `Docs/MilestoneSummary.md` for per-milestone ownership.
+- **Tooling & Rendering Engineers:** See `Docs/Milestones/MilestoneSummary.md` for per-milestone ownership.
 - **Automated documentation:** Maintained alongside milestone completion artifacts.
 
-For project coordination, reference `Docs/PlanningAgentPlan.md` and associated milestone documents. Issues, PRs, and feature ideas should link the relevant milestone scope and include validation steps (editor launch, automation suites, perf captures).
+For project coordination, reference `Docs/Plans/PlanningAgentPlan.md` and associated milestone documents. Issues, PRs, and feature ideas should link the relevant milestone scope and include validation steps (editor launch, automation suites, perf captures).

@@ -31,7 +31,7 @@ namespace
     constexpr double HeightmapExportTotalBudgetMs = 350.0;
     constexpr double HeightmapSeamToleranceMeters = 0.5;
 
-    // Tiled export baseline (Docs/PathToParity/TiledHeightmapExport.md): 512x512 tiles with 2px overlap.
+    // Tiled export baseline (Docs/Heightmap/Parity/TiledHeightmapExport.md): 512x512 tiles with 2px overlap.
     constexpr int32 HeightmapTileSizePixels = 512;
     constexpr int32 HeightmapTileOverlapPixels = 2;
 

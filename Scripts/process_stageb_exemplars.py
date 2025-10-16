@@ -66,7 +66,7 @@ Your Stage B exemplar data is ready!
    • Source manifest: {project_root}/StageB_SRTM90/metadata/stageb_manifest.json
 
 📜 License & attribution:
-   • See Docs/Licenses/SRTM.txt for citation requirements
+   • See Docs/Reference/Licenses/SRTM.txt for citation requirements
 
 🎯 Next steps:
    1. Commit the exemplar library JSON and license files to git

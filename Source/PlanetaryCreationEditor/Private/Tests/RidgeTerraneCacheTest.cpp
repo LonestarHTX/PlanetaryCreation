@@ -136,7 +136,7 @@ bool ExportRidgeTangentHeatmap(
         return false;
     }
 
-    const FString OutputDir = FPaths::Combine(FPaths::ProjectDir(), TEXT("Docs/Validation/ParityFigures"));
+    const FString OutputDir = FPaths::Combine(FPaths::ProjectDir(), TEXT("Docs/Automation/Validation/ParityFigures"));
     IFileManager::Get().MakeDirectory(*OutputDir, true);
 
     const FString OutputPath = FPaths::Combine(OutputDir, FString::Printf(TEXT("ridge_tangent_%s.png"), *Label));

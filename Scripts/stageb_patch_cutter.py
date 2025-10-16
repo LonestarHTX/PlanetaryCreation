@@ -1,13 +1,13 @@
 """Stage B SRTM exemplar patch extraction utility.
 
-This script automates the workflow described in Docs/SRTM_StageB_Exemplar_Guide.md
+This script automates the workflow described in Docs/Heightmap/SRTM_StageB_Exemplar_Guide.md
 by clipping repeatable exemplar windows from downloaded SRTM tiles. The catalog of
 patches is supplied as a CSV with bounding boxes (UL/LR latitude & longitude) and a
 comma- or semicolon-separated list of tile IDs.
 
 Example usage:
     python Scripts/stageb_patch_cutter.py \
-        --catalog Docs/StageB_SRTM_Exemplar_Catalog.csv \
+        --catalog Docs/Heightmap/StageB_SRTM_Exemplar_Catalog.csv \
         --tiles-dir StageB_SRTM90/raw \
         --out-dir StageB_SRTM90/cropped \
         --size 512 \

@@ -168,7 +168,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--output-csv",
-        help="Destination CSV path (defaults to Docs/Validation/ExemplarAudit/<tile>_vertex_samples.csv)",
+        help="Destination CSV path (defaults to Docs/Automation/Validation/ExemplarAudit/<tile>_vertex_samples.csv)",
     )
     parser.add_argument(
         "--render-lod",

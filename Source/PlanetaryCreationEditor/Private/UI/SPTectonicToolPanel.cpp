@@ -1561,7 +1561,7 @@ FReply SPTectonicToolPanel::HandleExportHeightmapClicked()
 	}
 
 	const FString ProjectDir = FPaths::ProjectDir();
-	const FString DocsDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(ProjectDir, TEXT("Docs/Validation")));
+	const FString DocsDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(ProjectDir, TEXT("Docs/Automation/Validation")));
 	IFileManager::Get().MakeDirectory(*DocsDir, true);
 
 	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
