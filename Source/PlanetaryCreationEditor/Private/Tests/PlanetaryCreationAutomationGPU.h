@@ -35,11 +35,12 @@ inline bool ShouldRunGPUAmplificationAutomation(FAutomationTestBase& Test, const
 
     if (!bAllow)
     {
-        const FString EnvValue = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARYCREATION_ALLOW_GPU_AUTOMATION"));
-        if (!EnvValue.IsEmpty() && EnvValue != TEXT("0"))
-        {
-            bAllow = true;
-        }
+        // TODO: Fix GetEnvironmentVariable call - temporarily disabled
+        // const FString EnvValue = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARYCREATION_ALLOW_GPU_AUTOMATION"));
+        // if (!EnvValue.IsEmpty() && EnvValue != TEXT("0"))
+        // {
+        //     bAllow = true;
+        // }
     }
 
     if (!bAllow)

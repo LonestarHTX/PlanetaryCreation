@@ -165,5 +165,77 @@ bool FOceanicCrustTest::RunTest(const FString& Parameters)
     FString Content; FFileHelper::LoadFileToString(Content, *JsonPath);
     TestTrue(TEXT("contains mean_alpha"), Content.Contains(TEXT("mean_alpha")));
 
+    // === CSV Export for Validation Plots ===
+    const FString Dir = FPaths::ProjectDir() / TEXT("Docs/Automation/Validation/Phase5");
+    IFileManager::Get().MakeDirectory(*Dir, true);
+
+    // 1. Elevation Profile CSV
+    FString ProfileCSV;
+    ProfileCSV += TEXT("vertex_id,lat_deg,lon_deg,dGamma_km,dP_km,alpha,baseline_m,elevation_m,plate_id\n");
+    for (int32 i = 0; i < N; ++i)
+    {
+        const FVector3d& P = Points[i];
+        const double lat = FMath::Asin(FMath::Clamp(P.Z, -1.0, 1.0)) * 180.0 / PI;
+        const double lon = FMath::Atan2(P.Y, P.X) * 180.0 / PI;
+        const double dG = BF.DistanceToRidge_km.IsValidIndex(i) ? BF.DistanceToRidge_km[i] : 1e9;
+        const double dP = BF.DistanceToPlateBoundary_km.IsValidIndex(i) ? BF.DistanceToPlateBoundary_km[i] : 1e9;
+        const double alpha = FMath::Clamp(dG / FMath::Max(dG + dP, 1e-9), 0.0, 1.0);
+        const int32 pid = Assign[i];
+        ProfileCSV += FString::Printf(TEXT("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f,%.3f,%d\n"),
+            i, lat, lon, dG, dP, alpha, Baseline_m[i], Elev_copy[i], pid);
+    }
+    const FString ProfilePath = Dir / TEXT("oceanic_elevation_profile.csv");
+    FFileHelper::SaveStringToFile(ProfileCSV, *ProfilePath);
+    UE_LOG(LogTemp, Display, TEXT("[Phase5] Elevation profile CSV: %s"), *ProfilePath);
+
+    // 2. Ridge Directions CSV
+    FString RidgeCSV;
+    RidgeCSV += TEXT("vertex_id,lat_deg,lon_deg,pos_x,pos_y,pos_z,ridge_dir_x,ridge_dir_y,ridge_dir_z,dGamma_km\n");
+    for (int32 i = 0; i < N; ++i)
+    {
+        const FVector3f R = Cache.RidgeDirections.IsValidIndex(i) ? Cache.RidgeDirections[i] : FVector3f::ZeroVector;
+        const double dG = BF.DistanceToRidge_km.IsValidIndex(i) ? BF.DistanceToRidge_km[i] : 1e9;
+        if (R.Size() > 0.1f && dG < 1000.0)
+        {
+            const FVector3d& P = Points[i];
+            const double lat = FMath::Asin(FMath::Clamp(P.Z, -1.0, 1.0)) * 180.0 / PI;
+            const double lon = FMath::Atan2(P.Y, P.X) * 180.0 / PI;
+            RidgeCSV += FString::Printf(TEXT("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f\n"),
+                i, lat, lon, P.X, P.Y, P.Z, R.X, R.Y, R.Z, dG);
+        }
+    }
+    const FString RidgePath = Dir / TEXT("ridge_directions.csv");
+    FFileHelper::SaveStringToFile(RidgeCSV, *RidgePath);
+    UE_LOG(LogTemp, Display, TEXT("[Phase5] Ridge directions CSV: %s"), *RidgePath);
+
+    // 3. Cross-Boundary Transect CSV
+    FString TransectCSV;
+    TransectCSV += TEXT("transect_index,lat_deg,lon_deg,distance_from_equator_km,elevation_m,plate_id,alpha\n");
+    const double transectLon = 0.0;
+    TArray<int32> TransectIndices;
+    for (int32 i = 0; i < N; ++i)
+    {
+        const FVector3d& P = Points[i];
+        const double lon = FMath::Atan2(P.Y, P.X) * 180.0 / PI;
+        if (FMath::Abs(lon - transectLon) < 5.0) TransectIndices.Add(i);
+    }
+    TransectIndices.Sort([&](int32 A, int32 B) { return Points[A].Z < Points[B].Z; });
+    for (int32 k = 0; k < TransectIndices.Num(); ++k)
+    {
+        const int32 i = TransectIndices[k];
+        const FVector3d& P = Points[i];
+        const double lat = FMath::Asin(FMath::Clamp(P.Z, -1.0, 1.0)) * 180.0 / PI;
+        const double lon = FMath::Atan2(P.Y, P.X) * 180.0 / PI;
+        const double distKm = lat * (PaperConstants::PlanetRadius_km * PI / 180.0);
+        const double dG = BF.DistanceToRidge_km.IsValidIndex(i) ? BF.DistanceToRidge_km[i] : 1e9;
+        const double dP = BF.DistanceToPlateBoundary_km.IsValidIndex(i) ? BF.DistanceToPlateBoundary_km[i] : 1e9;
+        const double alpha = FMath::Clamp(dG / FMath::Max(dG + dP, 1e-9), 0.0, 1.0);
+        TransectCSV += FString::Printf(TEXT("%d,%.6f,%.6f,%.3f,%.3f,%d,%.6f\n"),
+            k, lat, lon, distKm, Elev_copy[i], Assign[i], alpha);
+    }
+    const FString TransectPath = Dir / TEXT("cross_boundary_transect.csv");
+    FFileHelper::SaveStringToFile(TransectCSV, *TransectPath);
+    UE_LOG(LogTemp, Display, TEXT("[Phase5] Cross-boundary transect CSV: %s"), *TransectPath);
+
     return true;
 }

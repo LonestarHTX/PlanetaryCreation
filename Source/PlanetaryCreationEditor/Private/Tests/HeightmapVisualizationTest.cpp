@@ -64,8 +64,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
         AddInfo(FString::Printf(TEXT("Heightmap exported to: %s"), *OutputPath));
 
         // Clean up artifact to avoid polluting subsequent runs.
-        IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-        TestTrue(TEXT("Heightmap export cleanup succeeded"), PlatformFile.DeleteFile(*OutputPath));
+        TestTrue(TEXT("Heightmap export cleanup succeeded"), IFileManager::Get().Delete(*OutputPath, false));
     }
 
     // Verify continental amplification enables amplified displacement even without oceanic amplification.
@@ -138,7 +137,7 @@ bool FHeightmapVisualizationTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Export fails when output file is read-only"), LockedResult.IsEmpty());
 
         PlatformFile.SetReadOnly(*LockedPath, false);
-        PlatformFile.DeleteFile(*LockedPath);
+        IFileManager::Get().Delete(*LockedPath, false);
     }
 
     // Negative test: invalid output directory should fail gracefully.

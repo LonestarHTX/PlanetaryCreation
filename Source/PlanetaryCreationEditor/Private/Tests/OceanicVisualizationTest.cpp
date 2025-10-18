@@ -10,6 +10,7 @@
 #include "Simulation/PaperConstants.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 
 using namespace PaperConstants;
 
@@ -18,6 +19,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOceanicVisualizationTest, "PlanetaryCreation.P
 
 bool FOceanicVisualizationTest::RunTest(const FString& Parameters)
 {
+    // Gate CSV artifact writing (default on)
+    static TAutoConsoleVariable<int32> CVarPaperPhase5WriteCSVs(
+        TEXT("r.PaperPhase5.WriteCSVs"),
+        1,
+        TEXT("Write Phase 5 CSV artifacts under Docs/Automation/Validation/Phase5 (1=on, 0=off)"),
+        ECVF_Default);
+
     const int32 N = 10000;
 
     // Points
@@ -70,6 +78,17 @@ bool FOceanicVisualizationTest::RunTest(const FString& Parameters)
     Oceanic::FOceanicMetrics M = Oceanic::ApplyOceanicCrust(
         Points, Offsets, Adj, BF, Assign, Crust, Baseline_m, Elev_m, &Cache);
 
+    // Output directory
+    const FString Dir = FPaths::Combine(FPaths::ProjectDir(), TEXT("Docs"), TEXT("Automation"), TEXT("Validation"), TEXT("Phase5"));
+    if (CVarPaperPhase5WriteCSVs.GetValueOnAnyThread() != 0)
+    {
+        if (!IFileManager::Get().MakeDirectory(*Dir, /*Tree*/true))
+        {
+            AddError(FString::Printf(TEXT("[Phase5] Failed to create output directory: %s"), *Dir));
+            return false;
+        }
+    }
+
     // ========================================================================
     // Validation Artifact 1: Elevation Profile CSV
     // ========================================================================
@@ -91,12 +110,20 @@ bool FOceanicVisualizationTest::RunTest(const FString& Parameters)
         ProfileCSV += FString::Printf(TEXT("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f,%.3f,%d,%d\n"),
             i, lat, lon, dG, dP, alpha, Baseline_m[i], Elev_m[i], pid, bOceanic ? 1 : 0);
     }
-
-    const FString Dir = FPaths::ProjectDir() / TEXT("Docs/Automation/Validation/Phase5");
-    IFileManager::Get().MakeDirectory(*Dir, true);
     const FString ProfilePath = Dir / TEXT("oceanic_elevation_profile.csv");
-    FFileHelper::SaveStringToFile(ProfileCSV, *ProfilePath);
-    UE_LOG(LogTemp, Display, TEXT("[Phase5] Elevation profile CSV: %s"), *ProfilePath);
+    bool bWroteProfile = true;
+    if (CVarPaperPhase5WriteCSVs.GetValueOnAnyThread() != 0)
+    {
+        bWroteProfile = FFileHelper::SaveStringToFile(ProfileCSV, *ProfilePath);
+        if (!bWroteProfile)
+        {
+            AddError(FString::Printf(TEXT("[Phase5] Failed to write elevation profile CSV: %s"), *ProfilePath));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Display, TEXT("[Phase5] Elevation profile CSV: %s"), *ProfilePath);
+        }
+    }
 
     // ========================================================================
     // Validation Artifact 2: Ridge Direction CSV
@@ -109,24 +136,29 @@ bool FOceanicVisualizationTest::RunTest(const FString& Parameters)
         const FVector3d& P = Points[i];
         const FVector3f R = Cache.RidgeDirections.IsValidIndex(i) ? Cache.RidgeDirections[i] : FVector3f::ZeroVector;
         const double dG = BF.DistanceToRidge_km.IsValidIndex(i) ? BF.DistanceToRidge_km[i] : 1e9;
-
-        if (R.Size() > 0.1f && dG < 1000.0) // Only output near-ridge vertices with valid directions
+        const double latR = FMath::Asin(FMath::Clamp(P.Z, -1.0, 1.0)) * 180.0 / PI;
+        const double lonR = FMath::Atan2(P.Y, P.X) * 180.0 / PI;
+        RidgeCSV += FString::Printf(TEXT("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
+            i, latR, lonR, P.X, P.Y, P.Z, R.X, R.Y, R.Z, dG);
+    }
+    const FString RidgePath = Dir / TEXT("ridge_directions.csv");
+    bool bWroteRidge = true;
+    if (CVarPaperPhase5WriteCSVs.GetValueOnAnyThread() != 0)
+    {
+        bWroteRidge = FFileHelper::SaveStringToFile(RidgeCSV, *RidgePath);
+        if (!bWroteRidge)
         {
-            const double lat = FMath::Asin(FMath::Clamp(P.Z, -1.0, 1.0)) * 180.0 / PI;
-            const double lon = FMath::Atan2(P.Y, P.X) * 180.0 / PI;
-            RidgeCSV += FString::Printf(TEXT("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f\n"),
-                i, lat, lon, P.X, P.Y, P.Z, R.X, R.Y, R.Z, dG);
+            AddError(FString::Printf(TEXT("[Phase5] Failed to write ridge directions CSV: %s"), *RidgePath));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Display, TEXT("[Phase5] Ridge directions CSV: %s"), *RidgePath);
         }
     }
-
-    const FString RidgePath = Dir / TEXT("ridge_directions.csv");
-    FFileHelper::SaveStringToFile(RidgeCSV, *RidgePath);
-    UE_LOG(LogTemp, Display, TEXT("[Phase5] Ridge directions CSV: %s"), *RidgePath);
 
     // ========================================================================
     // Validation Artifact 3: Cross-Boundary Transect CSV
     // ========================================================================
-    // Sample vertices along a meridian crossing the equator (divergent boundary)
     FString TransectCSV;
     TransectCSV += TEXT("transect_index,lat_deg,lon_deg,distance_from_equator_km,elevation_m,plate_id,alpha\n");
 
@@ -162,10 +194,20 @@ bool FOceanicVisualizationTest::RunTest(const FString& Parameters)
         TransectCSV += FString::Printf(TEXT("%d,%.6f,%.6f,%.3f,%.3f,%d,%.6f\n"),
             k, lat, lon, distKm, Elev_m[i], pid, alpha);
     }
-
     const FString TransectPath = Dir / TEXT("cross_boundary_transect.csv");
-    FFileHelper::SaveStringToFile(TransectCSV, *TransectPath);
-    UE_LOG(LogTemp, Display, TEXT("[Phase5] Cross-boundary transect CSV: %s"), *TransectPath);
+    bool bWroteTransect = true;
+    if (CVarPaperPhase5WriteCSVs.GetValueOnAnyThread() != 0)
+    {
+        bWroteTransect = FFileHelper::SaveStringToFile(TransectCSV, *TransectPath);
+        if (!bWroteTransect)
+        {
+            AddError(FString::Printf(TEXT("[Phase5] Failed to write cross-boundary transect CSV: %s"), *TransectPath));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Display, TEXT("[Phase5] Cross-boundary transect CSV: %s"), *TransectPath);
+        }
+    }
 
     // ========================================================================
     // Validation Metrics
@@ -206,10 +248,13 @@ bool FOceanicVisualizationTest::RunTest(const FString& Parameters)
     }
     TestTrue(TEXT("ridge directions tangent to sphere"), tangentChecked > 0 && tangentOK > tangentChecked * 0.95);
 
-    UE_LOG(LogTemp, Display, TEXT("[Phase5] Validation artifacts written:"));
-    UE_LOG(LogTemp, Display, TEXT("  - Elevation profile: %s"), *ProfilePath);
-    UE_LOG(LogTemp, Display, TEXT("  - Ridge directions: %s"), *RidgePath);
-    UE_LOG(LogTemp, Display, TEXT("  - Cross-boundary transect: %s"), *TransectPath);
+    if (CVarPaperPhase5WriteCSVs.GetValueOnAnyThread() != 0)
+    {
+        UE_LOG(LogTemp, Display, TEXT("[Phase5] Validation artifacts written:"));
+        UE_LOG(LogTemp, Display, TEXT("  - Elevation profile: %s (ok=%d)"), *ProfilePath, bWroteProfile ? 1 : 0);
+        UE_LOG(LogTemp, Display, TEXT("  - Ridge directions: %s (ok=%d)"), *RidgePath, bWroteRidge ? 1 : 0);
+        UE_LOG(LogTemp, Display, TEXT("  - Cross-boundary transect: %s (ok=%d)"), *TransectPath, bWroteTransect ? 1 : 0);
+    }
 
     // Write metrics JSON
     FString BackendName; bool bUsedFallback = false;
@@ -220,3 +265,4 @@ bool FOceanicVisualizationTest::RunTest(const FString& Parameters)
 
     return true;
 }
+
