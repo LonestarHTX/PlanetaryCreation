@@ -45,6 +45,19 @@ public class PlanetaryCreationEditor : ModuleRules
             "Renderer"
         });
 
+        // Compile-time switch: Disable Stage B GPU Texture2DArray usage by default in editor/tests.
+        // Production builds can set PLANETARY_DISABLE_STAGEB_GPU=0 to re-enable.
+        string disableStageBGPUEnv = Environment.GetEnvironmentVariable("PLANETARY_DISABLE_STAGEB_GPU");
+        bool disableStageBGPU = string.IsNullOrEmpty(disableStageBGPUEnv) || disableStageBGPUEnv == "1";
+        if (disableStageBGPU)
+        {
+            PublicDefinitions.Add("PLANETARYCREATION_DISABLE_STAGEB_GPU=1");
+        }
+        else
+        {
+            PublicDefinitions.Add("PLANETARYCREATION_DISABLE_STAGEB_GPU=0");
+        }
+
         ConfigureStripack(Target);
         ConfigureGeogram(Target);
 

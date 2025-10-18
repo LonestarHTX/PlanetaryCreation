@@ -22,15 +22,12 @@ static TAutoConsoleVariable<int32> CVarPaperTriangulationPerfSampleCount(
     TEXT("Sample count used by the spherical Delaunay performance automation test (minimum 3)."),
     ECVF_Default);
 
-namespace
+namespace { static inline int64 EncodeEdgePerf(int32 A, int32 B)
 {
-    int64 EncodeEdge(int32 A, int32 B)
-    {
-        const int32 MinIndex = FMath::Min(A, B);
-        const int32 MaxIndex = FMath::Max(A, B);
-        return (static_cast<int64>(MinIndex) << 32) | static_cast<uint32>(MaxIndex);
-    }
-}
+    const int32 MinIndex = FMath::Min(A, B);
+    const int32 MaxIndex = FMath::Max(A, B);
+    return (static_cast<int64>(MinIndex) << 32) | static_cast<uint32>(MaxIndex);
+} }
 
 bool FSphericalDelaunayPerf10kTest::RunTest(const FString& Parameters)
 {
@@ -82,7 +79,7 @@ bool FSphericalDelaunayPerf10kTest::RunTest(const FString& Parameters)
         {
             const int32 A = Indices[EdgeIndex];
             const int32 B = Indices[(EdgeIndex + 1) % 3];
-            const int64 Key = EncodeEdge(A, B);
+            const int64 Key = EncodeEdgePerf(A, B);
             bool bAdded = false;
             UniqueEdges.Add(Key, &bAdded);
             if (bAdded)

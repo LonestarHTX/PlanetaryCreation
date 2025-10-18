@@ -9,15 +9,12 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSphericalDelaunay10kTest, "PlanetaryCreation.Paper.SphericalDelaunay10k",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-namespace
+namespace { static inline int64 EncodeEdge10k(int32 A, int32 B)
 {
-    int64 EncodeEdge(int32 A, int32 B)
-    {
-        const int32 MinIndex = FMath::Min(A, B);
-        const int32 MaxIndex = FMath::Max(A, B);
-        return (static_cast<int64>(MinIndex) << 32) | static_cast<uint32>(MaxIndex);
-    }
-}
+    const int32 MinIndex = FMath::Min(A, B);
+    const int32 MaxIndex = FMath::Max(A, B);
+    return (static_cast<int64>(MinIndex) << 32) | static_cast<uint32>(MaxIndex);
+} }
 
 bool FSphericalDelaunay10kTest::RunTest(const FString& Parameters)
 {
@@ -68,16 +65,16 @@ bool FSphericalDelaunay10kTest::RunTest(const FString& Parameters)
     // Build edge sets
     for (const FSphericalDelaunay::FTriangle& Triangle : Triangles1)
     {
-        UniqueEdges1.Add(EncodeEdge(Triangle.V0, Triangle.V1));
-        UniqueEdges1.Add(EncodeEdge(Triangle.V1, Triangle.V2));
-        UniqueEdges1.Add(EncodeEdge(Triangle.V2, Triangle.V0));
+        UniqueEdges1.Add(EncodeEdge10k(Triangle.V0, Triangle.V1));
+        UniqueEdges1.Add(EncodeEdge10k(Triangle.V1, Triangle.V2));
+        UniqueEdges1.Add(EncodeEdge10k(Triangle.V2, Triangle.V0));
     }
 
     for (const FSphericalDelaunay::FTriangle& Triangle : Triangles2)
     {
-        UniqueEdges2.Add(EncodeEdge(Triangle.V0, Triangle.V1));
-        UniqueEdges2.Add(EncodeEdge(Triangle.V1, Triangle.V2));
-        UniqueEdges2.Add(EncodeEdge(Triangle.V2, Triangle.V0));
+        UniqueEdges2.Add(EncodeEdge10k(Triangle.V0, Triangle.V1));
+        UniqueEdges2.Add(EncodeEdge10k(Triangle.V1, Triangle.V2));
+        UniqueEdges2.Add(EncodeEdge10k(Triangle.V2, Triangle.V0));
     }
 
     // Euler characteristic

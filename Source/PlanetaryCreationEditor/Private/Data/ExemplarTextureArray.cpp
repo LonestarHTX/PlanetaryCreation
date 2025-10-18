@@ -1,5 +1,7 @@
 // Milestone 6 GPU Acceleration: Exemplar Texture Array Management
 
+// Build-time switch to disable GPU Texture2DArray path for editor/tests.
+#if !PLANETARYCREATION_DISABLE_STAGEB_GPU
 #include "Data/ExemplarTextureArray.h"
 #include "Utilities/PlanetaryCreationLogging.h"
 #include "Hash/CityHash.h"
@@ -386,3 +388,32 @@ namespace PlanetaryCreation::GPU
 		return GExemplarTextureArray;
 	}
 }
+#else // PLANETARYCREATION_DISABLE_STAGEB_GPU
+
+#include "Data/ExemplarTextureArray.h"
+#include "Utilities/PlanetaryCreationLogging.h"
+#include "Simulation/PaperProfiling.h"
+
+namespace PlanetaryCreation::GPU
+{
+    FExemplarTextureArray::~FExemplarTextureArray() {}
+    bool FExemplarTextureArray::Initialize(const FString&) { bInitialized = false; ExemplarCount = 0; TextureArray = nullptr; ExemplarInfo.Reset(); return false; }
+    void FExemplarTextureArray::Shutdown() { bInitialized = false; TextureArray = nullptr; ExemplarInfo.Reset(); }
+
+    FExemplarTextureArray& GetExemplarTextureArray()
+    {
+        static FExemplarTextureArray G;
+        if (IsPaperProfilingEnabled())
+        {
+            static bool bOnce = false;
+            if (!bOnce)
+            {
+                UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB] GPU path disabled (compat mode): Exemplar texture array unavailable."));
+                bOnce = true;
+            }
+        }
+        return G;
+    }
+}
+
+#endif // PLANETARYCREATION_DISABLE_STAGEB_GPU

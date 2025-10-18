@@ -7,7 +7,7 @@
 
 using namespace Subduction;
 
-static void BuildCSR(const TArray<TArray<int32>>& Neighbors, TArray<int32>& OutOffsets, TArray<int32>& OutAdj)
+static void BuildCSR_SubductionIntegration(const TArray<TArray<int32>>& Neighbors, TArray<int32>& OutOffsets, TArray<int32>& OutAdj)
 {
     const int32 N = Neighbors.Num();
     OutOffsets.SetNum(N + 1);
@@ -48,7 +48,7 @@ bool FSubductionIntegrationTest::RunTest(const FString& Parameters)
 
     // CSR
     TArray<int32> Offsets, Adj;
-    BuildCSR(Neighbors, Offsets, Adj);
+    BuildCSR_SubductionIntegration(Neighbors, Offsets, Adj);
 
     // Two plates by hemisphere
     TArray<int32> PlateAssign;

@@ -42,13 +42,14 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "StageB/OceanicAmplificationGPU.h"
 #include "Data/ExemplarTextureArray.h"
 #include "Hash/CityHash.h"
-#include "Engine/Texture2DArray.h"
+#include "StageB/TextureArrayCompat.h"
 #include "StageB/ContinentalAmplificationTypes.h"
 #include "Simulation/BoundaryField.h"
 #include "Simulation/SphericalTriangulatorFactory.h"
 #include "Simulation/SubductionProcessor.h"
 #include "Simulation/CollisionProcessor.h"
 #include "Simulation/OceanicProcessor.h"
+#include "Simulation/ErosionProcessor.h"
 #include "Simulation/RiftingProcessor.h"
 #include <queue>
 #include <atomic>
@@ -198,6 +199,33 @@ static TAutoConsoleVariable<int32> CVarPaperOceanicMaxCadenceSteps(
     TEXT("r.PaperOceanic.MaxCadenceSteps"),
     60,
     TEXT("Maximum steps between oceanic crust evaluations."),
+    ECVF_Default);
+
+// Phase 6: Erosion & Dampening cadence and toggles
+static TAutoConsoleVariable<int32> CVarPaperErosionEvaluateEverySteps(
+    TEXT("r.PaperErosion.EvaluateEverySteps"),
+    1,
+    TEXT("Evaluate erosion/dampening every N steps (PaperMode only)."),
+    ECVF_Default);
+static TAutoConsoleVariable<int32> CVarPaperErosionEnableContinental(
+    TEXT("r.PaperErosion.EnableContinental"),
+    1,
+    TEXT("Enable continental erosion term (z -= (z/zc)*ec*dt)."),
+    ECVF_Default);
+static TAutoConsoleVariable<int32> CVarPaperErosionEnableOceanic(
+    TEXT("r.PaperErosion.EnableOceanic"),
+    1,
+    TEXT("Enable oceanic dampening term (z -= (1 - z/zt)*eo*dt)."),
+    ECVF_Default);
+static TAutoConsoleVariable<int32> CVarPaperErosionEnableTrench(
+    TEXT("r.PaperErosion.EnableTrench"),
+    1,
+    TEXT("Enable trench accretion term (z += et*dt within band)."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarPaperErosionTrenchBandKm(
+    TEXT("r.PaperErosion.TrenchBandKm"),
+    200.0f,
+    TEXT("Trench accretion band half-width in km."),
     ECVF_Default);
 
 // Phase 4: Rifting cadence and parameters
@@ -1850,11 +1878,11 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                             const FString PathR = Rifting::WritePhase4MetricsJsonAppendRifting(Path4, RiftMetrics);
                             UE_LOG(LogPlanetaryCreation, Log, TEXT("[Phase4] Rifting: %s (events=%d mean_frag=%.2f)"), *PathR, RiftMetrics.RiftingCount, RiftMetrics.MeanFragments);
                         }
-                    }
                 }
+            }
 
-                // Phase 5: Oceanic crust generation (velocity-derived cadence)
-                {
+            // Phase 5: Oceanic crust generation (velocity-derived cadence)
+            {
                     int32 OceanicEvery = CVarPaperOceanicEvaluateEverySteps.GetValueOnAnyThread();
                     if (OceanicEvery <= 0)
                     {
@@ -1898,11 +1926,74 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
                             FSphericalTriangulatorFactory::Resolve(BackendName5, bUsedFallback5);
                             const FString Path5 = Oceanic::WritePhase5MetricsJson(BackendName5, VertexCount, 42, OM);
                             UE_LOG(LogPlanetaryCreation, Log, TEXT("[Phase5] Metrics: %s (updated=%d mean_a=%.3f ridgelen=%.1fkm cadence=%d)"), *Path5, OM.VerticesUpdated, OM.MeanAlpha, OM.RidgeLength_km, OM.CadenceSteps);
-                        }
                     }
                 }
             }
+
+            // Phase 6: Erosion & Dampening (PaperMode cadence)
+            {
+                const bool bPaperMode6 = (CVarPlanetaryCreationPaperDefaults.GetValueOnAnyThread() != 0);
+                const int32 Every6 = FMath::Max(1, CVarPaperErosionEvaluateEverySteps.GetValueOnAnyThread());
+                if (bPaperMode6 && (AbsoluteStep % Every6) == 0)
+                {
+                    // Ensure adjacency exists for boundary field classification
+                    const int32 VertexCount6 = RenderVertices.Num();
+                    if (RenderVertexAdjacencyOffsets.Num() != VertexCount6 + 1 || RenderVertexAdjacency.Num() == 0)
+                    {
+                        BuildRenderVertexAdjacency();
+                    }
+
+                    // Build per-plate omega for BF and crust types
+                    TArray<FVector3d> OmegaPerPlate6; OmegaPerPlate6.SetNum(Plates.Num());
+                    TArray<uint8> PlateCrustType6; PlateCrustType6.SetNum(Plates.Num());
+                    for (int32 p = 0; p < Plates.Num(); ++p)
+                    {
+                        const FTectonicPlate& Plate = Plates[p];
+                        OmegaPerPlate6[p] = Plate.EulerPoleAxis * Plate.AngularVelocity;
+                        PlateCrustType6[p] = (Plate.CrustType == ECrustType::Continental) ? 1 : 0;
+                    }
+
+                    // Neighbors (vector-of-vectors) for BF
+                    auto CSRToNeighbors6 = [](const TArray<int32>& Off, const TArray<int32>& Adj, int32 N, TArray<TArray<int32>>& Out)
+                    {
+                        Out.SetNum(N);
+                        for (int32 a = 0; a < N; ++a)
+                        {
+                            const int32 Start = Off[a];
+                            const int32 End = Off[a + 1];
+                            const int32 Count = End - Start;
+                            Out[a].SetNumUninitialized(Count);
+                            for (int32 k = 0; k < Count; ++k) Out[a][k] = Adj[Start + k];
+                        }
+                    };
+                    TArray<TArray<int32>> Neighbors6;
+                    CSRToNeighbors6(RenderVertexAdjacencyOffsets, RenderVertexAdjacency, VertexCount6, Neighbors6);
+
+                    BoundaryField::FBoundaryFieldResults BF6;
+                    BoundaryField::ComputeBoundaryFields(RenderVertices, Neighbors6, VertexPlateAssignments, OmegaPerPlate6, BF6);
+
+                    const double TrenchBandKm = FMath::Max(0.0f, CVarPaperErosionTrenchBandKm.GetValueOnAnyThread());
+                    Erosion::FErosionMetrics EM = Erosion::ApplyErosionAndDampening(
+                        RenderVertices,
+                        VertexPlateAssignments,
+                        PlateCrustType,
+                        BF6,
+                        VertexElevationValues,
+                        TrenchBandKm);
+
+                    if (IsPaperProfilingEnabled())
+                    {
+                        FString BackendName; bool bUsedFallback6 = false;
+                        FSphericalTriangulatorFactory::Resolve(BackendName, bUsedFallback6);
+                        const FString Path6 = Erosion::WritePhase6MetricsJson(BackendName, VertexCount6, 42, EM);
+                        UE_LOG(LogPlanetaryCreation, Log, TEXT("[Phase6] Metrics: %s (cont=%d oceanic=%d trench=%d)"), *Path6, EM.ContinentalVertsChanged, EM.OceanicVertsChanged, EM.TrenchVertsChanged);
+                    }
+
+                    bSurfaceDataChanged = bSurfaceDataChanged || (EM.ContinentalVertsChanged + EM.OceanicVertsChanged + EM.TrenchVertsChanged) > 0;
+                }
+            }
         }
+    }
 
         CurrentTimeMy += StepDurationMy;
 
@@ -10982,8 +11073,22 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                 int32 DebugPixelX = -1;
                 int32 DebugPixelY = -1;
                 UTexture2DArray* TextureArray = PlanetaryCreation::GPU::GetExemplarTextureArray().GetTextureArray();
-                int32 TexWidth = TextureArray ? TextureArray->GetSizeX() : 0;
-                int32 TexHeight = TextureArray ? TextureArray->GetSizeY() : 0;
+                int32 TexWidth = 0;
+                int32 TexHeight = 0;
+#if !PLANETARYCREATION_DISABLE_STAGEB_GPU
+                TexWidth = TextureArray ? TextureArray->GetSizeX() : 0;
+                TexHeight = TextureArray ? TextureArray->GetSizeY() : 0;
+#else
+                if (IsPaperProfilingEnabled())
+                {
+                    static bool bOnce = false;
+                    if (!bOnce)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB] GPU path disabled (compat mode): exemplar texture debug info unavailable."));
+                        bOnce = true;
+                    }
+                }
+#endif
                 if (TexWidth > 0 && TexHeight > 0)
                 {
                     DebugPixelX = FMath::Clamp(static_cast<int32>(WrappedUVValue.X * static_cast<float>(TexWidth)), 0, TexWidth - 1);
@@ -11073,11 +11178,16 @@ void UTectonicSimulationService::ProcessPendingContinentalGPUReadbacks(bool bBlo
                         TransitionAgeValue);
 
 #if UE_BUILD_DEVELOPMENT
+#if !PLANETARYCREATION_DISABLE_STAGEB_GPU
                     if (TextureArray)
                     {
                         const int32 AtlasSlice = (PrimaryIndex != MAX_uint32)
                             ? FMath::Clamp(static_cast<int32>(PrimaryIndex), 0, TextureArray->GetArraySize() - 1)
                             : 0;
+#else
+                    {
+                        const int32 AtlasSlice = 0;
+#endif
                         PlanetaryCreation::GPU::FExemplarTextureArray& ExemplarArray = PlanetaryCreation::GPU::GetExemplarTextureArray();
                         const TArray<PlanetaryCreation::GPU::FExemplarTextureArray::FExemplarInfo>& ExemplarInfo = ExemplarArray.GetExemplarInfo();
                         if (ExemplarInfo.IsValidIndex(AtlasSlice))

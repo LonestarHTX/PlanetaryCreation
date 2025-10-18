@@ -69,12 +69,13 @@ namespace
 
     bool ShouldDisableRandomOffset()
     {
-        FString EnvValue = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_DISABLE_RANDOM_OFFSET"));
-        EnvValue.TrimStartAndEndInline();
+        const FString EnvValue = FPlatformMisc::GetEnvironmentVariable(TEXT("PLANETARY_STAGEB_DISABLE_RANDOM_OFFSET"));
+        FString TrimmedValue = EnvValue;
+        TrimmedValue.TrimStartAndEndInline();
 
-        const bool bEnvDisabled = EnvValue.Equals(TEXT("1"), ESearchCase::IgnoreCase) ||
-            EnvValue.Equals(TEXT("true"), ESearchCase::IgnoreCase) ||
-            EnvValue.Equals(TEXT("yes"), ESearchCase::IgnoreCase);
+        const bool bEnvDisabled = TrimmedValue.Equals(TEXT("1"), ESearchCase::IgnoreCase) ||
+            TrimmedValue.Equals(TEXT("true"), ESearchCase::IgnoreCase) ||
+            TrimmedValue.Equals(TEXT("yes"), ESearchCase::IgnoreCase);
 
         const bool bDisabled = (GStageBDisableRandomOffset != 0) || bEnvDisabled;
 

@@ -16,15 +16,12 @@ static TAutoConsoleVariable<int32> CVarGeogram200kTestEnabled(
 	TEXT("Enable 200k vertex Geogram triangulation test (0 = skip, 1 = run). This is a stress test."),
 	ECVF_Default);
 
-namespace
+namespace { static inline int64 EncodeEdge200k(int32 A, int32 B)
 {
-	int64 EncodeEdge(int32 A, int32 B)
-	{
-		const int32 MinIndex = FMath::Min(A, B);
-		const int32 MaxIndex = FMath::Max(A, B);
-		return (static_cast<int64>(MinIndex) << 32) | static_cast<uint32>(MaxIndex);
-	}
-}
+	const int32 MinIndex = FMath::Min(A, B);
+	const int32 MaxIndex = FMath::Max(A, B);
+	return (static_cast<int64>(MinIndex) << 32) | static_cast<uint32>(MaxIndex);
+} }
 
 bool FSphericalDelaunayGeogram200kTest::RunTest(const FString& Parameters)
 {
@@ -109,7 +106,7 @@ bool FSphericalDelaunayGeogram200kTest::RunTest(const FString& Parameters)
 		{
 			const int32 A = Indices[EdgeIndex];
 			const int32 B = Indices[(EdgeIndex + 1) % 3];
-			UniqueEdges.Add(EncodeEdge(A, B));
+			UniqueEdges.Add(EncodeEdge200k(A, B));
 		}
 	}
 

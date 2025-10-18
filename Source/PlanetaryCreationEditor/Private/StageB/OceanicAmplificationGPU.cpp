@@ -4,7 +4,7 @@
 #include "Utilities/PlanetaryCreationLogging.h"
 #include "Simulation/TectonicSimulationService.h"
 #include "Data/ExemplarTextureArray.h"
-#include "Engine/Texture2DArray.h"
+// #include "Engine/Texture2DArray.h" // not required for stubbed exemplar path
 
 #include "HAL/PlatformTime.h"
 #include "GlobalShader.h"
@@ -865,6 +865,14 @@ namespace PlanetaryCreation::GPU
                 TRefCountPtr<FRDGPooledBuffer> ContinentalOutputBufferRef;
                 if (bDispatchContinental && ContinentalIndexData.IsValid() && ContinentalReadback.IsValid() && ExemplarMetadataPtr.IsValid())
                 {
+#if PLANETARYCREATION_DISABLE_STAGEB_GPU
+                    static bool bCompatLogged = false;
+                    if (!bCompatLogged)
+                    {
+                        UE_LOG(LogPlanetaryCreation, Warning, TEXT("[StageB] GPU path disabled (compat mode): skipping continental GPU dispatch."));
+                        bCompatLogged = true;
+                    }
+#else
                     FRDGTextureRef ExemplarTextureRDG = nullptr;
                     if (ExemplarTextureObject)
                     {
@@ -884,6 +892,7 @@ namespace PlanetaryCreation::GPU
                 }
                 else
                 {
+#endif
                         FRDGBufferRef WorkIndexBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalWork"), *ContinentalIndexData);
                         FRDGBufferRef PackedInfoBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalPackedInfo"), ContinentalPackedInfo);
                         FRDGBufferRef ExemplarIndexBuffer = CreateStructuredBuffer(GraphBuilder, TEXT("PlanetaryCreation.StageBUnified.ContinentalExemplarIndices"), ContinentalExemplarIndices);
@@ -959,7 +968,9 @@ namespace PlanetaryCreation::GPU
                         Parameters->ContinentalTextureWidth = ExemplarTextureWidth;
                         Parameters->ContinentalTextureHeight = ExemplarTextureHeight;
                         Parameters->ContinentalLayerCount = ExemplarLayerCount;
+#if !PLANETARYCREATION_DISABLE_STAGEB_GPU
                         Parameters->ContinentalExemplarTexture = ExemplarTextureRDG;
+#endif
                         Parameters->ContinentalDebugOutput = ContinentalDebugUAV;
                         Parameters->ContinentalOutAmplified = GraphBuilder.CreateUAV(FRDGBufferUAVDesc(OutputBuffer));
 
@@ -972,7 +983,9 @@ namespace PlanetaryCreation::GPU
                             FIntVector(ContinentalGroupCountX, 1, 1));
 
                         GraphBuilder.QueueBufferExtraction(OutputBuffer, &ContinentalOutputBufferRef);
-                    }
+#if !PLANETARYCREATION_DISABLE_STAGEB_GPU
+                }
+#endif
                 }
 
 
