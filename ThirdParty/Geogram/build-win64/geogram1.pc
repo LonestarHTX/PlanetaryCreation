@@ -1,0 +1,10 @@
+prefix=C:/Program Files/Geogram
+exec_prefix=${prefix}
+includedir=${prefix}/include/geogram1
+
+Name: geogram
+Description: fast, simple and easy-to-use primitives for geometric programming
+Version: 1.9.7
+URL: https://github.com/BrunoLevy/geogram
+Libs: -lgeogram
+Cflags: -I${includedir}

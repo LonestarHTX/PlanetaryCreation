@@ -334,6 +334,9 @@ struct FTectonicPlate
     /** Static crust thickness in km (deferred: dynamic updates in Milestone 3). */
     double CrustThickness = 7.0; // Default oceanic crust ~7km
 
+    /** Continental coverage ratio for this plate (0..1). TODO: Wire real ratio from vertex types/elevations in Phase 5/6. */
+    double ContinentalRatio = 1.0;
+
     /** Indices of vertices forming this plate's polygon (into shared vertex array). */
     TArray<int32> VertexIndices;
 };

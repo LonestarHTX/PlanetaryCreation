@@ -70,9 +70,14 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectoni
 - Stage B throttling during GPU automation: `-SetCVar=r.PlanetaryCreation.StageBThrottleMs=50`.
 - Heightmap exports use `Scripts/ExportHeightmap1024.py` (safe) and `Scripts/ExportHeightmap4096Force.py` (unsafe; follow crash guidance in `Docs/Heightmap/heightmap_export_review.md`).
 
+- Triangulation backend selection:
+  - `r.PaperTriangulation.Backend=Auto|Geogram|Stripack` (default `Auto`, prefers Geogram when available).
+  - Shuffle control for STRIPACK incremental behavior: `r.PaperTriangulation.Shuffle=1` and `r.PaperTriangulation.ShuffleSeed=42`.
+
 ---
 
 ## Automation & Testing
+Agents are required to run builds and tests after making changes and include a brief results summary (pass/fail, timings, artifact paths). If execution is blocked by sandboxing/approvals, agents must request escalation with a one‑line justification or provide exact commands for a human to run and what success looks like.
 - **Milestone 3 regression:**  
   `powershell.exe -ExecutionPolicy Bypass -File ".\Scripts\RunMilestone3Tests.ps1" -ArchiveLogs`
 - **General automation suite:**  
@@ -82,6 +87,26 @@ PlanetaryCreation is an Unreal Engine 5.5 editor tool that recreates the tectoni
     -ExecCmds='Automation RunTests PlanetaryCreation' `
     -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log"
   ```
+
+### PaperMode Resolution
+- Control the initial paper geometry resolution via CVars (editor-only):
+  - `r.PaperMode.SampleCount` (int; >0 wins)
+  - `r.PaperMode.TargetResolutionKm` (double; used if `SampleCount` <= 0)
+  - When both unset, defaults to ~500k samples (paper requirement).
+  - Logs once at init: chosen `EffectiveN`, `EffectiveResolutionKm`, and triangulation backend.
+
+- Tiered presets (pin backend + determinism):
+  - Unit (fast): `-SetCVar=r.PaperMode.SampleCount=4096,r.PaperTriangulation.Backend=Geogram,r.PaperTriangulation.Shuffle=0`
+  - Integration: `-SetCVar=r.PaperMode.SampleCount=50000,r.PaperTriangulation.Backend=Geogram,r.PaperTriangulation.Shuffle=0`
+  - Perf/validation: `-SetCVar=r.PaperMode.TargetResolutionKm=35,r.PaperTriangulation.Backend=Geogram,r.PaperTriangulation.Shuffle=0`
+
+Example headless init smoke (verify log contains EffectiveN):
+```powershell
+"C:\Program Files\Epic Games\UE_5.5\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" `
+  "C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\PlanetaryCreation.uproject" `
+  -SetCVar=r.PaperMode.SampleCount=4096,r.PaperTriangulation.Backend=Geogram `
+  -unattended -nop4 -nosplash -log -TestExit="Automation Test Queue Empty"
+```
 - **GPU parity suites:**  
   Require real RHI, throttle ≥25 ms. Suites live under `PlanetaryCreation.Milestone6.GPU.*`.
 - **Log inspection:**  

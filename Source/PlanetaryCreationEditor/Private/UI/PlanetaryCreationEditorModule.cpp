@@ -4,6 +4,7 @@
 #include "UI/SPTectonicToolPanel.h"
 #include "Simulation/TectonicSimulationController.h"
 #include "Simulation/TectonicSimulationService.h"
+#include "Simulation/Triangulators/GeogramTriangulator.h"
 
 #include "Framework/Commands/UICommandList.h"
 #include "Framework/Docking/TabManager.h"
@@ -28,6 +29,8 @@ namespace
 void FPlanetaryCreationEditorModule::StartupModule()
 {
     UE_LOG(LogPlanetaryCreation, Log, TEXT("[Module] StartupModule() called"));
+
+    FGeogramTriangulator::Startup();
 
     GPrevEnsureHandler = SetEnsureHandler([](const FEnsureHandlerArgs& Args)
     {
@@ -65,6 +68,8 @@ void FPlanetaryCreationEditorModule::StartupModule()
 
 void FPlanetaryCreationEditorModule::ShutdownModule()
 {
+    FGeogramTriangulator::Shutdown();
+
     SetEnsureHandler(GPrevEnsureHandler);
     FCoreDelegates::OnPostEngineInit.Remove(OnPostEngineInitHandle);
 

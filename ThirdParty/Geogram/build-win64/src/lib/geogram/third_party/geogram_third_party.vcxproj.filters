@@ -1,0 +1,345 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources\libmeshb7.c">
+      <Filter>Source Files\libMeshb</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\rply\rply.c">
+      <Filter>Source Files\rply</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\adler32.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\compress.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\crc32.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\deflate.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzclose.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzlib.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzread.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzwrite.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\infback.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inffast.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inflate.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inftrees.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\trees.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\uncompr.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zutil.c">
+      <Filter>Source Files\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Factor.cpp">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Geometry.cpp">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MarchingCubes.cpp">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\poisson_geogram.cpp">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\xatlas\xatlas.cpp">
+      <Filter>Source Files\xatlas</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_amgcl.cpp">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_api.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_arpack.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_blas.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cholmod.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_context.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cuda.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_iterative_solvers.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_matrix.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_mkl.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_os.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_preconditioners.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_superlu.c">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS.cpp">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS_BLAS.cpp">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\ICFS.cpp">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\LineSearch.cpp">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\Lite_Sparse_Matrix.cpp">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\tetgen\tetgen.cpp">
+      <Filter>Source Files\tetgen</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\triangle\triangle.c">
+      <Filter>Source Files\triangle</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources\libmeshb7.h">
+      <Filter>Source Files\libMeshb</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\rply\rply.h">
+      <Filter>Source Files\rply</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\rply\rplyfile.h">
+      <Filter>Source Files\rply</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\crc32.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\deflate.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzguts.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inffast.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inffixed.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inflate.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inftrees.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\trees.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zconf.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zlib.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zutil.h">
+      <Filter>Source Files\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Allocator.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Array.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\BSplineData.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\BinaryNode.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Factor.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\FunctionData.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Geometry.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Hash.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MAT.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MarchingCubes.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MemoryUsage.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MultiGridOctreeData.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MyTime.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Octree.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\PPolynomial.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\PlyVertexMini.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\PointStream.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Polynomial.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\SparseMatrix.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\poisson_geogram.h">
+      <Filter>Source Files\PoissonRecon</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\xatlas\xatlas.h">
+      <Filter>Source Files\xatlas</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_64.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_amgcl.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_arpack.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_blas.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cholmod.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_context.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cuda.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_ext.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_iterative_solvers.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_linkage.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_matrix.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_mkl.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_preconditioners.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_private.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_superlu.h">
+      <Filter>Source Files\OpenNL</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS.h">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS_BLAS.h">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\ICFS.h">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\LineSearch.h">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\Lite_Sparse_Matrix.h">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\Sparse_Entry.h">
+      <Filter>Source Files\HLBFGS</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\tetgen\tetgen.h">
+      <Filter>Source Files\tetgen</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\triangle\triangle.h">
+      <Filter>Source Files\triangle</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{E304D366-87AB-367F-B495-C6E0BBD494AC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\HLBFGS">
+      <UniqueIdentifier>{4E51CC52-D732-3ED4-9359-1B413753A109}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\OpenNL">
+      <UniqueIdentifier>{28D0BCF5-AD02-3F1B-B696-659FEAB49446}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\PoissonRecon">
+      <UniqueIdentifier>{75FBD3BC-7171-3566-B1E8-62F094DC1999}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\libMeshb">
+      <UniqueIdentifier>{337AF954-9D70-334A-A447-8C6436DBA99A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\rply">
+      <UniqueIdentifier>{3CEB68C2-C248-3EFC-AB93-6E8258E88748}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\tetgen">
+      <UniqueIdentifier>{AB2B0104-FE38-3AD0-84AA-3473B9397CBA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\triangle">
+      <UniqueIdentifier>{EE2FA933-9A1F-3E75-AFDA-733A201D91D2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\xatlas">
+      <UniqueIdentifier>{0920FD5F-D426-3CB4-BC7B-67E5B0EAEB2D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\zlib">
+      <UniqueIdentifier>{5CA185B5-11C9-361D-AA6E-7623A8DCB647}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

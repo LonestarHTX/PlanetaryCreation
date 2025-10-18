@@ -1,0 +1,6 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-3.31/Modules/FindDoxygen.cmake
+C:/Program Files/CMake/share/cmake-3.31/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/CMake/share/cmake-3.31/Modules/FindPackageMessage.cmake
+C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/cmake/doxygen.cmake
+C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/doc/CMakeLists.txt

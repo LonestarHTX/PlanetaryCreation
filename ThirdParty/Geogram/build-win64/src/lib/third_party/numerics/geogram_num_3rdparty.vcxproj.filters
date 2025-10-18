@@ -1,0 +1,2211 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_abort_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_backspac.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_abs.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_cos.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_div.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_exp.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_log.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_sin.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_sqrt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_cabs.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_close.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ctype.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_abs.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_acos.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_asin.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_atan.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_atn2.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_cnjg.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_cos.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_cosh.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_dim.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_exp.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_imag.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_int.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_lg10.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_log.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_mod.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_nint.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_prod.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sign.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sin.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sinh.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sqrt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_tan.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_tanh.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_derf_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_derfc_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_dfe.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_dolio.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_dtime_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_due.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ef1asc_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ef1cmc_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_endfile.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_erf_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_erfc_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_err.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_etime_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_exit_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_f77_aloc.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_f77vers.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_fmt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_fmtlib.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ftell_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_getarg_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_getenv_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_abs.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_dim.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_dnnt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_indx.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_len.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_mod.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_nint.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_sign.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_ge.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_gt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_le.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_lt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i77vers.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_abs.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_ceiling.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_dim.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_dnnt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_indx.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_len.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_len_trim.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_mod.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_nint.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_sign.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_iargc_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_iio.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ilnw.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_inquire.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_ge.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_gt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_le.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_lt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lbitbits.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lbitshft.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lread.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lwrite.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_missing_erf.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_open.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_ci.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_dd.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_di.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_hh.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_ii.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_ri.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_zi.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_zz.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_abs.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_acos.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_asin.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_atan.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_atn2.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_cnjg.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_cos.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_cosh.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_dim.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_exp.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_imag.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_int.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_lg10.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_log.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_mod.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_nint.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sign.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sin.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sinh.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sqrt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_tan.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_tanh.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rdfmt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rewind.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rsfe.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rsli.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rsne.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_cat.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_cmp.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_copy.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_paus.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_rnge.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_stop.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_sfe.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_sig_die.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_signal_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_signbit.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_sue.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_system_.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_typesize.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_uio.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_uninit.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_util.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wref.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wrtfmt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wsfe.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wsle.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wsne.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_xwsne.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_abs.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_cos.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_div.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_exp.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_log.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_sin.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_sqrt.c">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\caxpy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ccopy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cdotc.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cdotu.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgemm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgemv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgerc.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgeru.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chemm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chemv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cher.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cher2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cher2k.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cherk.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chpmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chpr.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chpr2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\crotg.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cscal.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csrot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csscal.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cswap.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csymm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csyr2k.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csyrk.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctbsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctpmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctpsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrmm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrsm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dasum.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\daxpy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dcabs1.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dcopy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ddot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dgbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dgemm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dgemv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dger.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dnrm2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drotg.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drotm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drotmg.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dscal.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsdot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dspmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dspr.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dspr2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dswap.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsymm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsymv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyr.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyr2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyr2k.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyrk.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtbsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtpmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtpsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrmm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrsm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dzasum.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dznrm2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\icamax.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\idamax.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\isamax.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\izamax.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\lsame.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sasum.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\saxpy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scabs1.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scasum.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scnrm2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scopy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sdot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sdsdot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sgbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sgemm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sgemv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sger.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\snrm2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srotg.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srotm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srotmg.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sscal.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sspmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sspr.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sspr2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sswap.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssymm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssymv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyr.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyr2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyr2k.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyrk.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stbsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stpmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stpsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strmm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strsm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\xerbla.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\xerbla_array.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zaxpy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zcopy.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdotc.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdotu.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdrot.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdscal.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgemm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgemv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgerc.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgeru.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhemm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhemv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zher.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zher2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zher2k.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zherk.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhpmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhpr.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhpr2.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zrotg.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zscal.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zswap.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zsymm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zsyr2k.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zsyrk.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztbmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztbsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztpmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztpsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrmm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrmv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrsm.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrsv.c">
+      <Filter>Source Files\CBLAS</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_cgeqr2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clacn2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clacpy.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_cladiv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clahqr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clange.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clanhs.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarf.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarfg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarfp.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarnv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clartg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clascl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_claset.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_classq.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clatrs.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_crot.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrevc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrexc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrsen.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrsyl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_cunm2r.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dgeqr2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_disnan.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlabad.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlacn2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlacpy.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dladiv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlae2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaev2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaexc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlahqr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaisnan.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaln2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlamch.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlange.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlanhs.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlanst.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlanv2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlapy2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlapy3.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarf.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarfg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarfp.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarfx.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarnv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlartg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaruv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlascl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaset.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlasr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlasrt.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlassq.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlasy2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dorm2r.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dsteqr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrevc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrexc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrsen.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrsyl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dummy_argc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dzsum1.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_icmax1.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaclc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaclr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_iladlc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_iladlr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaslc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaslr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilazlc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilazlr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_izmax1.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_scsum1.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sgeqr2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sisnan.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slabad.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slacn2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slacpy.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sladiv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slae2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaev2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaexc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slahqr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaisnan.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaln2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slamch.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slange.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slanhs.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slanst.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slanv2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slapy2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slapy3.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarf.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarfg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarfp.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarfx.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarnv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slartg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaruv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slascl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaset.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slasr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slasrt.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slassq.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slasy2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sorm2r.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ssteqr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strevc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strexc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strsen.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strsyl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zgeqr2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlacn2.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlacpy.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zladiv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlahqr.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlange.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlanhs.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarf.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarfg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarfp.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarnv.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlartg.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlascl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlaset.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlassq.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlatrs.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zrot.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrevc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrexc.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrsen.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrsyl.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zunm2r.c">
+      <Filter>Source Files\CLAPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ccolumn_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ccolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ccopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cdiagonal.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgscon.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsequ.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsisx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsitrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsrfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgssv.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgssvx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgstrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgstrs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\clacon2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\clangs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\claqgs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cldperm.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cmemory.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cmyblas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\colamd.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpanel_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpivotgrowth.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpruneL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\creadhb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\creadrb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\creadtriple.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csnode_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csp_blas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csp_blas3.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cutil.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcolumn_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcomplex.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ddiagonal.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgscon.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsequ.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsisx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsitrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsrfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgssv.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgssvx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgstrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgstrs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dlacon2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dlangs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dlaqgs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dldperm.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dmach.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dmemory.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dmyblas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpanel_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpivotgrowth.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpruneL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dreadhb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dreadrb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dreadtriple.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsnode_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsp_blas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsp_blas3.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dutil.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dzsum1.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\get_perm_c.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\heap_relax_snode.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\icmax1.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ccolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ccopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_cdrop_row.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_cpanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_cpivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_csnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dcolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dcopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ddrop_row.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dpanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dpivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dsnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_heap_relax_snode.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_relax_snode.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_scolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_scopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_sdrop_row.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_spanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_spivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ssnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zcolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zcopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zdrop_row.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zpanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zpivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zsnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\input_error.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\izmax1.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\mark_relax.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\mc64ad.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\memory.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\mmd.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\qselect.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\relax_snode.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scolumn_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scomplex.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scsum1.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sdiagonal.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgscon.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsequ.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsisx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsitrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsrfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgssv.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgssvx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgstrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgstrs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slacon2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slangs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slaqgs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sldperm.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\smach.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\smemory.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\smyblas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sp_coletree.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sp_ienv.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sp_preorder.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spanel_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spivotgrowth.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spruneL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sreadhb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sreadrb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sreadtriple.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssnode_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssp_blas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssp_blas3.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\superlu_timer.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sutil.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\util.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zcolumn_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zcolumn_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zcopy_to_ucol.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zdiagonal.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgscon.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsequ.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsisx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsitrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsrfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgssv.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgssvx.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgstrf.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgstrs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zlacon2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zlangs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zlaqgs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zldperm.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zmemory.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zmyblas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpanel_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpanel_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpivotL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpivotgrowth.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpruneL.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zreadhb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zreadrb.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zreadtriple.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsnode_bmod.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsnode_dfs.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsp_blas2.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsp_blas3.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zutil.c">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cgetv0.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnaitr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnapps.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnaup2.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnaupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cneigh.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cneupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cngets.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\csortc.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cstatn.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dgetv0.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dlaqrb.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaitr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnapps.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaup2.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaupe.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnconv.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dneigh.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dneupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dngets.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsaitr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsapps.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsaup2.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsaupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsconv.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dseigt.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsesrt.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dseupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsgets.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsortc.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsortr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dstatn.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dstats.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dstqrb.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sgetv0.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\slaqrb.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaitr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snapps.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaup2.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaupe.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snconv.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sneigh.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sneupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sngets.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssaitr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssapps.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssaup2.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssaupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssconv.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sseigt.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssesrt.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sseupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssgets.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssortc.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssortr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sstatn.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sstats.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sstqrb.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zgetv0.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znaitr.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znapps.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znaup2.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znaupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zneigh.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zneupd.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zngets.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zsortc.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zstatn.c">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\cmout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\cvout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\dmout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\dvout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\icnteq.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\icopy.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\iset.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\iswap.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\ivout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\second.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\smout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\svout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\zmout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\zvout.c">
+      <Filter>Source Files\ARPACK_UTIL</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\linkage.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\arith.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\ctype.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\f2c.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\fio.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\fmt.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\fp.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\lio.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\rawio.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\signal1.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\sysdep1.h">
+      <Filter>Source Files\LIBF2C</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\colamd.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\html_mainpage.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_Cnames.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_cdefs.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_dcomplex.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_ddefs.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_scomplex.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_sdefs.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_util.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_zdefs.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\superlu_enum_consts.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\supermatrix.h">
+      <Filter>Source Files\SUPERLU</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\protos.h">
+      <Filter>Source Files\ARPACK</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{E304D366-87AB-367F-B495-C6E0BBD494AC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ARPACK">
+      <UniqueIdentifier>{B4EADFFE-5C4C-36F1-A052-8A733FDA9E5C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ARPACK_UTIL">
+      <UniqueIdentifier>{0D3FBCB0-5FF0-3608-AF0A-49FE40BE028A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\CBLAS">
+      <UniqueIdentifier>{964C3868-878A-3255-96DA-95C31E96C862}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\CLAPACK">
+      <UniqueIdentifier>{3A99377A-77BC-3BA1-8BA7-2AC458C279AC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\LIBF2C">
+      <UniqueIdentifier>{93D745B5-883C-312F-B623-D3DF9F639C6B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\SUPERLU">
+      <UniqueIdentifier>{6F3A91BB-2AF0-32C7-8461-D01EDAF20B42}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -33,6 +33,9 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Utilities/SphericalKDTree.h"
+#include "Simulation/FibonacciSampling.h"
+#include "Simulation/PaperConstants.h"
+#include "Simulation/SphericalTriangulatorFactory.h"
 #include "Trace/Trace.h"
 #include "RHI.h"
 #include "RHIGPUReadback.h"
@@ -41,6 +44,12 @@ DEFINE_LOG_CATEGORY(LogPlanetaryCreation);
 #include "Hash/CityHash.h"
 #include "Engine/Texture2DArray.h"
 #include "StageB/ContinentalAmplificationTypes.h"
+#include "Simulation/BoundaryField.h"
+#include "Simulation/SphericalTriangulatorFactory.h"
+#include "Simulation/SubductionProcessor.h"
+#include "Simulation/CollisionProcessor.h"
+#include "Simulation/OceanicProcessor.h"
+#include "Simulation/RiftingProcessor.h"
 #include <queue>
 #include <atomic>
 #if WITH_EDITOR
@@ -59,6 +68,19 @@ static void HandleUseGPUHydraulicChanged(IConsoleVariable* Variable);
 #endif
 
 #if WITH_EDITOR
+// PaperMode resolution controls (editor-only)
+static TAutoConsoleVariable<int32> CVarPaperModeSampleCount(
+    TEXT("r.PaperMode.SampleCount"),
+    -1,
+    TEXT("PaperMode: explicit Fibonacci sample count for initial geometry. >0 wins over TargetResolutionKm."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarPaperModeTargetResolutionKm(
+    TEXT("r.PaperMode.TargetResolutionKm"),
+    -1.0f,
+    TEXT("PaperMode: target geodesic resolution in km. Used only if SampleCount <= 0. Defaults to ~500k samples when both unset."),
+    ECVF_Default);
+
 static bool GStageBForceCPUEnvCached = false;
 static bool GStageBForceCPUFromEnv = false;
 static bool GStageBAnisotropyLoggedCPU = false;
@@ -133,6 +155,67 @@ static TAutoConsoleVariable<int32> CVarPlanetaryCreationPaperDefaults(
     1,
     TEXT("Toggle paper-aligned defaults (Stage B amplification, GPU preview, PBR shading, LOD5).\n0 = revert to M5 baseline\n1 = enable paper-authentic pipeline (default)."),
     FConsoleVariableDelegate::CreateStatic(&HandlePaperDefaultsChanged));
+
+// Global profiling toggle for PaperMode-related emitters/metrics
+static TAutoConsoleVariable<int32> CVarPaperProfiling(
+    TEXT("r.PaperProfiling"),
+    1,
+    TEXT("Enable profiling logs and Phase 3 metrics emission for PaperMode systems (1=on, 0=off)."),
+    ECVF_Default);
+
+// PaperMode: cadence for subduction uplift integration (steps)
+static TAutoConsoleVariable<int32> CVarPaperSubductionCadenceSteps(
+    TEXT("r.PaperSubduction.CadenceSteps"),
+    1,
+    TEXT("Apply subduction uplift every N simulation steps (PaperMode only)."),
+    ECVF_Default);
+
+// Phase 4: Collision surge cadence and peak guardrail
+static TAutoConsoleVariable<int32> CVarPaperCollisionEvaluateEverySteps(
+    TEXT("r.PaperCollision.EvaluateEverySteps"),
+    10,
+    TEXT("Evaluate collision surge every N steps (PaperMode only)."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarPaperCollisionPeakGuardrailMeters(
+    TEXT("r.PaperCollision.PeakGuardrailMeters"),
+    6000.0f,
+    TEXT("Collision surge peak guardrail in meters (0 disables)."),
+    ECVF_Default);
+
+// Phase 5: Oceanic crust generation cadence (velocity dependent)
+static TAutoConsoleVariable<int32> CVarPaperOceanicEvaluateEverySteps(
+    TEXT("r.PaperOceanic.EvaluateEverySteps"),
+    -1,
+    TEXT("Override cadence for oceanic crust generation. -1 = derive from max plate speed."),
+    ECVF_Default);
+static TAutoConsoleVariable<int32> CVarPaperOceanicMinCadenceSteps(
+    TEXT("r.PaperOceanic.MinCadenceSteps"),
+    10,
+    TEXT("Minimum steps between oceanic crust evaluations."),
+    ECVF_Default);
+static TAutoConsoleVariable<int32> CVarPaperOceanicMaxCadenceSteps(
+    TEXT("r.PaperOceanic.MaxCadenceSteps"),
+    60,
+    TEXT("Maximum steps between oceanic crust evaluations."),
+    ECVF_Default);
+
+// Phase 4: Rifting cadence and parameters
+static TAutoConsoleVariable<int32> CVarPaperRiftingEvaluateEverySteps(
+    TEXT("r.PaperRifting.EvaluateEverySteps"),
+    60,
+    TEXT("Evaluate probabilistic plate rifting every N steps (PaperMode only)."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarPaperRiftingLambdaBase(
+    TEXT("r.PaperRifting.LambdaBase"),
+    0.05f,
+    TEXT("Base rate for rifting probability model (Section 4.4)."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarPaperRiftingMinPlateAreaKm2(
+    TEXT("r.PaperRifting.MinPlateAreaKm2"),
+    2000000.0f,
+    TEXT("Minimum plate area (km^2) eligible for rifting."),
+    ECVF_Default);
 
 static void ApplyStageBProfilingCommandLineOverride()
 {
@@ -627,6 +710,8 @@ void UTectonicSimulationService::LogPlateElevationMismatches(const TCHAR* Contex
         }
     }
 
+    // (Phase 4 block moved to AdvanceSteps where AbsoluteStep and non-const state are available.)
+
     if (MismatchCount > 0)
     {
         UE_LOG(LogPlanetaryCreation, Warning,
@@ -1081,6 +1166,57 @@ void UTectonicSimulationService::ResetSimulation()
     Terranes.Empty();
     NextTerraneID = 0;
 
+#if WITH_EDITOR
+    // PaperMode: choose effective sampling resolution and log once per init
+    static int32 GPrevPaperModeEffectiveN = -1;
+    const bool bPaperDefaults = (CVarPlanetaryCreationPaperDefaults.GetValueOnAnyThread() != 0);
+    const int32 SampleCountCVar = CVarPaperModeSampleCount.GetValueOnAnyThread();
+    const float TargetResKmCVar = CVarPaperModeTargetResolutionKm.GetValueOnAnyThread();
+
+    if (bPaperDefaults || SampleCountCVar > 0 || TargetResKmCVar > 0.0f)
+    {
+        int32 EffectiveN = -1;
+        if (SampleCountCVar > 0)
+        {
+            EffectiveN = SampleCountCVar;
+        }
+        else if (TargetResKmCVar > 0.0f)
+        {
+            EffectiveN = FFibonacciSampling::ComputeSampleCount(PaperConstants::PlanetRadius_km, static_cast<double>(TargetResKmCVar));
+        }
+        else
+        {
+            EffectiveN = 500000; // paper requirement default when unspecified
+        }
+
+        const double EffectiveResolutionKm = FFibonacciSampling::ComputeResolution(PaperConstants::PlanetRadius_km, EffectiveN);
+
+        FString BackendName;
+        bool bUsedFallback = false;
+        {
+            // Resolve the backend name deterministically without triggering any heavy compute
+            ISphericalTriangulator& Backend = FSphericalTriangulatorFactory::Resolve(BackendName, bUsedFallback);
+            (void)Backend; // name only
+        }
+
+        UE_LOG(LogPlanetaryCreation, Log,
+            TEXT("PaperMode Init: SampleCountCVar=%d TargetResolutionKmCVar=%.3f EffectiveN=%d EffectiveResolutionKm=%.2f Backend=%s%s"),
+            SampleCountCVar,
+            TargetResKmCVar,
+            EffectiveN,
+            EffectiveResolutionKm,
+            *BackendName,
+            bUsedFallback ? TEXT(" (fallback)") : TEXT(""));
+
+        // Invalidate geometry-dependent caches if N changed across resets
+        if (GPrevPaperModeEffectiveN >= 0 && GPrevPaperModeEffectiveN != EffectiveN)
+        {
+            ++TopologyVersion; // bump once to mark geometry basis change for downstream caches
+        }
+        GPrevPaperModeEffectiveN = EffectiveN;
+    }
+#endif
+
     GenerateDefaultSphereSamples();
 
     // Milestone 2: Generate plate simulation state
@@ -1328,6 +1464,445 @@ void UTectonicSimulationService::AdvanceSteps(int32 StepCount)
 
         // Milestone 4 Task 2.1: Update hotspot drift in mantle frame
         UpdateHotspotDrift(StepDurationMy);
+
+        // Phase 3: Subduction uplift integration (PaperMode cadence)
+        {
+            const bool bPaperMode = (CVarPlanetaryCreationPaperDefaults.GetValueOnAnyThread() != 0);
+            const int32 Cadence = FMath::Max(1, CVarPaperSubductionCadenceSteps.GetValueOnAnyThread());
+            if (bPaperMode && (AbsoluteStep % Cadence == 0))
+            {
+                // Ensure adjacency is built
+                const int32 VertexCount = RenderVertices.Num();
+                if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
+                {
+                    BuildRenderVertexAdjacency();
+                }
+
+                // Build omega vectors per plate (rad/My)
+                TArray<FVector3d> OmegaPerPlate;
+                OmegaPerPlate.SetNum(Plates.Num());
+                for (int32 p = 0; p < Plates.Num(); ++p)
+                {
+                    const FTectonicPlate& Plate = Plates[p];
+                    OmegaPerPlate[p] = Plate.EulerPoleAxis * Plate.AngularVelocity;
+                }
+                // Build neighbors and classify once for metrics and slab pull inputs
+                auto CSRToNeighbors = [](const TArray<int32>& Off, const TArray<int32>& Adj, int32 N, TArray<TArray<int32>>& Out)
+                {
+                    Out.SetNum(N);
+                    for (int32 a = 0; a < N; ++a)
+                    {
+                        const int32 Start = Off[a];
+                        const int32 End = Off[a + 1];
+                        const int32 Count = End - Start;
+                        Out[a].SetNumUninitialized(Count);
+                        for (int32 k = 0; k < Count; ++k)
+                        {
+                            Out[a][k] = Adj[Start + k];
+                        }
+                    }
+                };
+
+                TArray<TArray<int32>> Neighbors;
+                CSRToNeighbors(RenderVertexAdjacencyOffsets, RenderVertexAdjacency, VertexCount, Neighbors);
+
+                const double ClassifyStart = FPlatformTime::Seconds();
+                BoundaryField::FBoundaryFieldResults BF;
+                BoundaryField::ComputeBoundaryFields(RenderVertices, Neighbors, VertexPlateAssignments, OmegaPerPlate, BF);
+                const double ClassifyMs = (FPlatformTime::Seconds() - ClassifyStart) * 1000.0;
+
+                // Uplift
+                Subduction::FSubductionMetrics UpliftMetrics = Subduction::ApplyUplift(
+                    RenderVertices,
+                    RenderVertexAdjacencyOffsets,
+                    RenderVertexAdjacency,
+                    VertexPlateAssignments,
+                    OmegaPerPlate,
+                    VertexElevationValues);
+                bSurfaceDataChanged = bSurfaceDataChanged || (UpliftMetrics.VerticesTouched > 0);
+
+                // Fold directions (use double buffer then cast to float storage)
+                TArray<FVector3d> FoldD;
+                FoldD.Init(FVector3d::ZeroVector, RenderVertices.Num());
+                if (VertexFoldDirection.Num() == RenderVertices.Num())
+                {
+                    for (int32 i = 0; i < RenderVertices.Num(); ++i) FoldD[i] = (FVector3d)VertexFoldDirection[i];
+                }
+                Subduction::FFoldMetrics FoldMetrics = Subduction::UpdateFoldDirections(
+                    RenderVertices,
+                    RenderVertexAdjacencyOffsets,
+                    RenderVertexAdjacency,
+                    VertexPlateAssignments,
+                    OmegaPerPlate,
+                    BF,
+                    FoldD);
+                VertexFoldDirection.SetNum(RenderVertices.Num());
+                for (int32 i = 0; i < RenderVertices.Num(); ++i) VertexFoldDirection[i] = (FVector3f)FoldD[i];
+
+                // Slab pull (build convergent edges as pairs of vertex indices)
+                TArray<Subduction::FConvergentEdge> ConvergentEdges;
+                for (int32 e = 0; e < BF.Edges.Num(); ++e)
+                {
+                    if (BF.Classifications.IsValidIndex(e) && BF.Classifications[e] == BoundaryField::EBoundaryClass::Convergent)
+                    {
+                        const int32 a = BF.Edges[e].Key;
+                        const int32 b = BF.Edges[e].Value;
+                        const FVector3d& A = RenderVertices[a];
+                        const FVector3d& B = RenderVertices[b];
+                        const FVector3d M = (A + B).GetSafeNormal();
+                        const FVector3d t = ((B - A) - ((B - A).Dot(M)) * M).GetSafeNormal();
+                        const FVector3d Nb = FVector3d::CrossProduct(M, t);
+                        const int32 pa = VertexPlateAssignments[a];
+                        const int32 pb = VertexPlateAssignments[b];
+                        if (pa == INDEX_NONE || pb == INDEX_NONE || pa == pb) continue;
+                        const FVector3d Si = FVector3d::CrossProduct(OmegaPerPlate[pa], M) * PaperConstants::PlanetRadius_km;
+                        const FVector3d Sj = FVector3d::CrossProduct(OmegaPerPlate[pb], M) * PaperConstants::PlanetRadius_km;
+                        const double projA = Si.Dot(Nb);
+                        const double projB = Sj.Dot(Nb);
+                        Subduction::FConvergentEdge CE;
+                        CE.A = a;
+                        CE.B = b;
+                        if (projA < projB)
+                        {
+                            CE.SubductingPlateId = pa;
+                            CE.OverridingPlateId = pb;
+                        }
+                        else
+                        {
+                            CE.SubductingPlateId = pb;
+                            CE.OverridingPlateId = pa;
+                        }
+                        ConvergentEdges.Add(CE);
+                    }
+                }
+                TArray<FVector3d> PlateCentroids;
+                PlateCentroids.SetNum(Plates.Num());
+                for (int32 p = 0; p < Plates.Num(); ++p) PlateCentroids[p] = Plates[p].Centroid.GetSafeNormal();
+                Subduction::FSlabPullMetrics SlabMetrics = Subduction::ApplySlabPull(
+                    PlateCentroids,
+                    ConvergentEdges,
+                    RenderVertices,
+                    OmegaPerPlate);
+
+                // Phase 3 metrics JSON (profiling)
+                IConsoleVariable* ProfilingVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PaperProfiling"));
+                const bool bProfile = ProfilingVar ? (ProfilingVar->GetInt() != 0) : true;
+                if (bProfile)
+                {
+                    FString BackendName;
+                    bool bUsedFallback = false;
+                    FSphericalTriangulatorFactory::Resolve(BackendName, bUsedFallback);
+                    const int32 SimSteps = static_cast<int32>(CurrentTimeMy / PaperConstants::TimeStep_My);
+                    const FString Path = Subduction::WritePhase3MetricsJson(
+                        TEXT("TectonicSimulation"),  // Test name for provenance
+                        BackendName,
+                        VertexCount,
+                        42,
+                        SimSteps,  // Simulation steps based on current time
+                        BF.Metrics.NumConvergent,
+                        BF.Metrics.NumDivergent,
+                        BF.Metrics.NumTransform,
+                        UpliftMetrics,
+                        FoldMetrics,
+                        ClassifyMs,
+                        SlabMetrics);
+                    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Phase3] Metrics: %s"), *Path);
+                }
+            }
+        }
+
+        // Phase 4: Collision surge (PaperMode cadence)
+        {
+            const bool bPaperMode = (CVarPlanetaryCreationPaperDefaults.GetValueOnAnyThread() != 0);
+            const int32 EvalEvery = FMath::Max(1, CVarPaperCollisionEvaluateEverySteps.GetValueOnAnyThread());
+            if (bPaperMode && (AbsoluteStep % EvalEvery == 0))
+            {
+                // Ensure adjacency
+                const int32 VertexCount = RenderVertices.Num();
+                if (RenderVertexAdjacencyOffsets.Num() != VertexCount + 1 || RenderVertexAdjacency.Num() == 0)
+                {
+                    BuildRenderVertexAdjacency();
+                }
+
+                // Per-plate omega and crust types
+                TArray<FVector3d> OmegaPerPlate;
+                TArray<uint8> PlateCrustType;
+                OmegaPerPlate.SetNum(Plates.Num());
+                PlateCrustType.SetNum(Plates.Num());
+                for (int32 p = 0; p < Plates.Num(); ++p)
+                {
+                    const FTectonicPlate& Plate = Plates[p];
+                    OmegaPerPlate[p] = Plate.EulerPoleAxis * Plate.AngularVelocity;
+                    PlateCrustType[p] = (Plate.CrustType == ECrustType::Continental) ? 1 : 0;
+                }
+
+                // Build neighbors (vector-of-vectors) and classify for boundary
+                auto CSRToNeighbors = [](const TArray<int32>& Off, const TArray<int32>& Adj, int32 N, TArray<TArray<int32>>& Out)
+                {
+                    Out.SetNum(N);
+                    for (int32 a = 0; a < N; ++a)
+                    {
+                        const int32 Start = Off[a];
+                        const int32 End = Off[a + 1];
+                        const int32 Count = End - Start;
+                        Out[a].SetNumUninitialized(Count);
+                        for (int32 k = 0; k < Count; ++k) Out[a][k] = Adj[Start + k];
+                    }
+                };
+                TArray<TArray<int32>> Neighbors;
+                CSRToNeighbors(RenderVertexAdjacencyOffsets, RenderVertexAdjacency, VertexCount, Neighbors);
+
+                BoundaryField::FBoundaryFieldResults BF4;
+                BoundaryField::ComputeBoundaryFields(RenderVertices, Neighbors, VertexPlateAssignments, OmegaPerPlate, BF4);
+
+                // Detect collision events
+                TArray<Collision::FCollisionEvent> Events;
+                Collision::DetectCollisions(
+                    RenderVertices,
+                    VertexPlateAssignments,
+                    OmegaPerPlate,
+                    PlateCrustType,
+                    RenderVertexAdjacencyOffsets,
+                    RenderVertexAdjacency,
+                    BF4,
+                    Events);
+
+                // Prepare fold buffer (double-precision workspace)
+                TArray<FVector3d> FoldD4;
+                FoldD4.Init(FVector3d::ZeroVector, VertexCount);
+                if (VertexFoldDirection.Num() == VertexCount)
+                {
+                    for (int32 i = 0; i < VertexCount; ++i) FoldD4[i] = (FVector3d)VertexFoldDirection[i];
+                }
+
+                Collision::FCollisionMetrics TotalM{};
+                const double Guardrail = FMath::Max(0.0f, CVarPaperCollisionPeakGuardrailMeters.GetValueOnAnyThread());
+                for (Collision::FCollisionEvent& Evt : Events)
+                {
+                    Evt.PeakGuardrail_m = Guardrail;
+                    const FVector3d Q = Evt.CenterUnit.GetSafeNormal();
+                    const int32 i = Evt.CarrierPlateId;
+                    const int32 j = Evt.TargetPlateId;
+                    FVector3d Si = FVector3d::ZeroVector;
+                    FVector3d Sj = FVector3d::ZeroVector;
+                    if (OmegaPerPlate.IsValidIndex(i)) Si = FVector3d::CrossProduct(OmegaPerPlate[i], Q) * PaperConstants::PlanetRadius_km;
+                    if (OmegaPerPlate.IsValidIndex(j)) Sj = FVector3d::CrossProduct(OmegaPerPlate[j], Q) * PaperConstants::PlanetRadius_km;
+                    const double v = (Sj - Si).Size();
+                    const double v0 = PaperConstants::MaxPlateSpeed_km_per_My;
+                    const double A0 = PaperConstants::ReferencePlateArea_km2;
+                    const double rc = PaperConstants::CollisionDistance_km;
+                    const double r_km = (v > 0.0 && Evt.TerraneArea_km2 > 0.0) ? (rc * FMath::Sqrt(v / v0) * FMath::Sqrt(Evt.TerraneArea_km2 / A0)) : 0.0;
+                    const double r_ang = PaperConstants::KmToGeodesicRadians(r_km);
+
+                    // Collect affected vertices deterministically
+                    TArray<int32> Affected;
+                    Affected.Reserve(VertexCount / 100);
+                    const double CosThresh = FMath::Cos(r_ang);
+                    for (int32 vi = 0; vi < VertexCount; ++vi)
+                    {
+                        const double dot = FMath::Clamp(RenderVertices[vi].Dot(Q), -1.0, 1.0);
+                        if (dot >= CosThresh) Affected.Add(vi);
+                    }
+
+                    Collision::FCollisionMetrics M = Collision::ApplyCollisionSurge(RenderVertices, Affected, Evt, VertexElevationValues, &FoldD4);
+                    TotalM.CollisionCount += M.CollisionCount;
+                    TotalM.MaxPeak_m = FMath::Max(TotalM.MaxPeak_m, M.MaxPeak_m);
+                    TotalM.ApplyMs += M.ApplyMs;
+                }
+
+                if (Events.Num() > 0)
+                {
+                    VertexFoldDirection.SetNum(VertexCount);
+                    for (int32 i = 0; i < VertexCount; ++i) VertexFoldDirection[i] = (FVector3f)FoldD4[i];
+                }
+                bSurfaceDataChanged = bSurfaceDataChanged || (Events.Num() > 0);
+
+                IConsoleVariable* ProfilingVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PaperProfiling"));
+                const bool bProfile = ProfilingVar ? (ProfilingVar->GetInt() != 0) : true;
+                if (bProfile)
+                {
+                    FString BackendName; bool bUsedFallback2 = false;
+                    FSphericalTriangulatorFactory::Resolve(BackendName, bUsedFallback2);
+                    const FString Path4 = Collision::WritePhase4MetricsJson(BackendName, VertexCount, 42, TotalM);
+                    UE_LOG(LogPlanetaryCreation, Log, TEXT("[Phase4] Metrics: %s (collisions=%d max_peak=%.1fm)"), *Path4, TotalM.CollisionCount, TotalM.MaxPeak_m);
+
+                    // Phase 4: Rifting cadence
+                    const int32 RiftEvery = FMath::Max(1, CVarPaperRiftingEvaluateEverySteps.GetValueOnAnyThread());
+                    if ((AbsoluteStep % RiftEvery) == 0)
+                    {
+                        Rifting::FRiftingMetrics RiftMetrics{};
+                        const double MinArea = FMath::Max(0.0f, CVarPaperRiftingMinPlateAreaKm2.GetValueOnAnyThread());
+                        const double LambdaBase = FMath::Max(0.0f, CVarPaperRiftingLambdaBase.GetValueOnAnyThread());
+
+                        // Approximate per-plate areas using vertex counts scaled to sphere surface area
+                        TMap<int32, int32> PlateCounts;
+                        PlateCounts.Reserve(Plates.Num());
+                        for (int32 v = 0; v < VertexCount; ++v)
+                        {
+                            PlateCounts.FindOrAdd(VertexPlateAssignments[v])++;
+                        }
+                        const double SphereArea_km2 = 4.0 * PI * FMath::Square(PaperConstants::PlanetRadius_km);
+                        const double A0_km2 = PaperConstants::ReferencePlateArea_km2;
+
+                        TArray<int32> UniquePlates; PlateCounts.GetKeys(UniquePlates);
+                        UniquePlates.Sort();
+
+                        for (int32 pid : UniquePlates)
+                        {
+                            const int32 count = PlateCounts[pid];
+                            const double area = (VertexCount > 0) ? (SphereArea_km2 * (double)count / (double)VertexCount) : 0.0;
+                            if (area < MinArea) continue;
+                            const double contRatio = (Plates.IsValidIndex(pid)) ? Plates[pid].ContinentalRatio : 1.0;
+                            Rifting::FRiftingEvent REvt{};
+                            if (Rifting::EvaluateRiftingProbability(pid, area, contRatio, LambdaBase, A0_km2, REvt))
+                            {
+                                TArray<FVector3d> DriftDirs;
+                                TArray<int32> NewAssign;
+                                TArray<TPair<int32,double>> FragRatios;
+                                if (Rifting::PerformRifting(REvt, RenderVertices, RenderVertexAdjacencyOffsets, RenderVertexAdjacency, VertexPlateAssignments, NewAssign, DriftDirs, RiftMetrics, &FragRatios))
+                                {
+                                    VertexPlateAssignments = NewAssign;
+                                    // Materialize fragment plates (IDs + metadata) deterministically
+                                    // Build ordered fragment id list aligned with DriftDirs
+                                    TArray<int32> FragIds; FragIds.Reserve(FragRatios.Num());
+                                    for (const TPair<int32,double>& pr : FragRatios) FragIds.Add(pr.Key);
+
+                                    auto ComputeCentroid = [&](int32 plateId) -> FVector3d
+                                    {
+                                        FVector3d sum = FVector3d::ZeroVector; int32 c = 0;
+                                        for (int32 v = 0; v < VertexCount; ++v)
+                                        {
+                                            if (VertexPlateAssignments[v] == plateId) { sum += RenderVertices[v]; ++c; }
+                                        }
+                                        return (c > 0) ? (sum / (double)c).GetSafeNormal() : FVector3d::ZeroVector;
+                                    };
+
+                                    // Parent crust type as inheritance baseline
+                                    const ECrustType ParentCrust = Plates.IsValidIndex(REvt.PlateId) ? Plates[REvt.PlateId].CrustType : ECrustType::Oceanic;
+
+                                    for (int32 k = 0; k < FragIds.Num(); ++k)
+                                    {
+                                        const int32 newPid = FragIds[k];
+                                        const double ratio = FragRatios.IsValidIndex(k) ? FragRatios[k].Value : contRatio;
+                                        const FVector3d centroid = ComputeCentroid(newPid);
+                                        FVector3d dir = DriftDirs.IsValidIndex(k) ? DriftDirs[k] : FVector3d::ZeroVector;
+                                        if (dir.IsNearlyZero())
+                                        {
+                                            const FVector3d Up = (FMath::Abs(centroid.Z) < 0.9) ? FVector3d::UnitZ() : FVector3d::UnitX();
+                                            dir = FVector3d::CrossProduct(centroid, Up).GetSafeNormal();
+                                        }
+                                        FVector3d axis = FVector3d::CrossProduct(dir, centroid);
+                                        const double axisLen = axis.Size();
+                                        if (axisLen > 0.0) axis /= axisLen; else axis = FVector3d::ZAxisVector;
+                                        const double omegaMag = 0.01; // small deterministic drift (rad/My)
+
+                                        if (newPid == REvt.PlateId && Plates.IsValidIndex(newPid))
+                                        {
+                                            // Update parent fragment in-place
+                                            FTectonicPlate& P = Plates[newPid];
+                                            P.Centroid = centroid;
+                                            P.EulerPoleAxis = axis;
+                                            P.AngularVelocity = omegaMag;
+                                            P.ContinentalRatio = ratio;
+                                        }
+                                        else
+                                        {
+                                            // Append placeholders up to newPid
+                                            while (Plates.Num() <= newPid)
+                                            {
+                                                FTectonicPlate NewP; NewP.PlateID = Plates.Num();
+                                                NewP.Centroid = FVector3d::ZeroVector;
+                                                NewP.EulerPoleAxis = FVector3d::ZAxisVector;
+                                                NewP.AngularVelocity = 0.0;
+                                                NewP.CrustType = ParentCrust;
+                                                NewP.ContinentalRatio = contRatio;
+                                                Plates.Add(NewP);
+                                            }
+                                            // Set actual fragment metadata
+                                            FTectonicPlate& NP = Plates[newPid];
+                                            NP.PlateID = newPid;
+                                            NP.CrustType = ParentCrust;
+                                            NP.ContinentalRatio = ratio;
+                                            NP.Centroid = centroid;
+                                            NP.EulerPoleAxis = axis;
+                                            NP.AngularVelocity = omegaMag;
+                                        }
+                                    }
+
+                                    if (bProfile)
+                                    {
+                                        // Log mapping and fragment sizes
+                                        FString MapStr;
+                                        for (int32 k = 0; k < FragIds.Num(); ++k)
+                                        {
+                                            const int32 fid = FragIds[k];
+                                            int32 cnt = 0; for (int32 v = 0; v < VertexCount; ++v) if (VertexPlateAssignments[v] == fid) ++cnt;
+                                            MapStr += FString::Printf(TEXT("%s%d(v=%d,cr=%.2f)"), k==0?TEXT(""):TEXT(","), fid, cnt, FragRatios[k].Value);
+                                        }
+                                        UE_LOG(LogPlanetaryCreation, Log, TEXT("[Rifting] Materialized parent %d -> [%s]"), REvt.PlateId, *MapStr);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (RiftMetrics.RiftingCount > 0)
+                        {
+                            const FString PathR = Rifting::WritePhase4MetricsJsonAppendRifting(Path4, RiftMetrics);
+                            UE_LOG(LogPlanetaryCreation, Log, TEXT("[Phase4] Rifting: %s (events=%d mean_frag=%.2f)"), *PathR, RiftMetrics.RiftingCount, RiftMetrics.MeanFragments);
+                        }
+                    }
+                }
+
+                // Phase 5: Oceanic crust generation (velocity-derived cadence)
+                {
+                    int32 OceanicEvery = CVarPaperOceanicEvaluateEverySteps.GetValueOnAnyThread();
+                    if (OceanicEvery <= 0)
+                    {
+                        // derive from max linear speed ratio s = |w|*R / v0
+                        double maxLin = 0.0;
+                        for (int32 p = 0; p < Plates.Num(); ++p)
+                        {
+                            const double lin = FMath::Abs(Plates[p].AngularVelocity) * PaperConstants::PlanetRadius_km;
+                            maxLin = FMath::Max(maxLin, lin);
+                        }
+                        const double s = FMath::Clamp(maxLin / PaperConstants::MaxPlateSpeed_km_per_My, 0.0, 1.0);
+                        const int32 minC = FMath::Max(1, CVarPaperOceanicMinCadenceSteps.GetValueOnAnyThread());
+                        const int32 maxC = FMath::Max(minC, CVarPaperOceanicMaxCadenceSteps.GetValueOnAnyThread());
+                        OceanicEvery = (int32)FMath::RoundToInt(FMath::Lerp((double)maxC, (double)minC, s));
+                    }
+                    if (OceanicEvery < 1) OceanicEvery = 1;
+
+                    if ((AbsoluteStep % OceanicEvery) == 0)
+                    {
+                        Oceanic::FRidgeCache RidgeCache;
+                        Oceanic::BuildRidgeCache(RenderVertices, RenderVertexAdjacencyOffsets, RenderVertexAdjacency, BF4, RidgeCache);
+
+                        // Baseline is the current elevation buffer
+                        const TArray<double>& Baseline = VertexElevationValues;
+                        Oceanic::FOceanicMetrics OM = Oceanic::ApplyOceanicCrust(
+                            RenderVertices,
+                            RenderVertexAdjacencyOffsets,
+                            RenderVertexAdjacency,
+                            BF4,
+                            VertexPlateAssignments,
+                            PlateCrustType,
+                            Baseline,
+                            VertexElevationValues,
+                            &RidgeCache);
+                        OM.CadenceSteps = OceanicEvery;
+                        bSurfaceDataChanged = bSurfaceDataChanged || (OM.VerticesUpdated > 0);
+
+                        if (bProfile)
+                        {
+                            FString BackendName5; bool bUsedFallback5 = false;
+                            FSphericalTriangulatorFactory::Resolve(BackendName5, bUsedFallback5);
+                            const FString Path5 = Oceanic::WritePhase5MetricsJson(BackendName5, VertexCount, 42, OM);
+                            UE_LOG(LogPlanetaryCreation, Log, TEXT("[Phase5] Metrics: %s (updated=%d mean_a=%.3f ridgelen=%.1fkm cadence=%d)"), *Path5, OM.VerticesUpdated, OM.MeanAlpha, OM.RidgeLength_km, OM.CadenceSteps);
+                        }
+                    }
+                }
+            }
+        }
 
         CurrentTimeMy += StepDurationMy;
 
@@ -2527,6 +3102,7 @@ void UTectonicSimulationService::SubdivideIcosphere(int32 SubdivisionLevel)
     {
         FTectonicPlate Plate;
         Plate.VertexIndices = Face;
+        Plate.ContinentalRatio = 1.0; // Default; TODO: wire real ratio in Phase 5/6
         Plates.Add(Plate);
     }
 

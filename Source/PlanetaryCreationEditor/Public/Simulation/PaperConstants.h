@@ -28,6 +28,7 @@ namespace PaperConstants
 
     // Geodynamic distances (km)
     constexpr double SubductionDistance_km = 1800.0;
+    constexpr double SubductionControlDistance_km = SubductionDistance_km / 3.0; // 600 km for f(d) piecewise
     constexpr double CollisionDistance_km  = 4200.0;
 
     // Interaction coefficients
@@ -36,6 +37,7 @@ namespace PaperConstants
     // Plate speeds
     constexpr double MaxPlateSpeed_mm_per_yr  = 100.0;
     constexpr double MaxPlateSpeed_km_per_My  = 100.0;
+    constexpr double MaxAngularVelocity_rad_per_My = MaxPlateSpeed_km_per_My / PlanetRadius_km; // ≈ 0.0157 rad/My
 
     // Uplift / erosion / sedimentation rates
     constexpr double SubductionUplift_mm_per_yr = 0.6;

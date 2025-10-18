@@ -1,0 +1,416 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{BBF2D16B-A0F7-337B-90A4-9F9D529BC90F}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>geogram_third_party</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">geogram_third_party.dir\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">geogram_third_party.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">geogram_third_party</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">geogram_third_party.dir\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">geogram_third_party.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">geogram_third_party</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">geogram_third_party.dir\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">geogram_third_party.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">geogram_third_party</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">geogram_third_party.dir\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">geogram_third_party.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">geogram_third_party</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4005;4244</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4005;4244</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Full</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4005;4244</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Full</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4005;4244</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Full</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS;NL_WITH_AMGCL;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\amgcl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/geogram/third_party/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/geogram/third_party/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\geogram\third_party\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/geogram/third_party/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/geogram/third_party/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\geogram\third_party\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/geogram/third_party/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/geogram/third_party/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\geogram\third_party\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/geogram/third_party/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/geogram/third_party/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\geogram\third_party\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources\libmeshb7.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\libMeshb\sources\libmeshb7.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\rply\rply.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\rply\rply.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\rply\rplyfile.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\adler32.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\compress.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\crc32.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\crc32.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\deflate.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\deflate.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzclose.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzguts.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzlib.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzread.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\gzwrite.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\infback.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inffast.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inffast.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inffixed.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inflate.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inflate.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inftrees.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\inftrees.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\trees.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\trees.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\uncompr.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zconf.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zlib.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zutil.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\zlib\zutil.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Allocator.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Array.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\BSplineData.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\BinaryNode.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Factor.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Factor.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\FunctionData.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Geometry.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Geometry.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Hash.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MAT.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MarchingCubes.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MarchingCubes.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MemoryUsage.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MultiGridOctreeData.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\MyTime.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Octree.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\PPolynomial.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\PlyVertexMini.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\PointStream.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\Polynomial.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\SparseMatrix.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\poisson_geogram.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\PoissonRecon\poisson_geogram.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\xatlas\xatlas.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\xatlas\xatlas.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_64.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_amgcl.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_amgcl.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_api.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_arpack.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_arpack.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_blas.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_blas.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cholmod.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cholmod.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_context.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_context.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cuda.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_cuda.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_ext.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_iterative_solvers.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_iterative_solvers.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_linkage.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_matrix.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_matrix.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_mkl.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_mkl.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_os.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_preconditioners.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_preconditioners.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_private.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_superlu.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\OpenNL\src\lib\OpenNL\nl_superlu.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS_BLAS.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\HLBFGS_BLAS.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\ICFS.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\ICFS.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\LineSearch.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\LineSearch.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\Lite_Sparse_Matrix.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\Lite_Sparse_Matrix.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\HLBFGS\Sparse_Entry.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\tetgen\tetgen.cpp" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\tetgen\tetgen.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\triangle\triangle.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram\third_party\triangle\triangle.h" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\ZERO_CHECK.vcxproj">
+      <Project>{4B79AFF6-F3B7-3918-A597-C772DB66C72C}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

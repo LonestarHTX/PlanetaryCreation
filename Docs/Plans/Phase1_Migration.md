@@ -28,5 +28,6 @@ Search-and-Replace Checklists
   - `\bzc\b` — disallow symbolic use; prefer explicit names above.
   - `(?<!PaperConstants\s*::)\b-?10000\b` — catch hard-coded zt/zc elevation magnitudes outside constants.
   - `\bmm\/yr\b` — flag unit usage in simulation paths; prefer `km/My` or `m/My` convenience constants.
+  - `\b0\.1\s*km.*My\b` — flag suspicious "0.1 km/My" (should be 100.0, 1000× conversion error).
 - Review all new simulation code paths for conversions against `PaperConstants.h` helpers.
 

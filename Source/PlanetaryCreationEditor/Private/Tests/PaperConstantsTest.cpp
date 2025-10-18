@@ -13,7 +13,7 @@ bool FPaperConstantsTest::RunTest(const FString& Parameters)
 
     const double omega = LinearSpeedKmPerMyToAngularRadPerMy(MaxPlateSpeed_km_per_My);
     const double v_back = AngularRadPerMyToLinearKmPerMy(omega);
-    TestTrue(TEXT("v <-> \xCF\x89R roundtrip"), FMath::IsNearlyEqual(v_back, MaxPlateSpeed_km_per_My, 1e-9));
+    TestTrue(TEXT("v <-> \xCF\x89R roundtrip"), FMath::IsNearlyEqual(v_back, MaxPlateSpeed_km_per_My, 1e-12));
 
     // Elevation ordering
     TestTrue(TEXT("elevation order"),

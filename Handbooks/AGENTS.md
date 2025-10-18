@@ -153,6 +153,64 @@
   - Useful patterns: `grep -E "Test Completed|Result=|Error:" PlanetaryCreation.log`; scope to a single test with `grep -A 30 "TestName" PlanetaryCreation.log`.
   - Check overall result via `grep "EXIT CODE:" PlanetaryCreation.log` (0 = success, -1 = failures).
 
+## Mandatory Build + Test Feedback Loop (Agents)
+
+Agents MUST compile and run the relevant automation tests after any non-trivial code change, and report outcomes. Do not submit changes without a green build and passing tests (or an explicit, documented failing test you were asked to introduce).
+
+Policy
+- Always build before and after code changes affecting C++/Shaders.
+- Always run the smallest relevant test set first (unit → component → integration), then broaden if needed.
+- Capture and summarize results (pass/fail counts, timings, and any JSON artifacts). Link paths like `Docs/Automation/Validation/...` in your update.
+- If sandbox/approvals block you from running, explicitly request escalation (with `with_escalated_permissions=true`) and include a one-line justification. If still blocked, state precisely which commands must be run by a human and what success looks like.
+
+Commands (from WSL via PowerShell)
+- Build editor target:
+  ```bash
+  powershell.exe -Command "& 'C:\\Program Files\\Epic Games\\UE_5.5\\Engine\\Binaries\\DotNET\\UnrealBuildTool\\UnrealBuildTool.exe' `
+    PlanetaryCreationEditor Win64 Development `
+    -project='C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject' -WaitMutex -FromMsBuild"
+  ```
+- PaperMode resolution tiers (pin backend + determinism):
+  - Unit: `-SetCVar=r.PaperMode.SampleCount=4096,r.PaperTriangulation.Backend=Geogram,r.PaperTriangulation.Shuffle=0`
+  - Integration: `-SetCVar=r.PaperMode.SampleCount=50000,r.PaperTriangulation.Backend=Geogram,r.PaperTriangulation.Shuffle=0`
+  - Perf: `-SetCVar=r.PaperMode.TargetResolutionKm=35,r.PaperTriangulation.Backend=Geogram,r.PaperTriangulation.Shuffle=0`
+
+  Verify init log once per run contains: `PaperMode Init: ... EffectiveN=... EffectiveResolutionKm=... Backend=...`
+- Run a single test by name (example: cyclic neighbor ordering):
+  ```bash
+  powershell.exe -Command "& 'C:\\Program Files\\Epic Games\\UE_5.5\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe' `
+    'C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject' `
+    -ExecCmds='Automation RunTests PlanetaryCreation.Paper.SphericalDelaunayCyclic' `
+    -SetCVar=r.PlanetaryCreation.PaperDefaults=0 -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log"
+  ```
+- Run Phase 2 sweep (Fibonacci, properties, adjacency, cyclic):
+  ```bash
+  powershell.exe -Command "& 'C:\\Program Files\\Epic Games\\UE_5.5\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe' `
+    'C:\\Users\\Michael\\Documents\\Unreal Projects\\PlanetaryCreation\\PlanetaryCreation.uproject' `
+    -ExecCmds='Automation RunTests PlanetaryCreation.Paper.FibonacciSampling,PlanetaryCreation.Paper.SphericalDelaunayProperties,PlanetaryCreation.Paper.SphericalDelaunayAdjacency,PlanetaryCreation.Paper.SphericalDelaunayCyclic' `
+    -SetCVar=r.PlanetaryCreation.PaperDefaults=0 -TestExit='Automation Test Queue Empty' -unattended -nop4 -nosplash -log"
+  ```
+
+Results & Evidence
+- Summarize: total tests run, passed, failed/skipped; call out any regressions.
+- Attach or reference artifacts:
+  - `Docs/Automation/Validation/Phase2/summary_*.json` (properties test)
+  - Key log excerpts showing `Result={Success}` lines
+- If a test is flaky, rerun once; if still flaky, document as such and surface for triage.
+
+Definition of Done (agents submit with):
+- Build succeeded for the touched targets.
+- All relevant tests executed and passed.
+- Test instructions included for humans to reproduce.
+- If approvals blocked execution, a clear, minimal command list is provided for a human to run, plus expected outputs.
+
+Metrics & Artifacts (mandatory)
+- For each phase component implemented, agents must:
+  - Run the phase’s automation test at the agreed sizing tier (10k/50k).
+  - Emit a metrics JSON artifact under `Docs/Automation/Validation/PhaseX/summary_YYYYMMDD_HHMMSS.json` (ensure `r.PaperProfiling=1`).
+  - Include in the status update: the artifact path and key numbers (timings, counts, hashes).
+- If metrics are missing or malformed, the task is NOT complete; fix metrics emission before proceeding.
+
 ## Heightmap Export Overhaul – Agent Spin-Up Plan
 
 ### Executive Context

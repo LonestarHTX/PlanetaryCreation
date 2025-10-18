@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\CMakeFiles\2075f1e60a1ee932ad7a6261eb98ed76\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{52A8CCF8-D497-37FE-9537-3183AFF8263F}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

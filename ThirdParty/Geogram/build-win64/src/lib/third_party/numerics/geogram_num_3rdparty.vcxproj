@@ -1,0 +1,1041 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{1A567604-A8DE-3B3E-B80C-28B36461990B}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>geogram_num_3rdparty</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\lib\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">geogram_num_3rdparty.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">geogram_num_3rdparty</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\lib\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">geogram_num_3rdparty.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">geogram_num_3rdparty</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\lib\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">geogram_num_3rdparty.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">geogram_num_3rdparty</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\lib\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">geogram_num_3rdparty.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">geogram_num_3rdparty</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4245;4389</DisableSpecificWarnings>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4245;4389</DisableSpecificWarnings>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Full</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4245;4389</DisableSpecificWarnings>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Full</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4275;4996;4512;4245;4389;4245;4389</DisableSpecificWarnings>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Full</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_SECURE_SCL=0;GEOGRAM_WITH_HLBFGS;GEOGRAM_WITH_TETGEN;GEOGRAM_WITH_TRIANGLE;GEOGRAM_USE_BUILTIN_DEPS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;_USE_MATH_DEFINES;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\geogram_gfx\third_party;C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\INCLUDE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/third_party/numerics/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/third_party/numerics/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\third_party\numerics\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/third_party/numerics/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/third_party/numerics/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\third_party\numerics\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/third_party/numerics/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/third_party/numerics/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\third_party\numerics\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7/src/lib/third_party/numerics/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/geogram-src/geogram_1.9.7" "-BC:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64" --check-stamp-file "C:/Users/Michael/Documents/Unreal Projects/PlanetaryCreation/ThirdParty/Geogram/build-win64/src/lib/third_party/numerics/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\src\lib\third_party\numerics\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\linkage.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\arith.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\ctype.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\f2c.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\fio.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\fmt.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\fp.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_abort_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_backspac.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_abs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_cos.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_div.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_exp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_log.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_sin.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_c_sqrt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_cabs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_close.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ctype.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_abs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_acos.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_asin.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_atan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_atn2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_cnjg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_cos.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_cosh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_dim.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_exp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_imag.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_int.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_lg10.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_log.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_mod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_nint.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_prod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sign.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sin.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sinh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_sqrt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_tan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_d_tanh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_derf_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_derfc_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_dfe.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_dolio.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_dtime_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_due.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ef1asc_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ef1cmc_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_endfile.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_erf_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_erfc_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_err.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_etime_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_exit_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_f77_aloc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_f77vers.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_fmt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_fmtlib.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ftell_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_getarg_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_getenv_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_abs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_dim.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_dnnt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_indx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_len.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_mod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_nint.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_h_sign.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_ge.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_gt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_le.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_hl_lt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i77vers.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_abs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_ceiling.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_dim.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_dnnt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_indx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_len.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_len_trim.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_mod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_nint.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_i_sign.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_iargc_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_iio.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_ilnw.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_inquire.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_ge.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_gt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_le.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_l_lt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lbitbits.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lbitshft.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lread.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_lwrite.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_missing_erf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_open.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_ci.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_dd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_di.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_hh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_ii.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_ri.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_zi.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_pow_zz.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_abs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_acos.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_asin.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_atan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_atn2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_cnjg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_cos.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_cosh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_dim.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_exp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_imag.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_int.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_lg10.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_log.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_mod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_nint.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sign.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sin.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sinh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_sqrt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_tan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_r_tanh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rdfmt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rewind.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rsfe.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rsli.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_rsne.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_cat.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_cmp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_copy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_paus.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_rnge.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_s_stop.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_sfe.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_sig_die.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_signal_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_signbit.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_sue.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_system_.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_typesize.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_uio.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_uninit.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_util.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wref.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wrtfmt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wsfe.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wsle.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_wsne.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_xwsne.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_abs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_cos.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_div.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_exp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_log.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_sin.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\libf2c_z_sqrt.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\lio.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\rawio.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\signal1.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\LIBF2C\sysdep1.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\caxpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ccopy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cdotc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cdotu.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgemm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgemv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgerc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cgeru.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chemm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chemv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cher.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cher2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cher2k.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cherk.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chpmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chpr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\chpr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\crotg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cscal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csrot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csscal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\cswap.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csymm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csyr2k.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\csyrk.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctbsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctpmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctpsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrmm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrsm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ctrsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dasum.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\daxpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dcabs1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dcopy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ddot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dgbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dgemm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dgemv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dger.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dnrm2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drotg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drotm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\drotmg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dscal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsdot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dspmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dspr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dspr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dswap.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsymm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsymv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyr2k.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dsyrk.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtbsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtpmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtpsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrmm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrsm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dtrsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dzasum.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\dznrm2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\icamax.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\idamax.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\isamax.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\izamax.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\lsame.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sasum.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\saxpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scabs1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scasum.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scnrm2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\scopy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sdot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sdsdot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sgbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sgemm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sgemv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sger.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\snrm2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srotg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srotm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\srotmg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sscal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sspmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sspr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sspr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\sswap.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssymm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssymv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyr2k.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ssyrk.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stbsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stpmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\stpsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strmm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strsm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\strsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\xerbla.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\xerbla_array.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zaxpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zcopy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdotc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdotu.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdrot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zdscal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgemm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgemv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgerc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zgeru.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhemm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhemv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zher.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zher2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zher2k.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zherk.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhpmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhpr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zhpr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zrotg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zscal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zswap.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zsymm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zsyr2k.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\zsyrk.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztbmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztbsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztpmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztpsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrmm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrmv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrsm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CBLAS\ztrsv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_cgeqr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clacn2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clacpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_cladiv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clahqr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clange.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clanhs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarfg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarfp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clarnv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clartg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clascl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_claset.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_classq.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_clatrs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_crot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrevc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrexc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrsen.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ctrsyl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_cunm2r.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dgeqr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_disnan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlabad.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlacn2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlacpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dladiv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlae2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaev2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaexc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlahqr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaisnan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaln2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlamch.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlange.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlanhs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlanst.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlanv2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlapy2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlapy3.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarfg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarfp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarfx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlarnv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlartg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaruv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlascl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlaset.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlasr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlasrt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlassq.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dlasy2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dorm2r.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dsteqr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrevc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrexc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrsen.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dtrsyl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dummy_argc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_dzsum1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_icmax1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaclc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaclr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_iladlc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_iladlr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaslc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilaslr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilazlc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ilazlr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_izmax1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_scsum1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sgeqr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sisnan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slabad.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slacn2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slacpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sladiv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slae2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaev2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaexc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slahqr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaisnan.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaln2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slamch.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slange.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slanhs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slanst.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slanv2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slapy2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slapy3.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarfg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarfp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarfx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slarnv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slartg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaruv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slascl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slaset.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slasr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slasrt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slassq.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_slasy2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_sorm2r.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ssteqr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strevc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strexc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strsen.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_strsyl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zgeqr2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlacn2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlacpy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zladiv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlahqr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlange.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlanhs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarfg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarfp.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlarnv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlartg.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlascl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlaset.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlassq.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zlatrs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zrot.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrevc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrexc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrsen.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_ztrsyl.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\CLAPACK\clapack_zunm2r.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ccolumn_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ccolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ccopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cdiagonal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgscon.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsequ.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsisx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsitrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgsrfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgssv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgssvx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgstrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cgstrs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\clacon2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\clangs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\claqgs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cldperm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cmemory.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cmyblas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\colamd.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\colamd.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpanel_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpivotgrowth.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cpruneL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\creadhb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\creadrb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\creadtriple.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csnode_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csp_blas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\csp_blas3.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\cutil.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcolumn_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcomplex.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dcopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ddiagonal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgscon.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsequ.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsisx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsitrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgsrfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgssv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgssvx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgstrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dgstrs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dlacon2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dlangs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dlaqgs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dldperm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dmach.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dmemory.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dmyblas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpanel_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpivotgrowth.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dpruneL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dreadhb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dreadrb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dreadtriple.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsnode_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsp_blas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dsp_blas3.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dutil.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\dzsum1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\get_perm_c.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\heap_relax_snode.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\html_mainpage.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\icmax1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ccolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ccopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_cdrop_row.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_cpanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_cpivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_csnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dcolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dcopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ddrop_row.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dpanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dpivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_dsnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_heap_relax_snode.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_relax_snode.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_scolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_scopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_sdrop_row.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_spanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_spivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_ssnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zcolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zcopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zdrop_row.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zpanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zpivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ilu_zsnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\input_error.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\izmax1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\mark_relax.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\mc64ad.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\memory.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\mmd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\qselect.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\relax_snode.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scolumn_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scomplex.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\scsum1.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sdiagonal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgscon.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsequ.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsisx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsitrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgsrfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgssv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgssvx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgstrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sgstrs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slacon2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slangs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slaqgs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sldperm.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_Cnames.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_cdefs.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_dcomplex.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_ddefs.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_scomplex.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_sdefs.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_util.h" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\slu_zdefs.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\smach.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\smemory.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\smyblas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sp_coletree.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sp_ienv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sp_preorder.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spanel_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spivotgrowth.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\spruneL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sreadhb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sreadrb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sreadtriple.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssnode_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssp_blas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\ssp_blas3.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\superlu_enum_consts.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\superlu_timer.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\supermatrix.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\sutil.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\util.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zcolumn_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zcolumn_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zcopy_to_ucol.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zdiagonal.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgscon.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsequ.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsisx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsitrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgsrfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgssv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgssvx.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgstrf.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zgstrs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zlacon2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zlangs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zlaqgs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zldperm.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zmemory.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zmyblas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpanel_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpanel_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpivotL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpivotgrowth.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zpruneL.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zreadhb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zreadrb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zreadtriple.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsnode_bmod.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsnode_dfs.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsp_blas2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zsp_blas3.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\SUPERLU\zutil.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cgetv0.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnaitr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnapps.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnaup2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cnaupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cneigh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cneupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cngets.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\csortc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\cstatn.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dgetv0.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dlaqrb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaitr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnapps.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaup2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnaupe.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dnconv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dneigh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dneupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dngets.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsaitr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsapps.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsaup2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsaupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsconv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dseigt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsesrt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dseupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsgets.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsortc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dsortr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dstatn.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dstats.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\dstqrb.c" />
+    <ClInclude Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\protos.h" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sgetv0.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\slaqrb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaitr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snapps.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaup2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snaupe.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\snconv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sneigh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sneupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sngets.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssaitr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssapps.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssaup2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssaupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssconv.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sseigt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssesrt.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sseupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssgets.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssortc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\ssortr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sstatn.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sstats.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\sstqrb.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zgetv0.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znaitr.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znapps.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znaup2.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\znaupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zneigh.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zneupd.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zngets.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zsortc.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK\zstatn.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\cmout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\cvout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\dmout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\dvout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\icnteq.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\icopy.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\iset.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\iswap.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\ivout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\second.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\smout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\svout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\zmout.c" />
+    <ClCompile Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\geogram-src\geogram_1.9.7\src\lib\third_party\numerics\ARPACK_UTIL\zvout.c" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\Michael\Documents\Unreal Projects\PlanetaryCreation\ThirdParty\Geogram\build-win64\ZERO_CHECK.vcxproj">
+      <Project>{4B79AFF6-F3B7-3918-A597-C772DB66C72C}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1,0 +1,7 @@
+r.PaperTriangulation.Shuffle 1
+r.PaperTriangulation.ShuffleSeed 42
+r.PaperTriangulation.RunPerf10k 1
+r.PaperTriangulation.PerfSampleCount 10000
+log LogTemp Display
+Automation RunTests PlanetaryCreation.Paper.SphericalDelaunayPerf10k
+Quit
